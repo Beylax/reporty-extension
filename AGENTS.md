@@ -34,12 +34,12 @@
 
 - Tutti gli sviluppatori autenticati (Google o link email, non account anonimi) vedono, modificano ed eliminano tutti i progetti, ambienti e segnalazioni. Non esistono più ruoli o membership nella UI né inviti sviluppatore.
 - Ogni progetto ha un unico link ospite recuperabile nella tab Ambienti, con ambiente di avvio selezionabile e rigenerazione che revoca il precedente link e le sessioni associate. Le tabelle dei vecchi ruoli restano solo per compatibilità e cronologia.
-- Gli inviti ospiti indicano un ambiente iniziale; nome obbligatorio e avvio dal link, collegamento automatico e consenso browser sul dominio quando necessario. Gli ospiti possono creare, leggere e rispondere e scegliere la priorità alla creazione; non cambiano stato/priorità successivamente né modificano/eliminano segnalazioni.
+- Gli inviti ospiti indicano un ambiente iniziale; nome obbligatorio e avvio dal link, collegamento automatico e consenso browser sul dominio quando necessario. Gli ospiti possono creare, leggere e rispondere e modificare stato e priorità delle segnalazioni del proprio progetto; non modificano il testo né eliminano segnalazioni.
 - Autorizzare ogni operazione sul backend e nel database: nascondere un pulsante non è un controllo di sicurezza.
 
 ## Database, sessioni e screenshot
 
-- Aggiungere nuove migrazioni numerate, senza riscrivere quelle già distribuite. L’ultima è `202610050011_shared_dashboard.sql`.
+- Aggiungere nuove migrazioni numerate, senza riscrivere quelle già distribuite. L’ultima è `202610050012_guest_report_updates.sql`.
 - Mantenere RLS, controlli RPC e `search_path` esplicito nelle funzioni security definer; limitare gli execute grant.
 - Token ospite e invito memorizzati con hash. I codici di collegamento estensione sono monouso; verificare origine, scheda, nonce e scadenza.
 - La sessione estensione resta nello storage riservato ai contesti fidati; non deve essere esposta al sito revisionato.
@@ -56,6 +56,7 @@
 - Estensione: floating `+` che ruota a `×`, creazione in evidenza, lista accordion, sezioni in riquadri verticali, back e chiudi sulla stessa riga.
 - Il popup determina progetto/ambiente dall'URL senza select; informazioni revisore in fondo, senza elenco siti.
 - Collegamento: toast di successo/errore, pulsante disabilitato dopo successo e protezione dai doppi clic.
+- Tutti i caricamenti usano skeleton (pagine, operazioni, dettagli e immagini); tutti i feedback delle operazioni usano toast. Le istruzioni e gli stati vuoti restano nel contenuto. Dashboard: ToastProvider globale Base UI; estensione: provider nelle superfici popup, review e shadow root, senza portali nel sito ospitante.
 - Preservare accessibilità, gestione del focus, etichette e reduced motion.
 
 ## Comandi dalla root

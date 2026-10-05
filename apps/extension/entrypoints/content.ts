@@ -1,3 +1,4 @@
+import { ToastProvider } from '@/components/ui/toast';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Site, Environment } from '@/lib/session';
@@ -24,7 +25,7 @@ export default defineContentScript({
         const response = await browser.runtime.sendMessage({ type: 'REPORTY_PAGE' });
         if (disposed || version !== refreshVersion) return;
         const data = response?.ok ? response.data as { site: Site; environment: Environment } | null : null;
-        root.render(data ? React.createElement(ReviewOverlay, { ...data, host }) : null);
+        root.render(data ? React.createElement(ToastProvider, { children: React.createElement(ReviewOverlay, { ...data, host }) }) : null);
       } catch { if (!disposed && version === refreshVersion) root.render(null); }
     }
     void refresh();

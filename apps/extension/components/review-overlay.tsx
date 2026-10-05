@@ -1,3 +1,6 @@
+import { useNotify } from '@/components/ui/toast';
+import { LoadingSkeleton } from '@/components/ui/skeleton';
+import { LoadingImage } from '@/components/loading-image';
 import { useEffect, useState } from 'react';
 import { ArrowLeft, ChevronDown, Crosshair, Eye, EyeOff, MapPin, Plus } from 'lucide-react';
 import { getPageContext, priorityLabels, type ReportPriority, type Anchor, type Report, type ReportComment, type ReportContext } from '@reporty/shared';
@@ -31,14 +34,18 @@ export function ReviewOverlay({ site, environment, host }: { site: Site; environ
   const [reply, setReply] = useState('');
   const [edit, setEdit] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState('');
-  const [status, setStatus] = useState('');
+  const setStatus = useNotify();
+  const [listLoading, setListLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [, tick] = useState(0);
   const [hover, setHover] = useState<DOMRect | null>(null);
   async function refresh() {
-    const result = await message({ type: 'REPORTY_REPORT', operation: 'list', payload: { pagePath: getPageContext(location.href).pagePath } });
-    setReports(result.data);
-    return result.data as Report[];
+    setListLoading(true);
+    try {
+      const result = await message({ type: 'REPORTY_REPORT', operation: 'list', payload: { pagePath: getPageContext(location.href).pagePath } });
+      setReports(result.data);
+      return result.data as Report[];
+    } finally { setListLoading(false); }
   }
   async function run(work: () => Promise<void>) {
     setBusy(true); setStatus('');
@@ -54,7 +61,8 @@ export function ReviewOverlay({ site, environment, host }: { site: Site; environ
   }
   useEffect(() => {
     let disposed = false;
-    void refresh().catch(error => { if (!disposed) setStatus(error.message); });
+    setListLoading(true);
+    void refresh().catch(error => { if (!disposed) setStatus(error.message); }).finally(() => { if (!disposed) setListLoading(false); });
     setSelected(null); setComments([]); setImageUrl('');
     return () => { disposed = true; };
   }, [page.pagePath, environment.id]);
@@ -111,14 +119,14 @@ export function ReviewOverlay({ site, environment, host }: { site: Site; environ
     {open && !mode ? <section aria-label="Segnalazioni Reporty" className="pointer-events-auto fixed flex max-h-[75vh] w-[min(380px,calc(100vw-48px))] flex-col gap-4 overflow-y-auto rounded-xl border bg-muted/50 p-4 text-sm text-card-foreground shadow-2xl" style={panelPosition}>
       <div className="flex items-center justify-between gap-2">{selected ? <Button variant="outline" size="sm" onClick={() => { setSelected(null); setListOpen(true); }}><ArrowLeft className="size-4" aria-hidden="true" />Torna alle segnalazioni</Button> : <span className="font-semibold">Reporty</span>}<Button size="sm" variant="ghost" aria-label="Chiudi" onClick={() => setOpen(false)}>×</Button></div>
       <header className="rounded-xl border bg-card p-4"><h2 className="font-semibold">{environment.projectName}</h2><p className="break-all text-xs text-muted-foreground">{environment.name} · {page.pagePath}</p></header>
-      <p role="status" className="text-xs text-muted-foreground">{busy ? 'Operazione in corso…' : status}</p>
+      {busy ? <LoadingSkeleton /> : null}
       {draft ? <form className="grid gap-3 rounded-xl border bg-card p-4 shadow-sm" onSubmit={event => { event.preventDefault(); void run(async () => {
         const result = await message({ type: 'REPORTY_REPORT', operation: 'create', payload: { id: draft.id, body: draft.body, priority: draft.priority, context: draft.context }, screenshot: draft.screenshot });
-        setDraft(null); await refresh(); setStatus(result.warning ?? 'Segnalazione inviata.');
+        setDraft(null); await refresh(); setStatus(result.warning ?? 'Segnalazione inviata.', result.warning ? 'error' : 'success');
       }); }}>
         <h3 className="font-medium">Nuova segnalazione</h3><Label htmlFor="report-body">Fix da effettuare</Label><textarea id="report-body" className="min-h-28 rounded-lg border bg-background p-3" value={draft.body} maxLength={10000} required onChange={event => setDraft({ ...draft, body: event.target.value })} />
         <Label htmlFor="report-priority">Priorità</Label><select id="report-priority" className="rounded-lg border bg-background p-2" disabled={busy} value={draft.priority} onChange={event => setDraft({ ...draft, priority: event.target.value as ReportPriority })}>{Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-        {draft.screenshot ? <><img alt="Anteprima screenshot da inviare" src={draft.screenshot} className="rounded-lg border" /><Button type="button" variant="outline" onClick={() => setDraft({ ...draft, screenshot: undefined })}>Rimuovi screenshot</Button></> : <div className="grid gap-2"><p className="text-xs text-muted-foreground">Nessuno screenshot allegato.</p><Button type="button" variant="outline" disabled={busy} onClick={() => void run(async () => {
+        {draft.screenshot ? <><LoadingImage key={draft.screenshot} alt="Anteprima screenshot da inviare" src={draft.screenshot} /><Button type="button" variant="outline" onClick={() => setDraft({ ...draft, screenshot: undefined })}>Rimuovi screenshot</Button></> : <div className="grid gap-2"><p className="text-xs text-muted-foreground">Nessuno screenshot allegato.</p><Button type="button" variant="outline" disabled={busy} onClick={() => void run(async () => {
           if (location.href !== draft.context.url || Math.abs(scrollY - draft.context.scroll.y) > 2 || Math.abs(scrollX - draft.context.scroll.x) > 2) throw new Error('Torna alla pagina e alla posizione originali prima di acquisire lo screenshot.');
           const screenshot = await captureHighlightedScreenshot(host, draft.context, () => message({ type: 'REPORTY_CAPTURE' }));
           if (screenshot.length > 3500000) throw new Error('Screenshot troppo grande.');
@@ -129,7 +137,7 @@ export function ReviewOverlay({ site, environment, host }: { site: Site; environ
         <section className={box} aria-label="Descrizione e screenshot"><h3 className="font-semibold">Segnalazione</h3>
         <p className="whitespace-pre-wrap break-words rounded-lg bg-muted p-3 text-sm leading-relaxed">{selected.body}</p>
         {selected.screenshot_path ? <Button variant="outline" disabled={busy} aria-expanded={Boolean(imageUrl)} onClick={() => { if (imageUrl) { setImageUrl(''); return; } void run(async () => { const result = await message({ type: 'REPORTY_SCREENSHOT', id: selected.id }); setImageUrl(result.url); }); }}>{imageUrl ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}{imageUrl ? 'Nascondi screenshot' : 'Mostra screenshot'}</Button> : null}
-        {imageUrl ? <img alt="Screenshot originale della segnalazione" src={imageUrl} className="rounded-lg border" /> : null}
+        {imageUrl ? <LoadingImage key={imageUrl} alt="Screenshot originale della segnalazione" src={imageUrl} /> : null}
         <div className="flex flex-wrap gap-2 text-xs"><span className={`rounded-full px-2 py-1 ${statusColors[selected.status]}`}>{statusLabels[selected.status]}</span><span className={`rounded-full px-2 py-1 ${priorityColors[selected.priority ?? 'medium']}`}>Priorità {priorityLabels[selected.priority ?? 'medium'].toLowerCase()}</span></div>
         {!locate(selected.context.anchor) ? <p className="rounded-lg bg-muted p-3">Elemento non trovato o modificato. Consulta lo screenshot originale.</p> : null}
         <Button variant="outline" disabled={busy} onClick={() => {
@@ -138,17 +146,18 @@ export function ReviewOverlay({ site, environment, host }: { site: Site; environ
           else window.scrollTo({ top: selected.context.scroll.y, left: selected.context.scroll.x, behavior: 'smooth' });
         }}>Vai al punto</Button></section>
         <section className={box} aria-label="Gestione segnalazione"><h3 className="font-medium">Gestisci segnalazione</h3>
-        {selected.canChangeStatus ? <div className="grid gap-2"><Label htmlFor="report-status">Stato</Label><select id="report-status" className="rounded-lg border bg-background p-2" disabled={busy} value={selected.status} onChange={event => void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'status', payload: { id: selected.id, status: event.target.value } }); const items = await refresh(); setSelected(items.find(item => item.id === selected.id) ?? null); })}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div> : null}
-        {selected.canChangeStatus ? <div className="grid gap-2"><Label htmlFor="selected-priority">Priorità</Label><select id="selected-priority" className="rounded-lg border bg-background p-2" disabled={busy} value={selected.priority ?? 'medium'} onChange={event => void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'priority', payload: { id: selected.id, priority: event.target.value } }); const items = await refresh(); setSelected(items.find(item => item.id === selected.id) ?? null); })}>{Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div> : null}
-        {selected.canEdit ? <div className="space-y-2">{edit === null ? <Button variant="outline" onClick={() => setEdit(selected.body)}>Modifica testo</Button> : <form className="grid gap-2" onSubmit={event => { event.preventDefault(); void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'edit', payload: { id: selected.id, body: edit } }); const items = await refresh(); setSelected(items.find(item => item.id === selected.id) ?? null); setEdit(null); }); }}><textarea className="rounded-lg border p-2" required value={edit} maxLength={10000} onChange={event => setEdit(event.target.value)} /><Button type="submit" disabled={busy}>Salva testo</Button></form>}<Button variant="destructive" disabled={busy} onClick={() => { if (confirm('Eliminare questa segnalazione e le sue risposte?')) void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'delete', payload: { id: selected.id } }); setSelected(null); await refresh(); }); }}>Elimina</Button></div> : null}
+        {selected.canChangeStatus ? <div className="grid gap-2"><Label htmlFor="report-status">Stato</Label><select id="report-status" className="rounded-lg border bg-background p-2" disabled={busy} value={selected.status} onChange={event => void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'status', payload: { id: selected.id, status: event.target.value } }); setStatus('Stato aggiornato.', 'success'); const items = await refresh(); setSelected(items.find(item => item.id === selected.id) ?? null); })}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div> : null}
+        {selected.canChangeStatus ? <div className="grid gap-2"><Label htmlFor="selected-priority">Priorità</Label><select id="selected-priority" className="rounded-lg border bg-background p-2" disabled={busy} value={selected.priority ?? 'medium'} onChange={event => void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'priority', payload: { id: selected.id, priority: event.target.value } }); setStatus('Priorità aggiornata.', 'success'); const items = await refresh(); setSelected(items.find(item => item.id === selected.id) ?? null); })}>{Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div> : null}
+        {selected.canEdit ? <div className="space-y-2">{edit === null ? <Button variant="outline" onClick={() => setEdit(selected.body)}>Modifica testo</Button> : <form className="grid gap-2" onSubmit={event => { event.preventDefault(); void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'edit', payload: { id: selected.id, body: edit } }); setStatus('Testo aggiornato.', 'success'); const items = await refresh(); setSelected(items.find(item => item.id === selected.id) ?? null); setEdit(null); }); }}><textarea className="rounded-lg border p-2" required value={edit} maxLength={10000} onChange={event => setEdit(event.target.value)} /><Button type="submit" disabled={busy}>Salva testo</Button></form>}<Button variant="destructive" disabled={busy} onClick={() => { if (confirm('Eliminare questa segnalazione e le sue risposte?')) void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'delete', payload: { id: selected.id } }); setStatus('Segnalazione eliminata.', 'success'); setSelected(null); await refresh(); }); }}>Elimina</Button></div> : null}
         </section><section className={box} aria-label="Risposte"><h3 className="font-medium">Risposte</h3>{comments.map(comment => <div key={comment.id} className="rounded-lg bg-muted p-3"><p className="text-xs font-medium">{comment.authorName}</p><p className="whitespace-pre-wrap break-words">{comment.body}</p></div>)}
-        <form className="grid gap-2" onSubmit={event => { event.preventDefault(); void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'reply', payload: { id: selected.id, body: reply } }); setReply(''); const result = await message({ type: 'REPORTY_REPORT', operation: 'thread', payload: { id: selected.id } }); setComments(result.data.comments); }); }}><Label htmlFor="reply">Aggiungi una risposta</Label><textarea id="reply" className="rounded-lg border bg-background p-2" maxLength={10000} required value={reply} onChange={event => setReply(event.target.value)} /><Button type="submit" disabled={busy || !reply.trim()}>Rispondi</Button></form>
+        <form className="grid gap-2" onSubmit={event => { event.preventDefault(); void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'reply', payload: { id: selected.id, body: reply } }); setStatus('Risposta inviata.', 'success'); setReply(''); const result = await message({ type: 'REPORTY_REPORT', operation: 'thread', payload: { id: selected.id } }); setComments(result.data.comments); }); }}><Label htmlFor="reply">Aggiungi una risposta</Label><textarea id="reply" className="rounded-lg border bg-background p-2" maxLength={10000} required value={reply} onChange={event => setReply(event.target.value)} /><Button type="submit" disabled={busy || !reply.trim()}>Rispondi</Button></form>
         </section><footer className="rounded-xl border bg-card p-4 text-xs text-muted-foreground"><p>Segnalata da {selected.authorName}</p><p>Viewport originale: {selected.context.viewport.width} × {selected.context.viewport.height} · scroll {Math.round(selected.context.scroll.y)} px</p></footer>
       </div> : <>
         <div className="grid gap-3 rounded-xl border bg-card p-4 shadow-sm"><h3 className="font-semibold">Crea una segnalazione</h3><Button className="w-full justify-start" disabled={busy} onClick={() => { setMode('element'); setOpen(false); }}><Crosshair className="size-4" aria-hidden="true" />Seleziona elemento</Button><Button className="w-full justify-start" disabled={busy} variant="outline" onClick={() => { setMode('pin'); setOpen(false); }}><MapPin className="size-4" aria-hidden="true" />Pin libero</Button></div>
         <section className={box} aria-label="Lista segnalazioni"><Button className="w-full justify-between" variant="outline" aria-expanded={listOpen} aria-controls="reporty-page-reports" onClick={() => setListOpen(previous => !previous)}>Segnalazioni della pagina ({reports.length})<span className="flex transition-transform duration-200 motion-reduce:transition-none" style={{ transform: listOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}><ChevronDown className="size-4" aria-hidden="true" /></span></Button>
         <div id="reporty-page-reports" hidden={!listOpen} className={listOpen ? "grid gap-2" : "hidden"}>
-          {!reports.length ? <p className="text-muted-foreground">Nessuna segnalazione su questa pagina.</p> : null}
+          {listLoading ? <LoadingSkeleton /> : null}
+          {!listLoading && !reports.length ? <p className="text-muted-foreground">Nessuna segnalazione su questa pagina.</p> : null}
           {reports.map((report, index) => <button key={report.id} className="rounded-lg border p-3 text-left hover:bg-accent" onClick={() => void view(report)}><p className="line-clamp-3 break-words">{index + 1}. {report.body}</p><div className="mt-2 flex flex-wrap gap-2 text-xs"><span className={`rounded-full px-2 py-1 ${statusColors[report.status]}`}>{statusLabels[report.status]}</span><span className={`rounded-full px-2 py-1 ${priorityColors[report.priority ?? 'medium']}`}>Priorità {priorityLabels[report.priority ?? 'medium'].toLowerCase()}</span>{!anchorPosition(report.context.anchor) ? <span className="text-muted-foreground">Elemento non trovato</span> : null}</div></button>)}
         </div></section>
       </>}

@@ -1,5 +1,7 @@
 'use client';
 
+import { useToastManager } from '@/components/ui/toast';
+import { LoadingSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,13 +26,14 @@ function prepareExtension(): Promise<Prepared> {
 }
 
 export function ReviewForm({ token }: { token: string }) {
-  const [busy, setBusy] = useState(false), [done, setDone] = useState(false), [status, setStatus] = useState('');
+  const [busy, setBusy] = useState(false), [done, setDone] = useState(false);
+  const toast = useToastManager();
   const locked = useRef(false);
   return <form className="grid gap-4" onSubmit={event => {
     event.preventDefault();
     if (locked.current) return;
     const form = new FormData(event.currentTarget);
-    locked.current = true; setBusy(true); setStatus('');
+    locked.current = true; setBusy(true);
     void (async () => {
       try {
         const prepared = await prepareExtension();
@@ -43,9 +46,9 @@ export function ReviewForm({ token }: { token: string }) {
           if (runtime.lastError || !response?.ok) reject(new Error('Collegamento non riuscito. Riapri il link e riprova.'));
           else resolve();
         }));
-        setDone(true); setStatus('Collegamento completato. Apertura della revisione…');
-      } catch (error) { locked.current = false; setStatus(error instanceof Error ? error.message : 'Avvio non riuscito.'); }
+        setDone(true); toast.add({ title: 'Collegamento completato', description: 'Apertura della revisione…', type: 'success' });
+      } catch (error) { locked.current = false; toast.add({ title: 'Avvio non riuscito', description: error instanceof Error ? error.message : 'Riprova.', type: 'error' }); }
       finally { setBusy(false); }
     })();
-  }}><div className="grid gap-2"><Label htmlFor="guest-name">Il tuo nome</Label><Input id="guest-name" name="name" autoComplete="name" maxLength={80} required placeholder="Come ti chiami?" disabled={busy || done} /></div><Button type="submit" disabled={busy || done}>{done ? 'Revisione avviata' : busy ? 'Collegamento…' : 'Inizia revisione'}</Button><p role="status" className="text-sm text-muted-foreground">{status}</p></form>;
+  }}><div className="grid gap-2"><Label htmlFor="guest-name">Il tuo nome</Label><Input id="guest-name" name="name" autoComplete="name" maxLength={80} required placeholder="Come ti chiami?" disabled={busy || done} /></div><Button type="submit" disabled={busy || done}>{done ? 'Revisione avviata' : busy ? <Skeleton className="h-4 w-32 bg-current opacity-30" /> : 'Inizia revisione'}</Button>{busy ? <LoadingSkeleton /> : null}</form>;
 }

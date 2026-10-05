@@ -95,3 +95,7 @@ Applicare `202610050010_guest_review_start.sql` dopo la migrazione 009, aggiorna
 Eseguire `migrations/202610050011_shared_dashboard.sql` dopo la 010. Tutti gli utenti registrati tramite Google o link email hanno accesso completo ai progetti e alle segnalazioni. Gli ospiti restano limitati al proprio progetto e all’estensione.
 
 La migrazione revoca i precedenti inviti individuali senza cancellare segnalazioni o autori. Nella tab Ambienti creare il link unico del progetto e scegliere l’ambiente di avvio; il link può essere copiato anche da altri sviluppatori. Rigenerarlo revoca il link precedente e le sessioni ospite associate. Cambiare solo l’ambiente di avvio conserva il link. Se l’ambiente viene eliminato, scegliere un nuovo ambiente per riattivare l’avvio della revisione.
+
+## Modifica stato e priorità per i guest (012)
+
+Dopo la 011, applicare `migrations/202610050012_guest_report_updates.sql`. Gli ospiti autorizzati possono cambiare stato e priorità di tutte le segnalazioni del proprio progetto. Gli accessi revocati e gli altri progetti restano esclusi. L’estensione mostra automaticamente i controlli tramite `canChangeStatus`; non occorre una nuova build.

@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { requireUser } from '@/lib/auth';
 import { signOut } from '@/app/login/actions';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
+import { SubmitButton } from '@/components/submit-button';
 import { DashboardNav } from './nav';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -17,7 +18,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <DashboardNav projects={projects.data ?? []} />
           <div className="mt-auto flex min-w-0 items-center gap-2 border-t pt-4">
             <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground" title={email}>{email}</p>
-            <form action={signOut}><Button type="submit" variant="outline" size="sm">Esci</Button></form>
+            <form action={signOut}><SubmitButton variant="outline" size="sm" pendingLabel="Uscita…">Esci</SubmitButton></form>
           </div>
         </div>
       </aside>

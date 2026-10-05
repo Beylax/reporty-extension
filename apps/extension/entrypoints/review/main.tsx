@@ -1,3 +1,5 @@
+import { ToastProvider, useNotify } from '@/components/ui/toast';
+import { LoadingSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { pattern, type Environment } from '@/lib/session';
@@ -7,12 +9,13 @@ import './style.css';
 
 function ReviewStart() {
   const [environment, setEnvironment] = useState<Environment | null>(null);
-  const [status, setStatus] = useState('');
+  const setStatus = useNotify();
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   useEffect(() => { void browser.runtime.sendMessage({ type: 'REPORTY_GUEST_START' }).then(result => {
     if (!result?.ok) throw new Error(result?.error ?? 'Invito non disponibile.');
     setEnvironment(result.data);
-  }).catch(error => setStatus(error.message)); }, []);
+  }).catch(error => setStatus(error.message)).finally(() => setLoading(false)); }, []);
   async function start() {
     if (!environment || busy) return;
     setBusy(true); setStatus('');
@@ -23,6 +26,6 @@ function ReviewStart() {
       if (!result?.ok) throw new Error(result?.error ?? 'Avvio non riuscito.');
     } catch (error) { setStatus(error instanceof Error ? error.message : 'Avvio non riuscito.'); setBusy(false); }
   }
-  return <main className="flex min-h-dvh items-center justify-center px-6 py-10"><div className="w-full max-w-lg space-y-5 text-center"><p className="text-xl font-semibold">Reporty</p><section className="space-y-4 rounded-xl border bg-card p-6"><h1 className="text-xl font-semibold">Un ultimo passaggio per iniziare</h1><p className="text-sm text-muted-foreground">Il collegamento è pronto. Consenti a Reporty di mostrare i commenti sul sito: il browser chiederà il permesso solo per questo dominio.</p>{environment ? <><p className="font-medium">{environment.projectName} · {environment.name}</p><p className="break-all text-sm text-muted-foreground">{environment.origin}</p><Button disabled={busy} onClick={() => void start()}>{busy ? 'Apertura…' : 'Consenti e apri il sito'}</Button></> : null}<p role="status" className="text-sm text-destructive">{status}</p></section></div></main>;
+  return <main className="flex min-h-dvh items-center justify-center px-6 py-10"><div className="w-full max-w-lg space-y-5 text-center"><p className="text-xl font-semibold">Reporty</p><section className="space-y-4 rounded-xl border bg-card p-6"><h1 className="text-xl font-semibold">Un ultimo passaggio per iniziare</h1><p className="text-sm text-muted-foreground">Il collegamento è pronto. Consenti a Reporty di mostrare i commenti sul sito: il browser chiederà il permesso solo per questo dominio.</p>{environment ? <><p className="font-medium">{environment.projectName} · {environment.name}</p><p className="break-all text-sm text-muted-foreground">{environment.origin}</p><Button disabled={busy} onClick={() => void start()}>{busy ? <Skeleton className="h-4 w-32 bg-current opacity-30" /> : 'Consenti e apri il sito'}</Button></> : null}{loading || busy ? <LoadingSkeleton /> : null}</section></div></main>;
 }
-createRoot(document.getElementById('root')!).render(<ReviewStart />);
+createRoot(document.getElementById('root')!).render(<ToastProvider><ReviewStart /></ToastProvider>);

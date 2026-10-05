@@ -2,13 +2,14 @@
 
 import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ToastProvider, useToastManager } from '@/components/ui/toast';
+import { useToastManager } from '@/components/ui/toast';
+import { Skeleton } from '@/components/ui/skeleton';
 import { createHandoff } from './actions';
 
 type ChromeWeb = { runtime?: { sendMessage: (id: string, message: unknown, callback: (response?: { ok?: boolean; error?: string }) => void) => void; lastError?: { message?: string } } };
 
 export function ConnectButton({ extensionId, nonce, projectId }: { extensionId: string; nonce: string; projectId?: string }) {
-  return <ToastProvider><ConnectionControl extensionId={extensionId} nonce={nonce} projectId={projectId} /></ToastProvider>;
+  return <ConnectionControl extensionId={extensionId} nonce={nonce} projectId={projectId} />;
 }
 
 function ConnectionControl({ extensionId, nonce, projectId }: { extensionId: string; nonce: string; projectId?: string }) {
@@ -40,5 +41,5 @@ function ConnectionControl({ extensionId, nonce, projectId }: { extensionId: str
     } catch { failure('Collegamento non riuscito. Riprova.'); }
     finally { locked.current = succeeded; setPending(false); }
   }
-  return <Button disabled={pending || connected} onClick={connect}>{connected ? 'Estensione collegata' : pending ? 'Collegamento…' : 'Conferma collegamento'}</Button>;
+  return <Button disabled={pending || connected} onClick={connect}>{connected ? 'Estensione collegata' : pending ? <Skeleton className="h-4 w-32 bg-current opacity-30" /> : 'Conferma collegamento'}</Button>;
 }

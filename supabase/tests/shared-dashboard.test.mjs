@@ -32,6 +32,7 @@ test('shared dashboard permissions and a single regenerable guest link', async (
     await db.query('insert into public.project_members(project_id,user_id,role) values($1,$2,$3)', [project,member,'member']);
     await db.query('insert into public.platform_admins(user_id) values($1)', [platform]);
     await db.exec(await readFile(new URL('../migrations/202610050011_shared_dashboard.sql', import.meta.url), 'utf8'));
+    await db.exec(await readFile(new URL('../migrations/202610050012_guest_report_updates.sql', import.meta.url), 'utf8'));
     const env = '66666666-6666-4666-8666-666666666666';
     const env2 = '77777777-7777-4777-8777-777777777777';
     await db.query('insert into public.environments(id,project_id,name,origin) values($1,$2,$3,$4),($5,$2,$6,$7)',[env,project,'Production','https://one.example',env2,'Staging','https://stage.example']);
@@ -65,9 +66,21 @@ test('shared dashboard permissions and a single regenerable guest link', async (
     await as(null,'anon');
     await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,foreignEnv,'list',{}]),/Not authorized/);
     await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,'delete',{id:issue}]),/Not authorized/);
+    for (const [operation, field, value] of [['status','status','in_progress'],['priority','priority','low']]) {
+      await db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,operation,{id:issue,[field]:value}]);
+      await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,operation,{id:issue,[field]:'invalid'}]),/Invalid/);
+      await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,foreignEnv,operation,{id:issue,[field]:value}]),/Not authorized/);
+    }
+    const guestReports = (await db.query('select public.report_operation($1,$2,$3,$4) as reports',[guestExtension,env,'list',{}])).rows[0].reports;
+    assert.equal(guestReports[0].canChangeStatus,true);
+    assert.equal(guestReports[0].canEdit,false);
+    assert.equal(guestReports[0].status,'in_progress');
+    assert.equal(guestReports[0].priority,'low');
+    await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,'edit',{id:issue,body:'Forbidden'}]),/Not authorized/);
     await as(outsider);
     const next = (await save(env,true)).rows[0].token;
     assert.notEqual(token,next);
+    await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,'status',{id:issue,status:'resolved'}]),/revoked/);
     assert.equal((await db.query('select * from public.preview_guest_review($1)',[token])).rows.length,0);
     assert.equal((await db.query('select * from public.get_guest_session($1)',[secret])).rows.length,0);
     assert.equal((await db.query('select * from public.project_review_links')).rows.length,1);

@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { ReportList } from './report-list';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { FeedbackToast } from '@/components/feedback-toast';
 import type { Report } from '@reporty/shared';
 
 export async function ProjectReports({ environments }: { environments: { id: string; name: string; origin: string }[] }) {
@@ -9,6 +9,6 @@ export async function ProjectReports({ environments }: { environments: { id: str
     const { data, error } = await supabase.rpc('report_operation', { secret: null, target: environment.id, operation: 'list', payload: {} });
     return { data: data as Report[] | null, error };
   }));
-  if (results.some(result => result.error)) return <Alert><AlertDescription>Per attivare le segnalazioni, applica la migrazione 202610050005_reports.sql. Se è già applicata, verifica connessione e permessi.</AlertDescription></Alert>;
+  if (results.some(result => result.error)) return <FeedbackToast message={'Per attivare le segnalazioni, applica la migrazione 202610050005_reports.sql. Se è già applicata, verifica connessione e permessi.'} />;
   return <ReportList reports={results.flatMap(result => result.data ?? [])} environments={environments} />;
 }

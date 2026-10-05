@@ -1,4 +1,4 @@
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { FeedbackToast } from '@/components/feedback-toast';
 
 const messages: Record<string, string> = {
   'invalid-name': 'Inserisci un nome valido entro il limite indicato.',
@@ -13,5 +13,5 @@ const messages: Record<string, string> = {
 export function Feedback({ message }: { message?: string }) {
   if (!message || !messages[message]) return null;
   const success = message === 'created' || message === 'saved';
-  return <Alert role={success ? 'status' : 'alert'} variant={success ? 'default' : 'destructive'}><AlertDescription>{messages[message]}</AlertDescription></Alert>;
+  return <FeedbackToast key={message} message={messages[message]} type={success ? 'success' : 'error'} />;
 }

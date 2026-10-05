@@ -2,10 +2,9 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { sendMagicLink, signInWithGoogle } from './actions';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { FeedbackToast } from '@/components/feedback-toast';
 import { SubmitButton } from '@/components/submit-button';
 
 const messages: Record<string, string> = {
@@ -31,9 +30,9 @@ export default async function Login({ searchParams }: {
       <Card>
       <CardHeader><CardTitle><h1 className="text-2xl">Accedi al tuo workspace</h1></CardTitle><CardDescription>Rivedi i siti e collabora sulle segnalazioni.</CardDescription></CardHeader>
       <CardContent className="space-y-6">
-      {message && messages[message] ? <Alert role="status"><AlertDescription>{messages[message]}</AlertDescription></Alert> : null}
+      {message && messages[message] ? <FeedbackToast message={messages[message]} type={message === 'email-sent' ? 'success' : 'error'} /> : null}
       <form action={signInWithGoogle}>
-        <Button type="submit" variant="outline" className="w-full">Continua con Google</Button>
+        <div className="grid"><SubmitButton variant="outline" pendingLabel="Accesso…">Continua con Google</SubmitButton></div>
       </form>
       <p className="text-center text-sm text-muted-foreground">oppure con email</p>
       <form action={sendMagicLink} className="grid gap-3">
