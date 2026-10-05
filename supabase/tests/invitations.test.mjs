@@ -27,7 +27,7 @@ test('invitation permissions, email binding and guest revocation on PostgreSQL',
         ('${member}', 'member@example.com', now()),
         ('${outsider}', 'outsider@example.com', now());
     `);
-    for (const file of ['202610050001_initial.sql', '202610050002_project_management.sql', '202610050003_invitations.sql', '202610050004_extension_sessions.sql']) {
+    for (const file of ['202610050001_initial.sql', '202610050002_project_management.sql', '202610050003_invitations.sql', '202610050004_extension_sessions.sql', '202610050005_reports.sql']) {
       await db.exec(await readFile(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
     }
     const as = async (id, role = 'authenticated') => {
@@ -87,11 +87,43 @@ test('invitation permissions, email binding and guest revocation on PostgreSQL',
     assert.equal(guestContext.environments.length, 1);
     assert.equal(guestContext.environments[0].origin, 'https://example.com');
     await assert.rejects(db.query('select * from public.extension_sessions'));
+    const environmentId = guestContext.environments[0].id;
+    const reportContext = { origin: 'https://example.com', url: 'https://example.com/products?sort=price', pagePath: '/products', anchor: { kind: 'pin', documentX: 100, documentY: 200 }, viewport: { width: 1280, height: 720, devicePixelRatio: 1 }, scroll: { x: 0, y: 0 } };
+    const issueId = '99999999-9999-4999-8999-999999999999';
+    const createdReport = (await db.query('select public.report_operation($1,$2,$3,$4) as report', [extensionSecret, environmentId, 'create', { id: issueId, body: 'Align the title', context: reportContext }])).rows[0].report;
+    assert.equal(createdReport.guest_session_id !== null, true);
+    assert.equal(createdReport.author_id, null);
+    assert.equal((await db.query('select public.report_operation($1,$2,$3,$4) as report', [extensionSecret, environmentId, 'create', { id: issueId, body: 'Align the title', context: reportContext }])).rows[0].report.id, issueId);
+    await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)', [extensionSecret, environmentId, 'status', { id: issueId, status: 'resolved' }]));
+    await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)', [extensionSecret, environmentId, 'delete', { id: issueId }]));
+    await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)', [extensionSecret, environmentId, 'edit', { id: issueId, body: 'Changed' }]));
+    await db.query('select public.report_operation($1,$2,$3,$4)', [extensionSecret, environmentId, 'reply', { id: issueId, body: 'Client reply' }]);
+    assert.equal((await db.query('select public.report_operation($1,$2,$3,$4) as report', [extensionSecret, environmentId, 'thread', { id: issueId }])).rows[0].report.comments.length, 1);
+    const pageReports = (await db.query('select public.report_operation($1,$2,$3,$4) as reports', [extensionSecret, environmentId, 'list', { pagePath: '/products' }])).rows[0].reports;
+    assert.equal(pageReports.length, 1);
+    assert.equal(pageReports[0].canChangeStatus, false);
+    assert.equal((await db.query('select public.report_operation($1,$2,$3,$4) as reports', [extensionSecret, environmentId, 'list', { pagePath: '/other' }])).rows[0].reports.length, 0);
+    await as(outsider);
+    await assert.rejects(db.query('select public.report_operation(null,$1,$2,$3)', [environmentId, 'list', {}]));
+    const otherProject = '88888888-8888-4888-8888-888888888888';
+    await db.query('insert into public.projects(id,name,created_by) values($1,$2,$3)', [otherProject, 'Other website', outsider]);
+    const otherEnv = (await db.query('insert into public.environments(project_id,name,origin) values($1,$2,$3) returning id', [otherProject, 'Production', 'https://other.com'])).rows[0].id;
+    await as(null, 'anon');
+    await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)', [extensionSecret, otherEnv, 'list', {}]));
+    await as(member);
+    await db.query('select public.report_operation(null,$1,$2,$3)', [environmentId, 'status', { id: issueId, status: 'in_progress' }]);
+    await assert.rejects(db.query('select public.report_operation(null,$1,$2,$3)', [environmentId, 'delete', { id: issueId }]));
+    await as(owner);
+    await db.query('select public.report_operation(null,$1,$2,$3)', [environmentId, 'edit', { id: issueId, body: 'Updated by admin' }]);
+    assert.equal((await db.query('select public.report_operation(null,$1,$2,$3) as report', [environmentId, 'thread', { id: issueId }])).rows[0].report.issue.body, 'Updated by admin');
+    await as(null, 'anon');
+
     await as(owner);
     await db.query('select public.revoke_project_invite($1, $2, $3)', [project, guestInvite, 'guest']);
     await as(null, 'anon');
     assert.equal((await db.query('select * from public.get_guest_session($1)', [sessionSecret])).rows.length, 0);
     await assert.rejects(db.query('select public.extension_context($1)', [extensionSecret]));
+    await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)', [extensionSecret, environmentId, 'thread', { id: issueId }]));
     assert.equal((await db.query('select * from public.preview_guest_invite($1)', [guestSecret])).rows.length, 0);
     await assert.rejects(db.query('select public.start_guest_session($1, $2, $3)', [guestSecret, 'Designer', 'f'.repeat(64)]));
     await as(member);

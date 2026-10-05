@@ -15,7 +15,7 @@ Il link email usa PKCE: aprirlo nello stesso browser in cui è stato richiesto.
 
 La migrazione `migrations/202610050001_initial.sql` è destinata a un progetto nuovo. Eseguirla nel SQL Editor oppure tramite Supabase CLI dopo aver collegato il progetto. Non è stata applicata automaticamente.
 
-Include progetti, membri, ambienti, segnalazioni, risposte, inviti e sessioni ospiti; RLS separa i progetti. Inviti e sessioni sono riservati al server e screenshot privati. Le API di gestione, gli ospiti e l'upload screenshot sono ancora da implementare: non aggiungere policy pubbliche per aggirare queste restrizioni.
+Include progetti, membri, ambienti, segnalazioni, risposte, inviti e sessioni ospiti; RLS separa i progetti. Le migrazioni successive attivano le API di gestione, gli inviti e le segnalazioni. I bucket restano privati: non aggiungere policy pubbliche.
 
 Dopo il primo accesso, per nominare l'amministratore generale eseguire nel SQL Editor, sostituendo l'UUID con quello dell'utente nella sezione Authentication → Users:
 
@@ -38,7 +38,7 @@ Eseguire `migrations/202610050003_invitations.sql` dopo le prime due migrazioni.
 - Invito membro: inserire l'email, creare il link e condividerlo manualmente. Accettazione dopo login con la stessa email verificata. Il link è monouso, con accettazione idempotente per il membro già aggiunto; può essere revocato prima dell'accettazione. Revocare un invito non rimuove un membro già entrato.
 - Invito ospite: link riutilizzabile fino a revoca, nessun login, solo nome. Crea una sessione ospite separata dall'account Supabase Auth e senza accesso alla dashboard. Revocando il link si bloccano tutte le sessioni create da quell'invito.
 - I link sono mostrati solo al momento della creazione. Il database conserva hash SHA-256: per sostituire un link perso, revocarlo e generarne uno nuovo.
-- La pagina ospite conferma l'accesso; il trasferimento della sessione all'estensione e la lettura/scrittura delle segnalazioni saranno implementati nel blocco estensione.
+- La pagina ospite conferma l'accesso; il popup dell'estensione permette di collegare la sessione e lavorare sulle segnalazioni.
 - Nell'MVP anche i clienti installano l'estensione. Il team usa dashboard ed estensione; i clienti non accedono alla dashboard. La modalità senza estensione tramite script è prevista per una fase successiva.
 - Non è richiesto un service-role secret: le funzioni SQL controllano i permessi e offrono agli ospiti solo operazioni limitate.
 
@@ -51,3 +51,19 @@ Verifica manuale: invitare un secondo account, provare prima con un'email divers
 Eseguire `migrations/202610050004_extension_sessions.sql` dopo la terza migrazione. Aggiunge codici monouso di collegamento (60 secondi) e sessioni dedicate all'estensione (30 giorni). Le API verificano a ogni richiesta l'accesso corrente agli ambienti: rimozione di una membership o revoca di un invito ha effetto anche sulle sessioni già collegate.
 
 Seguire [le istruzioni estensione](../apps/extension/README.md) per installazione e verifica. Non è richiesta una chiave service-role. I test locali includono riutilizzo del codice, token privati e revoca delle sessioni.
+
+## Segnalazioni e screenshot
+
+Eseguire `migrations/202610050005_reports.sql` dopo la quarta migrazione. Le operazioni sulle segnalazioni passano attraverso una funzione che verifica sessione, progetto, ambiente e permessi a ogni chiamata. Gli ospiti possono creare, leggere e rispondere; i membri possono cambiare stato; membri autori e amministratori possono modificare ed eliminare. Il caricamento della propria immagine è consentito anche all'autore ospite.
+
+Per gli screenshot aggiungere in `apps/web/.env.local` (e poi nelle variabili server Vercel):
+
+```dotenv
+SUPABASE_SECRET_KEY=chiave-segreta-server-supabase
+```
+
+Usare la Secret key da Settings → API Keys (oppure la legacy service-role key). Non usare il prefisso NEXT_PUBLIC e non inserire la chiave nell'estensione. Riavviare Next.js dopo aver configurato la variabile. La chiave è usata solo per Storage, dopo un controllo di accesso tramite RPC/RLS; le query applicative mantengono la sessione dell'utente.
+
+Il bucket `screenshots` è quello creato nella prima migrazione, privato. I percorsi sono determinati dal server con progetto e UUID segnalazione. Le immagini visibili sono servite con URL firmati validi per 60 secondi e senza cache del server. Le richieste screenshot JPEG sono limitate a 2,5 MB per rispettare il limite delle funzioni Vercel. Se l'upload fallisce dopo il salvataggio, il commento resta salvato e viene mostrato un avviso. La rimozione dei file dopo l'eliminazione di una segnalazione è best effort; un errore Storage può lasciare un file privato orfano.
+
+Verifica: creare una segnalazione con elemento e una con pin libero; rimuovere uno screenshot prima dell'invio; aprire la pagina con un secondo membro e controllare pin e commenti; cambiare stato e rispondere; verificare dalla dashboard filtri e immagini. Cambiare o rimuovere l'elemento nel sito e verificare che la segnalazione resti nella lista con indicazione di elemento non trovato.

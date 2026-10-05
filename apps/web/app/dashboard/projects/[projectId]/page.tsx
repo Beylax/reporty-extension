@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { SubmitButton } from '@/components/submit-button';
 import { ProjectInvitations } from '../../project-invitations';
+import { ProjectReports } from '../../project-reports';
 
 export default async function Project({ params, searchParams }: {
   params: Promise<{ projectId: string }>;
@@ -39,6 +40,7 @@ export default async function Project({ params, searchParams }: {
         <Badge variant="secondary">{canManage ? 'Amministratore' : 'Membro'}</Badge>
       </header>
       <Feedback message={message} />
+      <ProjectReports environments={environments} />
       {canManage ? <Card>
         <CardHeader><CardTitle>Nome del progetto</CardTitle><CardDescription>Il nome condiviso con tutti i membri.</CardDescription></CardHeader>
         <CardContent><form action={renameProject} className="flex flex-wrap items-end gap-3">

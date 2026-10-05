@@ -36,6 +36,32 @@ export default defineBackground(() => {
     void (async () => {
       await protectStorage;
       if (sender.id !== browser.runtime.id) throw new Error('Invalid sender');
+      if (['REPORTY_REPORT', 'REPORTY_CAPTURE', 'REPORTY_SCREENSHOT'].includes(message?.type)) {
+        if (sender.frameId !== 0 || !sender.tab?.id || !sender.url) throw new Error('Pagina non valida.');
+        const tab = await browser.tabs.get(sender.tab.id);
+        if (!tab.url || new URL(tab.url).origin !== new URL(sender.url).origin) throw new Error('Pagina cambiata.');
+        const origin = new URL(tab.url).origin;
+        const { sites = {} } = await browser.storage.local.get('sites');
+        const site = (sites as Sites)[origin];
+        const context = await getContext();
+        if (!site || !context?.environments.some(item => item.id === site.environmentId && item.origin === origin)) throw new Error('Accesso al sito non disponibile.');
+        if (message.type === 'REPORTY_CAPTURE') {
+          const active = (await browser.tabs.query({ active: true, windowId: tab.windowId }))[0];
+          if (active?.id !== tab.id) throw new Error('Torna alla scheda da revisionare.');
+          const image = await browser.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 75 }).catch(() => { throw new Error('Apri il popup Reporty per autorizzare lo screenshot, oppure prosegui senza immagine.'); });
+          const after = await browser.tabs.get(tab.id!);
+          if (after.url !== tab.url || !(await browser.tabs.get(tab.id!)).active) throw new Error('Pagina cambiata durante lo screenshot.');
+          return sendResponse({ ok: true, data: image });
+        }
+        const { sessionToken } = await browser.storage.local.get('sessionToken');
+        if (message.type === 'REPORTY_REPORT' && message.operation === 'create' && message.payload?.context?.url !== tab.url) throw new Error('La pagina è cambiata: crea una nuova segnalazione.');
+        const endpoint = message.type === 'REPORTY_SCREENSHOT' ? 'screenshot' : 'reports';
+        const body = message.type === 'REPORTY_SCREENSHOT' ? { environmentId: site.environmentId, id: message.id } : { environmentId: site.environmentId, operation: message.operation, payload: message.payload, screenshot: message.screenshot };
+        const response = await fetch(`${apiOrigin}/api/extension/${endpoint}`, { method: 'POST', credentials: 'omit', headers: { Authorization: `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(30000) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error ?? 'Operazione non riuscita.');
+        return sendResponse({ ok: true, data: result });
+      }
       if (message?.type === 'REPORTY_PAGE') {
         if (sender.frameId !== 0 || !sender.url) throw new Error('Invalid page');
         const origin = new URL(sender.url).origin;

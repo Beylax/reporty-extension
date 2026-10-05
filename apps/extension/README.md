@@ -4,7 +4,7 @@ Chrome ed Edge desktop, WXT + React e shadcn/ui. Non richiede script nel sito.
 
 ## Preparazione locale
 
-1. Applicare le migrazioni Supabase fino a `202610050004_extension_sessions.sql`.
+1. Applicare le migrazioni Supabase fino a `202610050005_reports.sql`.
 2. Avviare la dashboard con `npm run dev:web` dalla root.
 3. Se il servizio non è su `http://localhost:3000`, creare `apps/extension/.env` copiando `.env.example` e impostare `WXT_API_URL`. Ricostruire l'estensione dopo ogni cambio di URL.
 4. Dalla root eseguire `npm run build --workspace=@reporty/extension`.
@@ -25,6 +25,12 @@ Il codice di collegamento dura 60 secondi ed è monouso. Il trasferimento è acc
 
 ## Stato e verifica
 
-Sono implementati collegamento membri/ospiti, elenco ambienti, abilitazione per sito, posizione del pulsante e scollegamento. Il `+` mostra lo stato del collegamento: selezione elementi, commenti e screenshot non sono ancora implementati.
+Sono implementati collegamento membri/ospiti, elenco ambienti, abilitazione per sito, pulsante posizionabile, selezione elemento o pin libero, commenti e risposte, stati, modifica/eliminazione e screenshot. Configurare SUPABASE_SECRET_KEY solo sul backend per caricare e leggere immagini private.
+
+Dopo ogni build ricaricare l’estensione dalla pagina del browser e ricaricare il sito. Il + apre la lista della pagina. Scegliere Seleziona elemento o Pin libero; selezionare il punto, scrivere il commento, controllare o rimuovere lo screenshot e inviare. Durante la selezione i click sulla pagina sono intercettati per non attivare link e pulsanti. Esc annulla la selezione.
+
+Lo screenshot riguarda solo la scheda attiva e l’area visibile. Se il permesso activeTab non è disponibile dopo una navigazione, riaprire il popup sul sito e riprovare; è possibile inviare senza immagine. Sono accettati screenshot JPEG fino a 2,5 MB, così la richiesta resta entro il limite di payload Vercel.
+
+Gli ancoraggi DOM usano selettori e un estratto del testo. Se l’elemento non è univoco, visibile o coerente con il testo originale il pin non viene mostrato; la segnalazione resta nella lista. I pin liberi usano coordinate documento e possono spostarsi rispetto al contenuto se il layout cambia. Nessuno stato React, cookie o storage del sito viene salvato o ripristinato. Elementi interni a iframe e shadow DOM non sono selezionabili in questa versione.
 
 Verificare manualmente Chrome ed Edge: collegamento, attivazione, ricaricamento del sito, cambio posizione, disabilitazione e scollegamento. Per gli ospiti provare anche la revoca dalla dashboard. Build e test database non sostituiscono questa verifica nel browser.
