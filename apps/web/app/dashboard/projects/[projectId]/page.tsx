@@ -70,8 +70,10 @@ export default async function Project({ params, searchParams }: {
               <div className="grid min-w-60 flex-1 gap-2"><Label htmlFor={`origin-${environment.id}`}>Origine del sito</Label><Input id={`origin-${environment.id}`} name="origin" type="url" defaultValue={environment.origin} required /></div>
               <SubmitButton>Salva ambiente</SubmitButton>
             </form> : null}
+            <details className="group rounded-xl border"><summary className="cursor-pointer rounded-xl px-4 py-3 text-sm font-medium outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring">Link ospite e script di revisione</summary><div className="space-y-5 border-t p-4">
             {linksResult.data?.find(link => link.environment_id === environment.id) ? <ReviewLinkForm projectId={projectId} environmentId={environment.id} link={`${appOrigin()}/guest/${linksResult.data.find(link => link.environment_id === environment.id)!.token}`} /> : <FeedbackToast message="Link ospite non disponibile. Inizializza il database con supabase/initialize.sql secondo il README Supabase." />}
             {widgetsResult.data?.find(widget => widget.environment_id === environment.id) ? <EnvironmentWidget environmentId={environment.id} enabled={widgetsResult.data.find(widget => widget.environment_id === environment.id)!.enabled} publicKey={widgetsResult.data.find(widget => widget.environment_id === environment.id)!.public_key} origin={appOrigin()} /> : <FeedbackToast message="Applica supabase/widget.sql per attivare gli script per ambiente." />}
+            </div></details>
             {canManage ? <ResourceDelete id={environment.id} kind="environment" name={environment.name} /> : null}
           </CardContent>
         </Card>)}
