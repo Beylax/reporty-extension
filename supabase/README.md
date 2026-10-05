@@ -1,105 +1,30 @@
 # Configurazione Supabase
 
-## Autenticazione locale
+## Inizializzazione e reset
 
-In Authentication → URL Configuration:
+Eseguire **`initialize.sql`** nel SQL Editor di Supabase. È l’unico script di inizializzazione e sostituisce le precedenti migrazioni.
 
-- Site URL: `http://localhost:3000`
-- Redirect URLs: `http://localhost:3000/auth/callback`
+**È distruttivo a ogni esecuzione:** elimina tutte le tabelle, i dati, i link, le sessioni di Reporty e tutti gli account Supabase Auth. Ricrea poi lo schema aggiornato in un’unica transazione. Non conserva amministratori e non elimina gli schemi gestiti `auth` e `storage`, né le impostazioni OAuth. Non è stato eseguito sul database remoto dall’agente.
 
-In Authentication → Sign In / Providers abilitare Email e Google. Per Google creare le credenziali OAuth nella Google Cloud Console e usare il callback indicato da Supabase. Client secret Google resta nel pannello Supabase.
+Prima di eseguirlo, svuotare il bucket `screenshots` tramite il pannello Storage o l’API Storage, mantenendo il bucket. Se contiene file, lo script si interrompe prima del reset. Non cancellare direttamente i metadati `storage.objects` via SQL. Il bucket viene creato o configurato come privato, JPEG fino a 2,5 MB. Non aggiungere policy pubbliche; il backend controlla l’accesso e usa URL firmati.
 
-Il link email usa PKCE: aprirlo nello stesso browser in cui è stato richiesto.
+Dopo il reset:
 
-## Database
+1. Accedere alla dashboard con Google o link email; non serve nominare un amministratore.
+2. Creare progetti e ambienti. Ogni ambiente riceve automaticamente un link ospite in sola lettura nella sua card, copiabile e rigenerabile.
+3. Collegare nuovamente l’estensione: le vecchie sessioni non sono più valide.
 
-La migrazione `migrations/202610050001_initial.sql` è destinata a un progetto nuovo. Eseguirla nel SQL Editor oppure tramite Supabase CLI dopo aver collegato il progetto. Non è stata applicata automaticamente.
+Tutti gli sviluppatori registrati possono leggere, modificare ed eliminare tutti i progetti, ambienti e segnalazioni. Gli ospiti entrano con il link e il nome, senza dashboard; possono creare, leggere, rispondere e cambiare stato/priorità nel progetto autorizzato. Non possono modificare il testo o eliminare segnalazioni. Rigenerare un link revoca solo quel link e le sessioni associate.
 
-Include progetti, membri, ambienti, segnalazioni, risposte, inviti e sessioni ospiti; RLS separa i progetti. Le migrazioni successive attivano le API di gestione, gli inviti e le segnalazioni. I bucket restano privati: non aggiungere policy pubbliche.
+## Autenticazione
 
-Dopo il primo accesso, per nominare l'amministratore generale eseguire nel SQL Editor, sostituendo l'UUID con quello dell'utente nella sezione Authentication → Users:
+In Authentication → URL Configuration impostare Site URL e Redirect URLs:
 
-```sql
-insert into public.platform_admins(user_id) values ('UUID-UTENTE');
-```
+- Locale: `http://localhost:3000` e `http://localhost:3000/auth/callback`.
+- Produzione: `https://reporty-extension.vercel.app` e `https://reporty-extension.vercel.app/auth/callback`.
 
-Gli utenti non possono assegnarsi questo ruolo tramite i client.
+Abilitare Email e Google in Sign In / Providers. Le credenziali OAuth Google restano nel pannello Supabase. Il link email PKCE va aperto nello stesso browser dal quale è stato richiesto.
 
-## Gestione progetti e ambienti
+## Verifiche locali
 
-Dopo la migrazione iniziale eseguire `migrations/202610050002_project_management.sql` nel SQL Editor. Non rieseguire la migrazione iniziale. Questa seconda migrazione consente agli amministratori di rinominare progetti e aggiungere/modificare ambienti, mantenendo immutabili gli identificativi e la proprietà dei record.
-
-Verificare dalla dashboard: creare un progetto, aggiungere `https://example.com` e `http://localhost:3000`, modificarne i nomi e provare a inserire una seconda volta lo stesso dominio. I membri leggono gli ambienti; solo amministratori del progetto e amministratore generale possono modificarli.
-
-## Inviti membri e revisori ospiti
-
-Eseguire `migrations/202610050003_invitations.sql` dopo le prime due migrazioni. Nel dettaglio progetto gli amministratori trovano membri, inviti e link ospite.
-
-- Invito membro: inserire l'email, creare il link e condividerlo manualmente. Accettazione dopo login con la stessa email verificata. Il link è monouso, con accettazione idempotente per il membro già aggiunto; può essere revocato prima dell'accettazione. Revocare un invito non rimuove un membro già entrato.
-- Invito ospite: link riutilizzabile fino a revoca, nessun login, solo nome. Crea una sessione ospite separata dall'account Supabase Auth e senza accesso alla dashboard. Revocando il link si bloccano tutte le sessioni create da quell'invito.
-- I link sono mostrati solo al momento della creazione. Il database conserva hash SHA-256: per sostituire un link perso, revocarlo e generarne uno nuovo.
-- La pagina ospite conferma l'accesso; il popup dell'estensione permette di collegare la sessione e lavorare sulle segnalazioni.
-- Nell'MVP anche i clienti installano l'estensione. Il team usa dashboard ed estensione; i clienti non accedono alla dashboard. La modalità senza estensione tramite script è prevista per una fase successiva.
-- Non è richiesto un service-role secret: le funzioni SQL controllano i permessi e offrono agli ospiti solo operazioni limitate.
-
-Verifica manuale: invitare un secondo account, provare prima con un'email diversa, poi con quella corretta; aprire un link ospite in incognito, inserire un nome e revocare il link dalla dashboard. Ricaricando la pagina ospite l'accesso deve risultare revocato.
-
-`npm run test:db` esegue tutte le migrazioni su PostgreSQL locale in memoria (PGlite), con fixture per Auth e Storage. Verifica permessi, email, token nascosti e revoca senza contattare il progetto Supabase remoto.
-
-## Collegamento dell'estensione
-
-Eseguire `migrations/202610050004_extension_sessions.sql` dopo la terza migrazione. Aggiunge codici monouso di collegamento (60 secondi) e sessioni dedicate all'estensione (30 giorni). Le API verificano a ogni richiesta l'accesso corrente agli ambienti: rimozione di una membership o revoca di un invito ha effetto anche sulle sessioni già collegate.
-
-Seguire [le istruzioni estensione](../apps/extension/README.md) per installazione e verifica. Non è richiesta una chiave service-role. I test locali includono riutilizzo del codice, token privati e revoca delle sessioni.
-
-## Segnalazioni e screenshot
-
-Eseguire `migrations/202610050005_reports.sql` dopo la quarta migrazione. Le operazioni sulle segnalazioni passano attraverso una funzione che verifica sessione, progetto, ambiente e permessi a ogni chiamata. Gli ospiti possono creare, leggere e rispondere; i membri possono cambiare stato; membri autori e amministratori possono modificare ed eliminare. Il caricamento della propria immagine è consentito anche all'autore ospite.
-
-Per gli screenshot aggiungere in `apps/web/.env.local` (e poi nelle variabili server Vercel):
-
-```dotenv
-SUPABASE_SECRET_KEY=chiave-segreta-server-supabase
-```
-
-Usare la Secret key da Settings → API Keys (oppure la legacy service-role key). Non usare il prefisso NEXT_PUBLIC e non inserire la chiave nell'estensione. Riavviare Next.js dopo aver configurato la variabile. La chiave è usata solo per Storage, dopo un controllo di accesso tramite RPC/RLS; le query applicative mantengono la sessione dell'utente.
-
-Il bucket `screenshots` è quello creato nella prima migrazione, privato. I percorsi sono determinati dal server con progetto e UUID segnalazione. Le immagini visibili sono servite con URL firmati validi per 60 secondi e senza cache del server. Le richieste screenshot JPEG sono limitate a 2,5 MB per rispettare il limite delle funzioni Vercel. Se l'upload fallisce dopo il salvataggio, il commento resta salvato e viene mostrato un avviso. La rimozione dei file dopo l'eliminazione di una segnalazione è best effort; un errore Storage può lasciare un file privato orfano.
-
-Verifica: creare una segnalazione con elemento e una con pin libero; rimuovere uno screenshot prima dell'invio; aprire la pagina con un secondo membro e controllare pin e commenti; cambiare stato e rispondere; verificare dalla dashboard filtri e immagini. Cambiare o rimuovere l'elemento nel sito e verificare che la segnalazione resti nella lista con indicazione di elemento non trovato.
-
-## Priorità delle segnalazioni
-
-Eseguire `migrations/202610050006_report_priorities.sql` dopo la quinta migrazione. Aggiunge Bassa, Media e Alta: le segnalazioni esistenti e le richieste delle vecchie estensioni ricevono Media. Anche gli ospiti scelgono la priorità alla creazione; solo i membri del team possono cambiarla successivamente, con gli stessi permessi dello stato. La dashboard mostra la priorità e consente di filtrarla. Aggiornare backend ed estensione dopo aver applicato la migrazione.
-
-## Gestione utenti e dashboard
-
-Eseguire `migrations/202610050007_user_management.sql` dopo la sesta migrazione. Gli amministratori trovano la sezione **Utenti** nella sidebar e la gestione dei membri nella tab **Gestione accessi** del progetto. Possono invitare utenti, modificare il ruolo tra Membro e Amministratore e rimuovere accessi. Gli amministratori di progetto operano solo sui propri progetti; l'amministratore generale opera su tutti. Il database mantiene sempre almeno un amministratore per progetto, anche in caso di richieste concorrenti. Rimuovere un membro non elimina l'account o le segnalazioni e revoca l'accesso al progetto anche per le sessioni dell'estensione.
-
-Il dettaglio progetto è diviso nelle tab Segnalazioni, Ambienti e Gestione accessi; le segnalazioni si filtrano anche per pagina e si gestiscono in un dialogo. `npm run test:db` include permessi, isolamento dei progetti e protezione dell'ultimo amministratore.
-
-## Eliminazione progetti e ambienti
-
-Applicare `migrations/202610050008_platform_management.sql` dopo la settima migrazione. Solo gli amministratori generali di `platform_admins` possono eliminare progetti e ambienti. La cancellazione elimina anche segnalazioni e risposte; per i progetti elimina inoltre ambienti, membership e inviti. Il backend rimuove gli screenshot privati dopo la cancellazione (best effort). Gli amministratori di progetto mantengono i permessi sui propri progetti senza ottenere questo comando globale.
-
-### Permessi amministratori di progetto
-
-Applicare `202610050009_project_admin_permissions.sql` dopo la migrazione 008. Gli amministratori di progetto possono eliminare solo gli ambienti dei progetti che gestiscono, incluse le segnalazioni associate. L'eliminazione dei progetti rimane riservata agli amministratori generali. Le membership con ruolo Amministratore non possono essere rimosse né retrocesse, neppure dagli amministratori generali; resta possibile eliminare l'intero progetto.
-
-## Avvio rapido revisione ospite
-
-Applicare `202610050010_guest_review_start.sql` dopo la migrazione 009, aggiornare dashboard ed estensione. I nuovi inviti ospiti specificano un ambiente iniziale; i precedenti ricevono il primo ambiente del progetto. Un invito senza ambiente disponibile non avvia la revisione. L'ambiente è la destinazione iniziale e non restringe l'accesso ospite alle altre segnalazioni del progetto. Il nome resta obbligatorio. Il link collega automaticamente l'estensione tramite codice monouso e apre il sito; se manca il consenso sul dominio, si passa prima dalla schermata estensione di richiesta permesso. Google e link email rimangono disponibili agli sviluppatori anche per creare il primo progetto.
-
-## Dashboard condivisa e link unico (011)
-
-Eseguire `migrations/202610050011_shared_dashboard.sql` dopo la 010. Tutti gli utenti registrati tramite Google o link email hanno accesso completo ai progetti e alle segnalazioni. Gli ospiti restano limitati al proprio progetto e all’estensione.
-
-La migrazione revoca i precedenti inviti individuali senza cancellare segnalazioni o autori. Nella tab Ambienti creare il link unico del progetto e scegliere l’ambiente di avvio; il link può essere copiato anche da altri sviluppatori. Rigenerarlo revoca il link precedente e le sessioni ospite associate. Cambiare solo l’ambiente di avvio conserva il link. Se l’ambiente viene eliminato, scegliere un nuovo ambiente per riattivare l’avvio della revisione.
-
-## Modifica stato e priorità per i guest (012)
-
-Dopo la 011, applicare `migrations/202610050012_guest_report_updates.sql`. Gli ospiti autorizzati possono cambiare stato e priorità di tutte le segnalazioni del proprio progetto. Gli accessi revocati e gli altri progetti restano esclusi. L’estensione mostra automaticamente i controlli tramite `canChangeStatus`; non occorre una nuova build.
-
-## Link ospite per ambiente (013)
-
-Applicare `migrations/202610050013_environment_review_links.sql` dopo la 012. Sostituisce il link unico del progetto con un link per ambiente, generato automaticamente e copiabile dalla card dell’ambiente. La migrazione conserva il vecchio link sull’ambiente associato e genera i link mancanti per gli altri ambienti. Rigenerare un link revoca solo il precedente link di quell’ambiente e le sue sessioni. Gli inviti continuano ad autorizzare la revisione nel progetto; il link identifica l’ambiente iniziale.
+`npm run test:db` verifica con PGlite inizializzazione e riesecuzione, protezione del reset quando Storage non è vuoto, permessi degli sviluppatori e degli ospiti, link automatici per ambiente, revoca e operazioni sulle segnalazioni. Questi test non eseguono query sul progetto Supabase remoto.

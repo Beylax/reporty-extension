@@ -16,10 +16,10 @@ $$;
 do $$
 declare item record;
 begin
-  for item in select p.oid::regprocedure as signature from pg_proc p
+  for item in select p.oid::regprocedure::text as signature from pg_proc p
     join pg_namespace n on n.oid=p.pronamespace
     where n.nspname='public' and p.proname in ('is_platform_admin','can_read_project','can_manage_project','add_project_owner','create_member_invite','accept_member_invite','create_guest_invite','revoke_project_invite','list_project_members','preview_guest_invite','start_guest_session','get_guest_session','create_member_handoff','create_guest_handoff','redeem_extension_handoff','extension_context','revoke_extension_session','report_actor','report_operation','manage_project_member','platform_delete_resource','create_environment_guest_invite','preview_guest_review','save_project_review_link','create_environment_review_link','regenerate_environment_review_link')
-  loop execute format('drop function %s cascade',item.signature); end loop;
+  loop execute format('drop function if exists %s cascade',item.signature); end loop;
 end;
 $$;
 
@@ -454,6 +454,5 @@ grant execute on function public.regenerate_environment_review_link(uuid) to aut
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
 values('screenshots','screenshots',false,2621440,array['image/jpeg'])
 on conflict(id) do update set public=false,file_size_limit=excluded.file_size_limit,allowed_mime_types=excluded.allowed_mime_types;
--- Remove old client policies for this bucket, if installed previously.
 -- No Storage client policies are required: the backend checks report access.
 commit;

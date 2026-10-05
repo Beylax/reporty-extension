@@ -18,7 +18,7 @@ export async function createHandoff(projectId?: string): Promise<{ code?: string
     const { data } = await supabase.auth.getClaims();
     if (!data?.claims || data.claims.is_anonymous) return { error: 'Accedi prima alla piattaforma, poi torna qui.' };
     const { error } = await supabase.rpc('create_member_handoff', { secret_hash: hashToken(code) });
-    if (error) return { error: 'Collegamento non disponibile. Verifica la migrazione delle sessioni estensione.' };
+    if (error) return { error: 'Collegamento non disponibile. Verifica lo schema del database.' };
   }
   return { code };
 }

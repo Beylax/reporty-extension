@@ -1,3 +1,5 @@
+
+import { BrandLogo } from '@/components/brand-logo';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export function ReportRowsSkeleton() {
@@ -13,7 +15,7 @@ export function ProjectSkeleton() {
   return <main role="status" aria-label="Caricamento progetto" className="mx-auto w-full max-w-5xl space-y-8 px-6 py-10"><Skeleton className="h-8 w-36" /><header className="flex gap-3"><Skeleton className="h-9 w-64" /><Skeleton className="h-6 w-24 rounded-full" /></header><div className="flex gap-1 rounded-lg border bg-muted p-1"><Skeleton className="h-9 w-32 bg-background" /><Skeleton className="h-9 w-28 bg-background" /></div><ReportsSkeleton /></main>;
 }
 export function AccessSkeleton({ guest = false, connect = false }: { guest?: boolean; connect?: boolean }) {
-  return <main role="status" aria-label="Caricamento accesso" className={`mx-auto w-full ${guest || connect ? 'max-w-lg' : 'max-w-md'} space-y-6 px-6 py-20`}><p className="text-xl font-semibold">Reporty</p><div className="space-y-6 rounded-xl border bg-card p-6"><div className="space-y-2"><Skeleton className="h-7 w-3/4" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-2/3" /></div>{!guest && !connect ? <><Skeleton className="h-8 w-full" /><Skeleton className="mx-auto h-4 w-28" /></> : null}{!connect ? <div className="space-y-3"><Skeleton className="h-4 w-20" /><Skeleton className="h-9 w-full" /></div> : null}<Skeleton className="h-8 w-full" /></div></main>;
+  return <main role="status" aria-label="Caricamento accesso" className={`mx-auto w-full ${guest || connect ? 'max-w-lg' : 'max-w-md'} space-y-6 px-6 py-20`}><BrandLogo /><div className="space-y-6 rounded-xl border bg-card p-6"><div className="space-y-2"><Skeleton className="h-7 w-3/4" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-2/3" /></div>{!guest && !connect ? <><Skeleton className="h-8 w-full" /><Skeleton className="mx-auto h-4 w-28" /></> : null}{!connect ? <div className="space-y-3"><Skeleton className="h-4 w-20" /><Skeleton className="h-9 w-full" /></div> : null}<Skeleton className="h-8 w-full" /></div></main>;
 }
 export function ScreenshotSkeleton({ aspectRatio = '16 / 9' }: { aspectRatio?: string }) {
   return <div role="status" aria-label="Caricamento screenshot" style={{ aspectRatio }} className="w-full overflow-hidden rounded-lg border"><Skeleton className="h-full w-full rounded-none" /></div>;

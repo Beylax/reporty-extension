@@ -14,8 +14,7 @@
 - `apps/web`: Next.js App Router, React, dashboard e API su Vercel.
 - `apps/extension`: WXT + React, Manifest V3 per Chrome ed Edge desktop.
 - `packages/shared`: tipi, validazione Zod e identificazione delle pagine.
-- `supabase/migrations`: migrazioni SQL ordinate; `supabase/tests`: verifiche PostgreSQL locali con PGlite.
-- `supabase/scripts`: operazioni manuali, incluse quelle distruttive; non sono migrazioni.
+- `supabase/initialize.sql`: unico script distruttivo di reset e inizializzazione; `supabase/tests`: verifiche PostgreSQL locali con PGlite.
 - `downloads/reporty-chrome.zip`: estensione di produzione pronta da distribuire tramite GitHub.
 - UI con shadcn/ui, Base UI, Tailwind CSS e icone Lucide; riutilizzare i componenti esistenti.
 - Prima di modificare Next.js leggere `apps/web/AGENTS.md` e la documentazione pertinente in `apps/web/node_modules/next/dist/docs/`.
@@ -33,13 +32,13 @@
 ## Permessi
 
 - Tutti gli sviluppatori autenticati (Google o link email, non account anonimi) vedono, modificano ed eliminano tutti i progetti, ambienti e segnalazioni. Non esistono più ruoli o membership nella UI né inviti sviluppatore.
-- Ogni ambiente ha un link ospite generato automaticamente alla creazione, recuperabile in sola lettura nella propria card della tab Ambienti. Rigenerarlo revoca solo quel link e le sessioni associate; gli altri link restano validi. Le tabelle dei vecchi ruoli restano solo per compatibilità e cronologia.
+- Ogni ambiente ha un link ospite generato automaticamente alla creazione, recuperabile in sola lettura nella propria card della tab Ambienti. Rigenerarlo revoca solo quel link e le sessioni associate; gli altri link restano validi. Non esistono tabelle amministratori o membri di progetto.
 - Gli inviti ospiti indicano un ambiente iniziale; nome obbligatorio e avvio dal link, collegamento automatico e consenso browser sul dominio quando necessario. Gli ospiti possono creare, leggere e rispondere e modificare stato e priorità delle segnalazioni del proprio progetto; non modificano il testo né eliminano segnalazioni.
 - Autorizzare ogni operazione sul backend e nel database: nascondere un pulsante non è un controllo di sicurezza.
 
 ## Database, sessioni e screenshot
 
-- Aggiungere nuove migrazioni numerate, senza riscrivere quelle già distribuite. L’ultima è `202610050013_environment_review_links.sql`.
+- Lo schema corrente è in `supabase/initialize.sql`: è distruttivo, elimina anche tutti gli account Auth e non conserva amministratori. Non eseguirlo sul remoto senza autorizzazione. Per future modifiche su dati da conservare, concordare una migrazione incrementale anziché usare il reset.
 - Mantenere RLS, controlli RPC e `search_path` esplicito nelle funzioni security definer; limitare gli execute grant.
 - Token ospite e invito memorizzati con hash. I codici di collegamento estensione sono monouso; verificare origine, scheda, nonce e scadenza.
 - La sessione estensione resta nello storage riservato ai contesti fidati; non deve essere esposta al sito revisionato.
@@ -85,4 +84,4 @@ npm run zip:extension:production
 - `NEXT_PUBLIC_APP_URL` è l'origine della dashboard, senza `/login`. Callback Supabase: `/auth/callback`.
 - `npm run zip:extension:production` usa il dominio di produzione e aggiorna `downloads/reporty-chrome.zip`. Verificare manifest e backend inclusi prima di condividere.
 - Distribuzione corrente via ZIP su GitHub, senza marketplace: estrarre, abilitare Modalità sviluppatore, caricare la cartella contenente `manifest.json`. Aggiornamenti manuali.
-- Non committare `.env*`, segreti o file generati diversi dall'archivio distribuibile concordato. Aggiornare README e indicare all'utente eventuali migrazioni, deploy o ricaricamenti necessari.
+- Non committare `.env*`, segreti o file generati diversi dall'archivio distribuibile concordato. Aggiornare README e indicare all'utente eventuali aggiornamenti del database, deploy o ricaricamenti necessari.

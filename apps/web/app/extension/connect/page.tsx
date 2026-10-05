@@ -1,3 +1,5 @@
+
+import { BrandLogo } from '@/components/brand-logo';
 import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
@@ -19,7 +21,7 @@ export default async function ConnectPage({ searchParams }: { searchParams: Prom
     }))).filter((guest): guest is { projectId: string; name: string } => guest !== null);
   }
   const valid = extensionId && /^[a-p]{32}$/.test(extensionId) && nonce && /^[0-9a-f]{64}$/.test(nonce) && (!projectId || isUuid(projectId));
-  return <main className="mx-auto max-w-lg space-y-6 px-6 py-20"><p className="text-xl font-semibold">Reporty</p><Card><CardHeader><CardTitle>Collega l’estensione</CardTitle><CardDescription>La sessione scelta sarà disponibile nell’estensione di questo browser.</CardDescription></CardHeader><CardContent className="space-y-5">
+  return <main className="mx-auto max-w-lg space-y-6 px-6 py-20"><BrandLogo /><Card><CardHeader><CardTitle>Collega l’estensione</CardTitle><CardDescription>La sessione scelta sarà disponibile nell’estensione di questo browser.</CardDescription></CardHeader><CardContent className="space-y-5">
     {!valid ? <p>Apri questa pagina dal pulsante Collega nell’estensione.</p> : <>
       {projectId ? <ConnectButton extensionId={extensionId} nonce={nonce} projectId={projectId} /> : <>
         {member ? <div className="space-y-3"><p className="text-sm">Account del team: {String(data.claims.email ?? '')}</p><ConnectButton extensionId={extensionId} nonce={nonce} /></div> : <Link href="/login" className="underline">Accedi come sviluppatore</Link>}

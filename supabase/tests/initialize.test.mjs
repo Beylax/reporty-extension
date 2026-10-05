@@ -1,0 +1,97 @@
+import { PGlite } from '@electric-sql/pglite';
+import { readFile } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+const owner = '11111111-1111-4111-8111-111111111111';
+const member = '22222222-2222-4222-8222-222222222222';
+const outsider = '33333333-3333-4333-8333-333333333333';
+const platform = '99999999-9999-4999-8999-999999999999';
+const project = '44444444-4444-4444-8444-444444444444';
+const other = '55555555-5555-4555-8555-555555555555';
+
+test('destructive bootstrap, shared permissions, guest updates and environment links', async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(`create role anon; create role authenticated;
+      create schema auth; create schema storage;
+      create table auth.users(id uuid primary key, email text, email_confirmed_at timestamptz);
+      create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
+      create function auth.uid() returns uuid language sql stable as $$ select (auth.jwt()->>'sub')::uuid $$;
+      grant usage on schema auth, public to anon, authenticated;
+      grant execute on function auth.uid(), auth.jwt() to anon, authenticated;
+      create table storage.buckets(id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
+      create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text);
+      insert into auth.users values ('${owner}','owner@example.com',now()), ('${member}','member@example.com',now()), ('${outsider}','outsider@example.com',now()), ('${platform}','platform@example.com',now());`);
+    const initialize = await readFile(new URL('../initialize.sql', import.meta.url),'utf8');
+    await db.exec(initialize);
+    assert.equal((await db.query('select * from auth.users')).rows.length,0);
+    await db.exec(initialize);
+    await db.query('insert into auth.users(id,email,email_confirmed_at) values($1,$2,now()),($3,$4,now())',[owner,'owner@example.com',outsider,'developer@example.com']);
+    const as = async (id, role = 'authenticated') => {
+      await db.exec('reset role');
+      await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify(id ? {sub:id,is_anonymous:false} : {})]);
+      await db.exec(`set role ${role}`);
+    };
+    await as(owner);
+    await db.query('insert into public.projects(id,name,created_by) values($1,$2,$3)',[project,'Project',owner]);
+    const env='66666666-6666-4666-8666-666666666666',env2='77777777-7777-4777-8777-777777777777';
+    await db.query('insert into public.environments(id,project_id,name,origin) values($1,$2,$3,$4),($5,$2,$6,$7)',[env,project,'Production','https://one.example',env2,'Staging','https://stage.example']);
+    const links=(await db.query('select * from public.environment_review_links')).rows;
+    assert.equal(links.length,2);
+    const token=links.find(link=>link.environment_id===env).token;
+    const second=links.find(link=>link.environment_id===env2).token;
+    assert.notEqual(token,second);
+    await as(outsider);
+    assert.equal((await db.query('select * from public.projects')).rows.length,1);
+    await db.query('update public.projects set name=$1 where id=$2',['Shared',project]);
+    const extensionSecret='d'.repeat(64),handoff='c'.repeat(64);
+    await db.query("select public.create_member_handoff(encode(sha256(convert_to($1,'UTF8')),'hex'))",[handoff]);
+    await db.query('select public.redeem_extension_handoff($1,$2)',[handoff,extensionSecret]);
+    await assert.rejects(db.query('select public.redeem_extension_handoff($1,$2)',[handoff,'b'.repeat(64)]),/Invalid handoff/);
+    assert.equal((await db.query('select public.extension_context($1) as context',[extensionSecret])).rows[0].context.environments.length,2);
+    const issue='88888888-8888-4888-8888-888888888888';
+    const context={url:'https://one.example/',origin:'https://one.example',pagePath:'/',anchor:{kind:'pin',documentX:10,documentY:20},viewport:{width:1280,height:800,devicePixelRatio:1},scroll:{x:0,y:0}};
+    await db.query('select public.report_operation($1,$2,$3,$4)',[extensionSecret,env,'create',{id:issue,body:'Fix',context,priority:'high'}]);
+    const guestSecret='a'.repeat(64),guestCode='e'.repeat(64),guestExtension='f'.repeat(64);
+    const foreignEnv='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    await db.query('insert into public.projects(id,name,created_by) values($1,$2,$3)',[other,'Other',outsider]);
+    await db.query('insert into public.environments(id,project_id,name,origin) values($1,$2,$3,$4)',[foreignEnv,other,'Other','https://other.example']);
+    await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:outsider,is_anonymous:true})]);
+    assert.equal((await db.query('select * from public.projects')).rows.length,0);
+    await as(null,'anon');
+    assert.equal((await db.query('select * from public.preview_guest_review($1)',[token])).rows[0].environment_id,env);
+    await db.query('select public.start_guest_session($1,$2,$3)',[token,'Client',guestSecret]);
+    await db.query("select public.create_guest_handoff($1,encode(sha256(convert_to($2,'UTF8')),'hex'))",[guestSecret,guestCode]);
+    await db.query('select public.redeem_extension_handoff($1,$2)',[guestCode,guestExtension]);
+    await assert.rejects(db.query('select * from public.projects'),/permission denied/);
+    await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,foreignEnv,'list',{}]),/Not authorized/);
+    await assert.rejects(db.query('select * from public.environment_review_links'),/permission denied/);
+    for(const [operation,field,value] of [['status','status','resolved'],['priority','priority','low']]) {
+      await db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,operation,{id:issue,[field]:value}]);
+      await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,operation,{id:issue,[field]:'invalid'}]),/Invalid/);
+    }
+    const reports=(await db.query('select public.report_operation($1,$2,$3,$4) as reports',[guestExtension,env,'list',{}])).rows[0].reports;
+    assert.equal(reports[0].canChangeStatus,true);
+    assert.equal(reports[0].canEdit,false);
+    await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,'delete',{id:issue}]),/Not authorized/);
+    await as(outsider);
+    await db.query('select public.regenerate_environment_review_link($1)',[env]);
+    assert.equal((await db.query('select * from public.preview_guest_review($1)',[token])).rows.length,0);
+    assert.equal((await db.query('select * from public.preview_guest_review($1)',[second])).rows.length,1);
+    await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,'status',{id:issue,status:'open'}]),/revoked/);
+    await db.query('select public.report_operation(null,$1,$2,$3)',[env,'edit',{id:issue,body:'Edited'}]);
+    await db.query('select public.platform_delete_resource($1,$2)',[env2,'environment']);
+    await db.query('select public.platform_delete_resource($1,$2)',[project,'project']);
+    await db.exec('reset role');
+    await db.exec("insert into storage.objects(bucket_id) values('screenshots')");
+    await assert.rejects(db.exec(initialize),/svuota prima/);
+    await db.exec('rollback');
+    assert.equal((await db.query('select * from auth.users')).rows.length,2);
+    await db.exec("delete from storage.objects where bucket_id='screenshots'");
+    await db.exec(initialize);
+    assert.equal((await db.query('select * from auth.users')).rows.length,0);
+    assert.equal((await db.query('select * from public.projects')).rows.length,0);
+    assert.equal((await db.query("select to_regclass('public.platform_admins') as relation")).rows[0].relation,null);
+  } finally { await db.close(); }
+});

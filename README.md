@@ -49,7 +49,7 @@ Per Vercel impostare la Root Directory su `apps/web`, mantenendo accessibili i f
 
 ## Stato
 
-Sono presenti le basi del monorepo, l'accesso Google/email, gestione sessione e dashboard con shadcn/ui: elenco, creazione e rinomina progetti; creazione e modifica ambienti; inviti membri vincolati all'email, link ospiti riutilizzabili e revoca. L'estensione permette collegamento membri/ospiti, elenco ambienti, attivazione per sito e pulsante flottante personalizzabile. Le migrazioni vanno applicate al database remoto seguendo il README Supabase. Sono implementati selezione elementi/pin, segnalazioni, risposte, stati e screenshot privati, con lista e filtri nella dashboard. Per gli screenshot configurare SUPABASE_SECRET_KEY sul backend e applicare la quinta migrazione. Restano da verificare i flussi completi in Chrome ed Edge sui siti reali.
+Sono presenti le basi del monorepo, l'accesso Google/email, gestione sessione e dashboard con shadcn/ui: elenco, creazione e rinomina progetti; creazione e modifica ambienti; link ospiti per ambiente e revoca. L'estensione permette collegamento membri/ospiti, elenco ambienti, attivazione per sito e pulsante flottante personalizzabile. Lo script distruttivo `supabase/initialize.sql` inizializza il database: seguire il README Supabase. Sono implementati selezione elementi/pin, segnalazioni, risposte, stati e screenshot privati, con lista e filtri nella dashboard. Per gli screenshot configurare SUPABASE_SECRET_KEY sul backend e inizializzare lo schema. Restano da verificare i flussi completi in Chrome ed Edge sui siti reali.
 
 ## Download estensione
 
@@ -57,8 +57,8 @@ Scaricare [`reporty-chrome.zip`](downloads/reporty-chrome.zip), estrarlo e caric
 
 Le sessioni ospite dell’estensione sono separate per origine del sito (protocollo, dominio e porta): aprire un altro invito non scollega i siti già collegati. Gli avvii della revisione sono separati anche per scheda del browser.
 
-### Accesso condiviso
+### Accesso e database
 
-Tutti gli sviluppatori che accedono con Google o link email possono gestire tutti i progetti, ambienti e segnalazioni. Non sono necessari inviti o ruoli per progetto. Nella tab **Ambienti** si trova l’unico link ospite del progetto: scegli l’ambiente di avvio, crea e copia il link. **Rigenera link** invalida il precedente link e gli accessi ospite associati. Richiede la migrazione `202610050011_shared_dashboard.sql`; i vecchi inviti individuali vengono revocati mantenendo lo storico delle segnalazioni.
+Tutti gli sviluppatori che accedono con Google o link email possono gestire tutti i progetti, ambienti e segnalazioni, senza inviti o ruoli amministratore. Ogni ambiente ha un link guest automatico nella sua card: **Copia link** e **Rigenera link**. La rigenerazione revoca solo il precedente link dell’ambiente e le sue sessioni.
 
-Dalla migrazione 013 il link ospite è **per ambiente**: viene creato automaticamente insieme all’ambiente e compare in sola lettura nella sua card, con **Copia link** e **Rigenera link**. La rigenerazione non modifica gli altri link.
+Per inizializzare o ricostruire il database usare **`supabase/initialize.sql`**. Ogni esecuzione elimina i dati Reporty e tutti gli utenti Auth, poi ricrea lo schema. Svuotare prima il bucket screenshots tramite Storage. I dettagli sono in [supabase/README.md](supabase/README.md).

@@ -68,7 +68,7 @@ export default async function Project({ params, searchParams }: {
               <div className="grid min-w-60 flex-1 gap-2"><Label htmlFor={`origin-${environment.id}`}>Origine del sito</Label><Input id={`origin-${environment.id}`} name="origin" type="url" defaultValue={environment.origin} required /></div>
               <SubmitButton>Salva ambiente</SubmitButton>
             </form> : null}
-            {linksResult.data?.find(link => link.environment_id === environment.id) ? <ReviewLinkForm projectId={projectId} environmentId={environment.id} link={`${appOrigin()}/guest/${linksResult.data.find(link => link.environment_id === environment.id)!.token}`} /> : <FeedbackToast message="Link ospite non disponibile. Applica la migrazione 202610050013_environment_review_links.sql." />}
+            {linksResult.data?.find(link => link.environment_id === environment.id) ? <ReviewLinkForm projectId={projectId} environmentId={environment.id} link={`${appOrigin()}/guest/${linksResult.data.find(link => link.environment_id === environment.id)!.token}`} /> : <FeedbackToast message="Link ospite non disponibile. Inizializza il database con supabase/initialize.sql secondo il README Supabase." />}
             {canManage ? <ResourceDelete id={environment.id} kind="environment" name={environment.name} /> : null}
           </CardContent>
         </Card>)}

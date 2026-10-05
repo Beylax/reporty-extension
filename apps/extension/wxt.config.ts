@@ -16,6 +16,7 @@ export default defineConfig({
   manifest: {
     name: 'Reporty',
     description: 'Revisioni e segnalazioni per siti e app web',
+    web_accessible_resources: [{ resources: ['brand/*.png'], matches: ['http://*/*', 'https://*/*'] }],
     permissions: ['storage', 'activeTab', 'scripting'],
     host_permissions: [apiMatch],
     optional_host_permissions: ['http://*/*', 'https://*/*'],

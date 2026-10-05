@@ -1,3 +1,5 @@
+
+import { BrandLogo } from '@/components/brand-logo';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { sendMagicLink, signInWithGoogle } from './actions';
@@ -26,7 +28,7 @@ export default async function Login({ searchParams }: {
   const { message } = await searchParams;
   return (
     <main className="mx-auto w-full max-w-md px-6 py-20">
-      <p className="mb-8 text-xl font-semibold">Reporty</p>
+      <BrandLogo className="mb-8" />
       <Card>
       <CardHeader><CardTitle><h1 className="text-2xl">Accedi al tuo workspace</h1></CardTitle><CardDescription>Rivedi i siti e collabora sulle segnalazioni.</CardDescription></CardHeader>
       <CardContent className="space-y-6">
