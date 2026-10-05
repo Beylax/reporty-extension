@@ -27,7 +27,7 @@ test('invitation permissions, email binding and guest revocation on PostgreSQL',
         ('${member}', 'member@example.com', now()),
         ('${outsider}', 'outsider@example.com', now());
     `);
-    for (const file of ['202610050001_initial.sql', '202610050002_project_management.sql', '202610050003_invitations.sql']) {
+    for (const file of ['202610050001_initial.sql', '202610050002_project_management.sql', '202610050003_invitations.sql', '202610050004_extension_sessions.sql']) {
       await db.exec(await readFile(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
     }
     const as = async (id, role = 'authenticated') => {
@@ -37,6 +37,7 @@ test('invitation permissions, email binding and guest revocation on PostgreSQL',
     };
     await as(owner);
     await db.query('insert into public.projects(id, name, created_by) values ($1, $2, $3)', [project, 'Website', owner]);
+    await db.query('insert into public.environments(project_id, name, origin) values ($1, $2, $3)', [project, 'Production', 'https://example.com']);
     const memberSecret = 'a'.repeat(64);
     const invite = (await db.query('select public.create_member_invite($1, $2, $3) as id', [project, 'member@example.com', hash(memberSecret)])).rows[0].id;
     await assert.rejects(db.query('select token_hash from public.member_invites'));
@@ -76,12 +77,35 @@ test('invitation permissions, email binding and guest revocation on PostgreSQL',
     await db.query('select public.start_guest_session($1, $2, $3)', [guestSecret, 'Second designer', 'e'.repeat(64)]);
     assert.equal((await db.query('select * from public.get_guest_session($1)', [sessionSecret])).rows[0].display_name, 'Designer');
     assert.equal((await db.query('select * from public.get_guest_session($1)', ['z'.repeat(64)])).rows.length, 0);
+    const handoff = '1'.repeat(64);
+    const extensionSecret = '2'.repeat(64);
+    await db.query('select public.create_guest_handoff($1, $2)', [sessionSecret, hash(handoff)]);
+    await db.query('select public.redeem_extension_handoff($1, $2)', [handoff, extensionSecret]);
+    await assert.rejects(db.query('select public.redeem_extension_handoff($1, $2)', [handoff, '3'.repeat(64)]));
+    const guestContext = (await db.query('select public.extension_context($1) as context', [extensionSecret])).rows[0].context;
+    assert.equal(guestContext.kind, 'guest');
+    assert.equal(guestContext.environments.length, 1);
+    assert.equal(guestContext.environments[0].origin, 'https://example.com');
+    await assert.rejects(db.query('select * from public.extension_sessions'));
     await as(owner);
     await db.query('select public.revoke_project_invite($1, $2, $3)', [project, guestInvite, 'guest']);
     await as(null, 'anon');
     assert.equal((await db.query('select * from public.get_guest_session($1)', [sessionSecret])).rows.length, 0);
+    await assert.rejects(db.query('select public.extension_context($1)', [extensionSecret]));
     assert.equal((await db.query('select * from public.preview_guest_invite($1)', [guestSecret])).rows.length, 0);
     await assert.rejects(db.query('select public.start_guest_session($1, $2, $3)', [guestSecret, 'Designer', 'f'.repeat(64)]));
+    await as(member);
+    const memberHandoff = '4'.repeat(64), memberExtension = '5'.repeat(64);
+    await db.query('select public.create_member_handoff($1)', [hash(memberHandoff)]);
+    await as(null, 'anon');
+    await db.query('select public.redeem_extension_handoff($1, $2)', [memberHandoff, memberExtension]);
+    assert.equal((await db.query('select public.extension_context($1) as context', [memberExtension])).rows[0].context.environments.length, 1);
+    await db.exec('reset role');
+    await db.query('delete from public.project_members where project_id = $1 and user_id = $2', [project, member]);
+    await as(null, 'anon');
+    assert.equal((await db.query('select public.extension_context($1) as context', [memberExtension])).rows[0].context.environments.length, 0);
+    await db.query('select public.revoke_extension_session($1)', [memberExtension]);
+    await assert.rejects(db.query('select public.extension_context($1)', [memberExtension]));
     await as(owner);
     assert.equal((await db.query('select accepted_at from public.member_invites where id = $1', [invite])).rows.length, 1);
   } finally { await db.close(); }

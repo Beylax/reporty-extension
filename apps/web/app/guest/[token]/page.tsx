@@ -20,7 +20,7 @@ export default async function GuestInvite({ params, searchParams }: {
   const project = data?.[0];
   if (error || !project) return <main className="mx-auto max-w-lg px-6 py-20"><Alert variant="destructive"><AlertDescription>Questo invito non è disponibile. Chiedi all’amministratore un nuovo link.</AlertDescription></Alert></main>;
   return <main className="mx-auto w-full max-w-lg space-y-6 px-6 py-20"><p className="text-xl font-semibold">Reporty</p>
-    <Card><CardHeader><CardTitle>Revisiona {project.project_name}</CardTitle><CardDescription>Entra come Designer ospite, senza creare un account.</CardDescription></CardHeader><CardContent className="space-y-5">
+    <Card><CardHeader><CardTitle>Revisiona {project.project_name}</CardTitle><CardDescription>Entra come revisore ospite, senza creare un account.</CardDescription></CardHeader><CardContent className="space-y-5">
       {message ? <Alert variant="destructive"><AlertDescription>{message === 'invalid-name' ? 'Inserisci un nome da 1 a 80 caratteri.' : 'Accesso non riuscito. Il link potrebbe essere stato revocato.'}</AlertDescription></Alert> : null}
       <form action={joinAsGuest} className="grid gap-4"><input type="hidden" name="token" value={token} /><div className="grid gap-2"><Label htmlFor="guest-name">Il tuo nome</Label><Input id="guest-name" name="name" autoComplete="name" maxLength={80} required placeholder="Come ti chiami?" /></div><SubmitButton pendingLabel="Accesso…">Entra come ospite</SubmitButton></form>
     </CardContent></Card>

@@ -45,3 +45,9 @@ Eseguire `migrations/202610050003_invitations.sql` dopo le prime due migrazioni.
 Verifica manuale: invitare un secondo account, provare prima con un'email diversa, poi con quella corretta; aprire un link ospite in incognito, inserire un nome e revocare il link dalla dashboard. Ricaricando la pagina ospite l'accesso deve risultare revocato.
 
 `npm run test:db` esegue tutte le migrazioni su PostgreSQL locale in memoria (PGlite), con fixture per Auth e Storage. Verifica permessi, email, token nascosti e revoca senza contattare il progetto Supabase remoto.
+
+## Collegamento dell'estensione
+
+Eseguire `migrations/202610050004_extension_sessions.sql` dopo la terza migrazione. Aggiunge codici monouso di collegamento (60 secondi) e sessioni dedicate all'estensione (30 giorni). Le API verificano a ogni richiesta l'accesso corrente agli ambienti: rimozione di una membership o revoca di un invito ha effetto anche sulle sessioni già collegate.
+
+Seguire [le istruzioni estensione](../apps/extension/README.md) per installazione e verifica. Non è richiesta una chiave service-role. I test locali includono riutilizzo del codice, token privati e revoca delle sessioni.

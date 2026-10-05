@@ -1,3 +1,30 @@
-# WXT + React
+# Estensione Reporty
 
-This template should help get you started developing with React in WXT.
+Chrome ed Edge desktop, WXT + React e shadcn/ui. Non richiede script nel sito.
+
+## Preparazione locale
+
+1. Applicare le migrazioni Supabase fino a `202610050004_extension_sessions.sql`.
+2. Avviare la dashboard con `npm run dev:web` dalla root.
+3. Se il servizio non è su `http://localhost:3000`, creare `apps/extension/.env` copiando `.env.example` e impostare `WXT_API_URL`. Ricostruire l'estensione dopo ogni cambio di URL.
+4. Dalla root eseguire `npm run build --workspace=@reporty/extension`.
+5. Aprire `chrome://extensions` oppure `edge://extensions`, abilitare Modalità sviluppatore e usare Carica estensione non pacchettizzata selezionando `apps/extension/.output/chrome-mv3`.
+
+Per lo sviluppo con aggiornamenti automatici: `npm run dev:extension` dalla root.
+
+## Collegamento
+
+- Team: accedere alla dashboard nel browser, aprire il popup dell'estensione, premere Collega e confermare nella pagina aperta.
+- Cliente: aprire il link ospite, inserire il nome, poi premere Collega nel popup. Scegliere il progetto ospite nella pagina e confermare. Non occorre un account.
+- Tornare al popup dopo la conferma. I siti accessibili sono elencati nel popup; aprirne uno.
+- Sul sito, aprire il popup, scegliere progetto/ambiente e posizione, poi Abilita su questo sito. Il browser chiede il permesso di accesso a quel dominio.
+- L'abilitazione viene ricordata per origine e ambiente. Protocolli e porte restano distinti anche se il permesso browser è assegnato a livello di dominio.
+- Scollega revoca la sessione corrente e rimuove le abilitazioni locali. Le sessioni durano 30 giorni; poi occorre ricollegare. La revoca di un invito ospite blocca subito le API; il pulsante in una pagina aperta si aggiorna entro 30 secondi.
+
+Il codice di collegamento dura 60 secondi ed è monouso. Il trasferimento è accettato solo dalla pagina Reporty e dalla scheda aperta dal popup, con verifica della richiesta avviata dall'utente. La sessione è conservata nello storage riservato ai contesti fidati; non viene inviata al sito revisionato.
+
+## Stato e verifica
+
+Sono implementati collegamento membri/ospiti, elenco ambienti, abilitazione per sito, posizione del pulsante e scollegamento. Il `+` mostra lo stato del collegamento: selezione elementi, commenti e screenshot non sono ancora implementati.
+
+Verificare manualmente Chrome ed Edge: collegamento, attivazione, ricaricamento del sito, cambio posizione, disabilitazione e scollegamento. Per gli ospiti provare anche la revoca dalla dashboard. Build e test database non sostituiscono questa verifica nel browser.

@@ -49,4 +49,4 @@ Per Vercel impostare la Root Directory su `apps/web`, mantenendo accessibili i f
 
 ## Stato
 
-Sono presenti le basi del monorepo, l'accesso Google/email, gestione sessione e dashboard con shadcn/ui: elenco, creazione e rinomina progetti; creazione e modifica ambienti; inviti membri vincolati all'email, link ospiti riutilizzabili e revoca. Le migrazioni vanno applicate al database remoto seguendo il README Supabase. Collegamento delle sessioni all'estensione, API e flusso di segnalazione sono ancora da implementare.
+Sono presenti le basi del monorepo, l'accesso Google/email, gestione sessione e dashboard con shadcn/ui: elenco, creazione e rinomina progetti; creazione e modifica ambienti; inviti membri vincolati all'email, link ospiti riutilizzabili e revoca. L'estensione permette collegamento membri/ospiti, elenco ambienti, attivazione per sito e pulsante flottante personalizzabile. Le migrazioni vanno applicate al database remoto seguendo il README Supabase. Creazione e lettura delle segnalazioni, risposte e screenshot sono ancora da implementare.
