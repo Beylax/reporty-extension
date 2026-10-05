@@ -33,13 +33,13 @@
 ## Permessi
 
 - Tutti gli sviluppatori autenticati (Google o link email, non account anonimi) vedono, modificano ed eliminano tutti i progetti, ambienti e segnalazioni. Non esistono più ruoli o membership nella UI né inviti sviluppatore.
-- Ogni progetto ha un unico link ospite recuperabile nella tab Ambienti, con ambiente di avvio selezionabile e rigenerazione che revoca il precedente link e le sessioni associate. Le tabelle dei vecchi ruoli restano solo per compatibilità e cronologia.
+- Ogni ambiente ha un link ospite generato automaticamente alla creazione, recuperabile in sola lettura nella propria card della tab Ambienti. Rigenerarlo revoca solo quel link e le sessioni associate; gli altri link restano validi. Le tabelle dei vecchi ruoli restano solo per compatibilità e cronologia.
 - Gli inviti ospiti indicano un ambiente iniziale; nome obbligatorio e avvio dal link, collegamento automatico e consenso browser sul dominio quando necessario. Gli ospiti possono creare, leggere e rispondere e modificare stato e priorità delle segnalazioni del proprio progetto; non modificano il testo né eliminano segnalazioni.
 - Autorizzare ogni operazione sul backend e nel database: nascondere un pulsante non è un controllo di sicurezza.
 
 ## Database, sessioni e screenshot
 
-- Aggiungere nuove migrazioni numerate, senza riscrivere quelle già distribuite. L’ultima è `202610050012_guest_report_updates.sql`.
+- Aggiungere nuove migrazioni numerate, senza riscrivere quelle già distribuite. L’ultima è `202610050013_environment_review_links.sql`.
 - Mantenere RLS, controlli RPC e `search_path` esplicito nelle funzioni security definer; limitare gli execute grant.
 - Token ospite e invito memorizzati con hash. I codici di collegamento estensione sono monouso; verificare origine, scheda, nonce e scadenza.
 - La sessione estensione resta nello storage riservato ai contesti fidati; non deve essere esposta al sito revisionato.
@@ -50,13 +50,13 @@
 ## Convenzioni UI
 
 - Dashboard con sidebar progetti e ricerca; email troncata ed Esci sulla stessa riga.
-- Dettaglio progetto in tab: Segnalazioni e Ambienti; link ospite nella tab Ambienti.
+- Dettaglio progetto in tab: Segnalazioni e Ambienti; link ospite nella card di ciascun ambiente.
 - Filtri segnalazioni multiselect su una riga, ricerca separata, pillole rimovibili sotto. Stati iniziali: Aperta e In lavorazione. Ordine priorità: Alta, Media, Bassa.
 - Dettaglio segnalazione in dialogo: descrizione e screenshot in evidenza, gestione sotto, autore in fondo. Colori per stato/priorità.
 - Estensione: floating `+` che ruota a `×`, creazione in evidenza, lista accordion, sezioni in riquadri verticali, back e chiudi sulla stessa riga.
 - Il popup determina progetto/ambiente dall'URL senza select; informazioni revisore in fondo, senza elenco siti.
 - Collegamento: toast di successo/errore, pulsante disabilitato dopo successo e protezione dai doppi clic.
-- Tutti i caricamenti usano skeleton (pagine, operazioni, dettagli e immagini); tutti i feedback delle operazioni usano toast. Le istruzioni e gli stati vuoti restano nel contenuto. Dashboard: ToastProvider globale Base UI; estensione: provider nelle superfici popup, review e shadow root, senza portali nel sito ospitante.
+- Tutti i caricamenti usano skeleton specifici che riprendono layout, dimensioni e sezioni della UI caricata (pagine, operazioni, dettagli e immagini), senza placeholder generici; tutti i feedback delle operazioni usano toast. Le istruzioni e gli stati vuoti restano nel contenuto. Dashboard: ToastProvider globale Base UI; estensione: provider nelle superfici popup, review e shadow root, senza portali nel sito ospitante.
 - Preservare accessibilità, gestione del focus, etichette e reduced motion.
 
 ## Comandi dalla root

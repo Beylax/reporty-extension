@@ -9,7 +9,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { SubmitButton } from '@/components/submit-button';
-import { ProjectReviewLink } from '../../project-review-link';
+import { ReviewLinkForm } from '../../review-link-form';
+import { appOrigin } from '@/lib/supabase/config';
+import { FeedbackToast } from '@/components/feedback-toast';
 import { ProjectReports } from '../../project-reports';
 import { buttonVariants } from '@/components/ui/button';
 import { ResourceDelete } from '../../resource-delete';
@@ -22,10 +24,11 @@ export default async function Project({ params, searchParams }: {
   const { supabase } = await requireUser();
   const { projectId } = await params;
   if (!isUuid(projectId)) notFound();
-  const [projectResult, environmentsResult, permissionResult, { message }] = await Promise.all([
+  const [projectResult, environmentsResult, permissionResult, linksResult, { message }] = await Promise.all([
     supabase.from('projects').select('id, name').eq('id', projectId).maybeSingle(),
     supabase.from('environments').select('id, name, origin').eq('project_id', projectId).order('created_at'),
     supabase.rpc('can_manage_project', { target: projectId }),
+    supabase.from('environment_review_links').select('environment_id,token,environments!inner(project_id)').eq('environments.project_id', projectId),
     searchParams,
   ]);
   if (projectResult.error || environmentsResult.error || permissionResult.error) {
@@ -45,7 +48,6 @@ export default async function Project({ params, searchParams }: {
       </header>
       <Feedback message={message} />
       <ProjectTabs reports={<ProjectReports environments={environments} />} environments={<>
-      <ProjectReviewLink projectId={projectId} environments={environments} />
       {canManage ? <Card>
         <CardHeader><CardTitle>Nome del progetto</CardTitle><CardDescription>Il nome condiviso con tutti gli sviluppatori.</CardDescription></CardHeader>
         <CardContent><form action={renameProject} className="flex flex-wrap items-end gap-3">
@@ -66,6 +68,7 @@ export default async function Project({ params, searchParams }: {
               <div className="grid min-w-60 flex-1 gap-2"><Label htmlFor={`origin-${environment.id}`}>Origine del sito</Label><Input id={`origin-${environment.id}`} name="origin" type="url" defaultValue={environment.origin} required /></div>
               <SubmitButton>Salva ambiente</SubmitButton>
             </form> : null}
+            {linksResult.data?.find(link => link.environment_id === environment.id) ? <ReviewLinkForm projectId={projectId} environmentId={environment.id} link={`${appOrigin()}/guest/${linksResult.data.find(link => link.environment_id === environment.id)!.token}`} /> : <FeedbackToast message="Link ospite non disponibile. Applica la migrazione 202610050013_environment_review_links.sql." />}
             {canManage ? <ResourceDelete id={environment.id} kind="environment" name={environment.name} /> : null}
           </CardContent>
         </Card>)}

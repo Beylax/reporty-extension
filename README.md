@@ -60,3 +60,5 @@ Le sessioni ospite dell’estensione sono separate per origine del sito (protoco
 ### Accesso condiviso
 
 Tutti gli sviluppatori che accedono con Google o link email possono gestire tutti i progetti, ambienti e segnalazioni. Non sono necessari inviti o ruoli per progetto. Nella tab **Ambienti** si trova l’unico link ospite del progetto: scegli l’ambiente di avvio, crea e copia il link. **Rigenera link** invalida il precedente link e gli accessi ospite associati. Richiede la migrazione `202610050011_shared_dashboard.sql`; i vecchi inviti individuali vengono revocati mantenendo lo storico delle segnalazioni.
+
+Dalla migrazione 013 il link ospite è **per ambiente**: viene creato automaticamente insieme all’ambiente e compare in sola lettura nella sua card, con **Copia link** e **Rigenera link**. La rigenerazione non modifica gli altri link.

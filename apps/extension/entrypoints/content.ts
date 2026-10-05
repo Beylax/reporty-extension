@@ -1,3 +1,4 @@
+import { shadowStyles } from '@/lib/shadow-styles';
 import { ToastProvider } from '@/components/ui/toast';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
@@ -10,11 +11,11 @@ export default defineContentScript({
   main(ctx) {
     if (document.getElementById('reporty-overlay')) return;
     const host = document.createElement('div'); host.id = 'reporty-overlay';
-    host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;pointer-events:none';
+    host.style.cssText = 'all:initial!important;display:block!important;position:fixed!important;inset:0!important;z-index:2147483647!important;pointer-events:none!important;font:14px/1.5 system-ui,sans-serif!important;direction:ltr!important;color-scheme:light!important';
     document.documentElement.append(host);
     const shadow = host.attachShadow({ mode: 'closed' });
     const style = document.createElement('style');
-    style.textContent = css.replaceAll(':root', ':host') + ':host{font:14px/1.5 system-ui;color:#171717}';
+    style.textContent = shadowStyles(css);
     const mount = document.createElement('div'); shadow.append(style, mount);
     const root = createRoot(mount);
     let disposed = false;

@@ -172,3 +172,15 @@ test('a legacy guest session is preserved when joining another site', async () =
   assert.equal(h.stored['guestSession:https://other.example'], 'c'.repeat(64));
   assert.equal(h.stored.sessionToken, undefined);
 });
+
+
+test('shadow styles initialize Tailwind properties locally without overriding utilities', async () => {
+  const helper = await readFile(new URL('../apps/extension/lib/shadow-styles.ts', import.meta.url), 'utf8');
+  const scope = {};
+  runInNewContext(helper.replace('export function', 'function').replace('css: string', 'css') + ';this.shadowStyles = shadowStyles;', scope);
+  const css = scope.shadowStyles('@layer base{*{border:0 solid}}@layer utilities{.border{border-style:var(--tw-border-style)}.shadow{--tw-shadow:2px 2px #000}}:root{--primary:black}@property --tw-border-style{syntax:"*";inherits:false;initial-value:solid}@property --tw-shadow{syntax:"*";inherits:false;initial-value:0 0 #0000}');
+  assert.match(css, /@layer base\{\*,::before,::after\{--reporty-tw-border-style:solid;--reporty-tw-shadow:0 0 #0000;/);
+  assert.match(css, /var\(--reporty-tw-border-style\)/);
+  assert.match(css, /:host\{--reporty-primary:black\}/);
+  assert.doesNotMatch(css, /(?:var\(|@property )--tw-/);
+});

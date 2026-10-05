@@ -1,5 +1,5 @@
 import { useNotify } from '@/components/ui/toast';
-import { LoadingSkeleton } from '@/components/ui/skeleton';
+import { PopupSkeleton } from '@/components/loading-skeletons';
 import { useEffect, useState } from 'react';
 import { apiOrigin, pattern, type Context, type Sites, type Site } from '@/lib/session';
 import { Button } from '@/components/ui/button';
@@ -69,6 +69,6 @@ export default function App() {
       <Button disabled={loading} className="w-full" onClick={() => void run(async () => { await command({ type: 'REPORTY_START_CONNECTION' }); window.close(); })}>{context ? 'Cambia collegamento' : 'Collega'}</Button>
       {context ? <Button disabled={loading} variant="outline" className="w-full" onClick={() => void run(async () => { await command({ type: 'REPORTY_DISCONNECT' }); await load(); setStatus('Sito scollegato.', 'success'); })}>Scollega</Button> : null}
     </CardContent></Card> : null}
-    {loading ? <LoadingSkeleton /> : null}
+    {loading ? <PopupSkeleton /> : null}
   </main>;
 }

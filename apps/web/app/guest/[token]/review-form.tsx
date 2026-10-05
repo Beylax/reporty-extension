@@ -1,7 +1,7 @@
 'use client';
 
 import { useToastManager } from '@/components/ui/toast';
-import { LoadingSkeleton, Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -50,5 +50,5 @@ export function ReviewForm({ token }: { token: string }) {
       } catch (error) { locked.current = false; toast.add({ title: 'Avvio non riuscito', description: error instanceof Error ? error.message : 'Riprova.', type: 'error' }); }
       finally { setBusy(false); }
     })();
-  }}><div className="grid gap-2"><Label htmlFor="guest-name">Il tuo nome</Label><Input id="guest-name" name="name" autoComplete="name" maxLength={80} required placeholder="Come ti chiami?" disabled={busy || done} /></div><Button type="submit" disabled={busy || done}>{done ? 'Revisione avviata' : busy ? <Skeleton className="h-4 w-32 bg-current opacity-30" /> : 'Inizia revisione'}</Button>{busy ? <LoadingSkeleton /> : null}</form>;
+  }}><div className="grid gap-2"><Label htmlFor="guest-name">Il tuo nome</Label><Input id="guest-name" name="name" autoComplete="name" maxLength={80} required placeholder="Come ti chiami?" disabled={busy || done} /></div><Button type="submit" disabled={busy || done}>{done ? 'Revisione avviata' : busy ? <Skeleton className="h-4 w-32 bg-current opacity-30" /> : 'Inizia revisione'}</Button></form>;
 }

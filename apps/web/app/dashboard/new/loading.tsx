@@ -1,0 +1,2 @@
+import { Skeleton } from '@/components/ui/skeleton';
+export default function Loading() { return <main role="status" aria-label="Caricamento nuovo progetto" className="mx-auto w-full max-w-3xl space-y-6 px-6 py-10 lg:px-10"><Skeleton className="h-9 w-56" /><div className="space-y-6 rounded-xl border bg-card p-6"><Skeleton className="h-5 w-56" /><Skeleton className="h-4 w-5/6" /><div className="space-y-2"><Skeleton className="h-4 w-28" /><Skeleton className="h-9 w-full" /></div><Skeleton className="h-8 w-28" /></div></main>; }

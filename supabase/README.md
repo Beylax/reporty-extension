@@ -99,3 +99,7 @@ La migrazione revoca i precedenti inviti individuali senza cancellare segnalazio
 ## Modifica stato e priorità per i guest (012)
 
 Dopo la 011, applicare `migrations/202610050012_guest_report_updates.sql`. Gli ospiti autorizzati possono cambiare stato e priorità di tutte le segnalazioni del proprio progetto. Gli accessi revocati e gli altri progetti restano esclusi. L’estensione mostra automaticamente i controlli tramite `canChangeStatus`; non occorre una nuova build.
+
+## Link ospite per ambiente (013)
+
+Applicare `migrations/202610050013_environment_review_links.sql` dopo la 012. Sostituisce il link unico del progetto con un link per ambiente, generato automaticamente e copiabile dalla card dell’ambiente. La migrazione conserva il vecchio link sull’ambiente associato e genera i link mancanti per gli altri ambienti. Rigenerare un link revoca solo il precedente link di quell’ambiente e le sue sessioni. Gli inviti continuano ad autorizzare la revisione nel progetto; il link identifica l’ambiente iniziale.

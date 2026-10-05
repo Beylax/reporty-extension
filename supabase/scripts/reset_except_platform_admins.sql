@@ -24,6 +24,7 @@ delete from public.comments;
 delete from public.issues;
 delete from public.member_invites;
 delete from public.guest_sessions;
+delete from public.environment_review_links;
 delete from public.guest_invites;
 delete from public.environments;
 delete from public.project_members;
