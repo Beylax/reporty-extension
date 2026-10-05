@@ -33,19 +33,20 @@ Il monorepo usa un solo `package-lock.json` nella root.
 - Ogni progetto comprende più ambienti con origini esplicite (produzione, staging, localhost). Le segnalazioni sono separate per ambiente.
 - I membri assegnati possono vedere, commentare e cambiare stato delle segnalazioni. Autore e amministratore possono modificarle o eliminarle.
 - Stati: aperta, in lavorazione, risolta.
-- Gli ospiti Designer accedono tramite link riutilizzabili fino a revoca, inseriscono solo il nome e non devono registrarsi. Vedono tutte le segnalazioni del progetto e rispondono dall'estensione, senza dashboard o cambio di stato.
+- Il team usa sia dashboard sia estensione. I revisori ospiti (Designer e clienti) installano l'estensione e accedono tramite link riutilizzabili fino a revoca, inserendo solo il nome, senza registrazione. Vedono tutte le segnalazioni del progetto e rispondono dall'estensione, senza dashboard o cambio di stato.
 - Abilitazione esplicita dell'estensione per sito; pulsante flottante con posizione personalizzabile.
 - Creazione tramite selezione elemento o pin libero; screenshot automatico dell'area visibile con anteprima e rimozione prima dell'invio.
 - Identità pagina: ambiente e percorso; query e URL completo rimangono contesto. I percorsi dei router hash sono distinti.
 - Nessun SDK nel sito e nessun ripristino dello stato React nell'MVP. Screenshot e contesto documentano lo stato originale; elementi non più trovati devono essere segnalati come tali.
+- La revisione senza estensione tramite script nei siti gestiti dal team è rimandata a una fase successiva ed esclusa dall'MVP.
 - La dashboard elenca i siti e consente di aprirli per consultare le segnalazioni nell'estensione.
 
 ## Configurazione prevista
 
-Gli esempi `.env.example` elencano le variabili previste: la connessione Supabase non è ancora implementata. Copiare quello web in `.env.local` e quello dell'estensione in `.env` quando si collega il servizio. Le chiavi privilegiate Supabase devono restare esclusivamente sul server.
+Gli esempi `.env.example` elencano le variabili richieste. Copiare quello web in `.env.local` e quello dell'estensione in `.env`. Le chiavi privilegiate Supabase devono restare esclusivamente sul server. Per provider, callback e database seguire [supabase/README.md](supabase/README.md).
 
 Per Vercel impostare la Root Directory su `apps/web`, mantenendo accessibili i file del monorepo esterni alla root dell'app.
 
 ## Stato
 
-Sono presenti gli starter e le basi del monorepo. Autenticazione, database, API, dashboard applicativa e flusso di segnalazione sono ancora da implementare.
+Sono presenti le basi del monorepo, l'accesso Google/email, gestione sessione e dashboard con shadcn/ui: elenco, creazione e rinomina progetti; creazione e modifica ambienti; inviti membri vincolati all'email, link ospiti riutilizzabili e revoca. Le migrazioni vanno applicate al database remoto seguendo il README Supabase. Collegamento delle sessioni all'estensione, API e flusso di segnalazione sono ancora da implementare.

@@ -1,4 +1,5 @@
-export { getPageContext } from './page.ts';
+export { getPageContext } from './page';
+export { normalizeOrigin, validateName, isUuid } from './project';
 
 export const issueStatuses = ['open', 'in_progress', 'resolved'] as const;
 export type IssueStatus = (typeof issueStatuses)[number];
