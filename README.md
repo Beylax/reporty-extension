@@ -50,3 +50,7 @@ Per Vercel impostare la Root Directory su `apps/web`, mantenendo accessibili i f
 ## Stato
 
 Sono presenti le basi del monorepo, l'accesso Google/email, gestione sessione e dashboard con shadcn/ui: elenco, creazione e rinomina progetti; creazione e modifica ambienti; inviti membri vincolati all'email, link ospiti riutilizzabili e revoca. L'estensione permette collegamento membri/ospiti, elenco ambienti, attivazione per sito e pulsante flottante personalizzabile. Le migrazioni vanno applicate al database remoto seguendo il README Supabase. Sono implementati selezione elementi/pin, segnalazioni, risposte, stati e screenshot privati, con lista e filtri nella dashboard. Per gli screenshot configurare SUPABASE_SECRET_KEY sul backend e applicare la quinta migrazione. Restano da verificare i flussi completi in Chrome ed Edge sui siti reali.
+
+## Download estensione
+
+Scaricare [`reporty-chrome.zip`](downloads/reporty-chrome.zip), estrarlo e caricare la cartella da Chrome o Edge in modalità sviluppatore. [Istruzioni complete](apps/extension/README.md#distribuzione-senza-marketplace). La build inclusa usa `https://reporty-extension.vercel.app`.

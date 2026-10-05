@@ -2,6 +2,26 @@
 
 Chrome ed Edge desktop, WXT + React e shadcn/ui. Non richiede script nel sito.
 
+## Distribuzione senza marketplace
+
+Dalla root genera lo ZIP collegato alla piattaforma di produzione:
+
+```sh
+npm run zip:extension:production
+```
+
+WXT crea `apps/extension/.output/reportyextension-0.0.0-chrome.zip` (il nome cambia con la versione). Lo ZIP pronto da condividere nella repo si trova in [`downloads/reporty-chrome.zip`](../../downloads/reporty-chrome.zip). Il comando aggiorna automaticamente questa copia: pubblicare poi le modifiche su GitHub. Puoi inoltre allegare lo ZIP a una Release GitHub.
+
+Per installarlo:
+
+1. Scaricare lo ZIP e **estrarlo** in una cartella permanente.
+2. Aprire `chrome://extensions` oppure `edge://extensions`.
+3. Abilitare **Modalità sviluppatore**.
+4. Premere **Carica estensione non pacchettizzata** e selezionare la cartella estratta contenente `manifest.json`.
+5. Aprire Reporty e premere **Collega**.
+
+Non selezionare direttamente lo ZIP e non eliminare la cartella estratta dopo l'installazione. Gli aggiornamenti sono manuali: estrarre la nuova versione nella stessa cartella e premere Ricarica nella pagina delle estensioni.
+
 ## Preparazione locale
 
 1. Applicare le migrazioni Supabase fino a `202610050005_reports.sql`.

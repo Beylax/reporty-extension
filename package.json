@@ -10,6 +10,8 @@
     "node": ">=22.12.0"
   },
   "scripts": {
+    "build:extension:production": "WXT_API_URL=https://reporty-extension.vercel.app npm run build --workspace=@reporty/extension",
+    "zip:extension:production": "WXT_API_URL=https://reporty-extension.vercel.app npm run zip --workspace=@reporty/extension && node scripts/copy-extension-zip.mjs",
     "dev:web": "npm run dev --workspace=@reporty/web",
     "dev:extension": "npm run dev --workspace=@reporty/extension",
     "build": "npm run build --workspaces --if-present",
