@@ -1,0 +1,2 @@
+/* The full-page onboarding must not inherit the popup’s fixed width. */
+body.reporty-review { width: 100%; min-height: 100dvh; }

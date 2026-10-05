@@ -99,3 +99,8 @@ for (const granted of [false, true]) test(`guest connection ${granted ? 'opens a
     assert.equal(h.stored.guestReviewStart, undefined);
   }
 });
+
+test('guest bridge browser bundle does not depend on the Node process global', async () => {
+  const bridge = await readFile(new URL('../apps/extension/.output/chrome-mv3/content-scripts/guest-bridge.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(bridge, /\bprocess\s*(?:\.|\[)/);
+});
