@@ -17,9 +17,11 @@
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspace=@reporty/web",
-    "test": "npm run test --workspace=@reporty/shared && npm run test:db",
+    "test": "npm run test --workspace=@reporty/shared && npm run test:db && npm run test:widget",
     "test:db": "node --test supabase/tests/*.test.mjs",
-    "test:extension": "npm run build --workspace=@reporty/extension && node --test scripts/extension-lifecycle.test.mjs"
+    "test:extension": "npm run build --workspace=@reporty/extension && node --test scripts/extension-lifecycle.test.mjs",
+    "build:widget": "node scripts/build-widget.mjs",
+    "test:widget": "npm run build:widget && node --test scripts/widget-loader.test.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8"

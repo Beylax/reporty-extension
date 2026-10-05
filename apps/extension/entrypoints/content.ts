@@ -9,7 +9,7 @@ import css from '@/entrypoints/popup/style.css?inline';
 export default defineContentScript({
   matches: [], registration: 'runtime',
   main(ctx) {
-    if (document.getElementById('reporty-overlay')) return;
+    if (document.getElementById('reporty-overlay') || document.getElementById('reporty-widget')?.dataset.enabled === 'true') return;
     const host = document.createElement('div'); host.id = 'reporty-overlay';
     host.style.cssText = 'all:initial!important;display:block!important;position:fixed!important;inset:0!important;z-index:2147483647!important;pointer-events:none!important;font:14px/1.5 system-ui,sans-serif!important;direction:ltr!important;color-scheme:light!important';
     document.documentElement.append(host);

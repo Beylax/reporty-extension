@@ -9,3 +9,6 @@ dist/
 .vercel/
 .DS_Store
 supabase/.temp/
+
+# Widget bundle is generated before web dev/build.
+/apps/web/public/widget/

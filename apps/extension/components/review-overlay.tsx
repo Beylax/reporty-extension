@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { anchorPosition as locate } from '@/lib/anchor';
 
-async function message(body: object) {
+async function extensionMessage(body: object) {
   const response = await browser.runtime.sendMessage(body);
   if (!response?.ok) throw new Error(response?.error ?? 'Operazione non riuscita.');
   return response.data;
@@ -24,7 +24,8 @@ const priorityColors = { low: 'bg-slate-100 text-slate-700', medium: 'bg-amber-1
 const box = 'space-y-3 rounded-xl border bg-card p-4 shadow-sm';
 type Draft = { id: string; context: ReportContext; screenshot?: string; body: string; priority: ReportPriority };
 
-export function ReviewOverlay({ site, environment, host }: { site: Site; environment: Environment; host: HTMLElement }) {
+export function ReviewOverlay({ site, environment, host, transport, logoUrl }: { site: Site; environment: Environment; host: HTMLElement; transport?: (body: Record<string, unknown>) => Promise<unknown>; logoUrl?: string }) {
+  const message = async (body: Record<string, unknown>) => (transport ? await transport(body) : await extensionMessage(body)) as Awaited<ReturnType<typeof extensionMessage>>;
   const [page, setPage] = useState(getPageContext(location.href));
   const [reports, setReports] = useState<Report[]>([]);
   const [open, setOpen] = useState(false);
@@ -134,7 +135,7 @@ export function ReviewOverlay({ site, environment, host }: { site: Site; environ
     }) : null}
     <Button aria-label={open ? "Chiudi segnalazioni Reporty" : "Apri segnalazioni Reporty"} aria-expanded={open} className="pointer-events-auto fixed size-13 rounded-full shadow-xl transition-transform duration-200 hover:scale-110 motion-reduce:transition-none" style={{ [top ? 'top' : 'bottom']: 24, [left ? 'left' : 'right']: 24 }} onClick={() => { setOpen(!open); if (!open) void run(async () => { await refresh(); }); }}><span className="flex transition-transform duration-200 motion-reduce:transition-none" style={{ transform: open ? 'rotate(45deg)' : 'rotate(0deg)' }}><Plus className="size-6" aria-hidden="true" /></span></Button>
     {open && !mode ? <section aria-label="Segnalazioni Reporty" className="pointer-events-auto fixed flex max-h-[75vh] w-[min(380px,calc(100vw-48px))] flex-col gap-4 overflow-y-auto rounded-xl border bg-muted/50 p-4 text-sm text-card-foreground shadow-2xl" style={panelPosition}>
-      <div className="flex items-center justify-between gap-2">{selected ? <Button variant="outline" size="sm" onClick={() => { setSelected(null); setListOpen(true); }}><ArrowLeft className="size-4" aria-hidden="true" />Torna alle segnalazioni</Button> : <BrandLogo compact />}<Button size="sm" variant="ghost" aria-label="Chiudi" onClick={() => setOpen(false)}>×</Button></div>
+      <div className="flex items-center justify-between gap-2">{selected ? <Button variant="outline" size="sm" onClick={() => { setSelected(null); setListOpen(true); }}><ArrowLeft className="size-4" aria-hidden="true" />Torna alle segnalazioni</Button> : <BrandLogo compact logoUrl={logoUrl} />}<Button size="sm" variant="ghost" aria-label="Chiudi" onClick={() => setOpen(false)}>×</Button></div>
       <header className="rounded-xl border bg-card p-4"><h2 className="font-semibold">{environment.projectName}</h2><p className="break-all text-xs text-muted-foreground">{environment.name} · {page.pagePath}</p></header>
 
       {draft ? <form className="grid gap-3 rounded-xl border bg-card p-4 shadow-sm" onSubmit={event => { event.preventDefault(); void run(async () => {

@@ -32,3 +32,13 @@ Abilitare Email e Google in Sign In / Providers. Le credenziali OAuth Google res
 ## Creazione progetto con Produzione
 
 La creazione del progetto richiede l’origine del sito e crea atomicamente l’ambiente Produzione e il relativo link ospite. Per aggiornare un database esistente senza cancellare dati, eseguire `create_project_with_production.sql`. La funzione è già inclusa in `initialize.sql`: non rieseguire il reset per applicare questo aggiornamento.
+
+## Script incorporabile per ambiente
+
+Su un database esistente eseguire **`widget.sql`**, aggiornamento non distruttivo. Il reset `initialize.sql` include già lo schema widget. Dopo il deploy web, ogni card ambiente mostra lo script da copiare nel sito e il toggle Abilita/Disabilita, inizialmente disabilitato.
+
+Chiunque visiti l’origine configurata, quando lo script è attivo, inserisce il nome e può creare, leggere, rispondere, cambiare stato/priorità, modificare ed eliminare le segnalazioni di quell’ambiente. La chiave nello snippet è pubblica, non un segreto amministrativo. Il backend e il database verificano ambiente, origine e stato del toggle a ogni operazione. La sessione dura un giorno; il pannello controlla il toggle ogni 10 secondi. Disabilitando il widget le nuove operazioni vengono bloccate subito e il pannello scompare al controllo successivo.
+
+Screenshot opzionali in HTTPS (o localhost) con `getDisplayMedia`: scegliere la scheda corrente e consentire ogni acquisizione. Vengono evidenziati punto o elemento e fermate tutte le tracce della condivisione dopo la cattura. Annullando il consenso si può comunque inviare la segnalazione senza screenshot. La funzione può non essere disponibile su browser mobile.
+
+Con CSP del sito autorizzare il dominio Reporty per `script-src`, `connect-src` e `img-src` (oltre ai domini delle immagini Supabase e `data:` per le anteprime); consentire gli stili del pannello isolato. Lo script non recupera lo stato interno React. Il bundle viene generato prima di `dev:web` e della build Vercel; `npm run build:widget` lo rigenera manualmente durante lo sviluppo.

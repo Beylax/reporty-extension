@@ -27,7 +27,7 @@
 - Segnalazioni collegate a elementi DOM o pin liberi, con descrizione, screenshot opzionale e risposte.
 - Stati: `open`, `in_progress`, `resolved`. Priorità: `low`, `medium`, `high`, inizialmente `medium`.
 - Identità pagina: ambiente e percorso; query conservate come contesto, percorsi hash distinti.
-- Non acquisire o ripristinare stato interno React, cookie o storage del sito. La modalità con script senza estensione è rimandata.
+- Non acquisire o ripristinare stato interno React, cookie o storage del sito. La modalità con script è disponibile per ambiente: chiave pubblica e toggle inizialmente disabilitato, nome obbligatorio, permessi completi limitati all’ambiente. API e database verificano il toggle; frontend lo controlla ogni 10 secondi.
 
 ## Permessi
 
@@ -40,6 +40,7 @@
 
 - Lo schema corrente è in `supabase/initialize.sql`: è distruttivo, elimina anche tutti gli account Auth e non conserva amministratori. Non eseguirlo sul remoto senza autorizzazione. Per future modifiche su dati da conservare, concordare una migrazione incrementale anziché usare il reset.
 - Mantenere RLS, controlli RPC e `search_path` esplicito nelle funzioni security definer; limitare gli execute grant.
+- Il widget riusa il pannello estensione tramite transport; bundle generato da `scripts/build-widget.mjs` prima della build web. Screenshot widget tramite condivisione scheda con consenso a ogni acquisizione; fermare le tracce sempre.
 - Token ospite e invito memorizzati con hash. I codici di collegamento estensione sono monouso; verificare origine, scheda, nonce e scadenza.
 - La sessione estensione resta nello storage riservato ai contesti fidati; non deve essere esposta al sito revisionato.
 - `SUPABASE_SECRET_KEY` resta server-only, usata per Storage dopo controllo di autorizzazione. Non inserirla nell'estensione, nei log o in variabili `NEXT_PUBLIC_*`.

@@ -1,3 +1,4 @@
+import { EnvironmentWidget } from '../../environment-widget';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { isUuid } from '@reporty/shared';
@@ -24,11 +25,12 @@ export default async function Project({ params, searchParams }: {
   const { supabase } = await requireUser();
   const { projectId } = await params;
   if (!isUuid(projectId)) notFound();
-  const [projectResult, environmentsResult, permissionResult, linksResult, { message }] = await Promise.all([
+  const [projectResult, environmentsResult, permissionResult, linksResult, widgetsResult, { message }] = await Promise.all([
     supabase.from('projects').select('id, name').eq('id', projectId).maybeSingle(),
     supabase.from('environments').select('id, name, origin').eq('project_id', projectId).order('created_at'),
     supabase.rpc('can_manage_project', { target: projectId }),
     supabase.from('environment_review_links').select('environment_id,token,environments!inner(project_id)').eq('environments.project_id', projectId),
+    supabase.from('environment_widgets').select('environment_id,public_key,enabled'),
     searchParams,
   ]);
   if (projectResult.error || environmentsResult.error || permissionResult.error) {
@@ -69,6 +71,7 @@ export default async function Project({ params, searchParams }: {
               <SubmitButton>Salva ambiente</SubmitButton>
             </form> : null}
             {linksResult.data?.find(link => link.environment_id === environment.id) ? <ReviewLinkForm projectId={projectId} environmentId={environment.id} link={`${appOrigin()}/guest/${linksResult.data.find(link => link.environment_id === environment.id)!.token}`} /> : <FeedbackToast message="Link ospite non disponibile. Inizializza il database con supabase/initialize.sql secondo il README Supabase." />}
+            {widgetsResult.data?.find(widget => widget.environment_id === environment.id) ? <EnvironmentWidget environmentId={environment.id} enabled={widgetsResult.data.find(widget => widget.environment_id === environment.id)!.enabled} publicKey={widgetsResult.data.find(widget => widget.environment_id === environment.id)!.public_key} origin={appOrigin()} /> : <FeedbackToast message="Applica supabase/widget.sql per attivare gli script per ambiente." />}
             {canManage ? <ResourceDelete id={environment.id} kind="environment" name={environment.name} /> : null}
           </CardContent>
         </Card>)}
