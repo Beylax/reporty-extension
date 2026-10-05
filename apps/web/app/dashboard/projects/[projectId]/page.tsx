@@ -12,6 +12,7 @@ import { SubmitButton } from '@/components/submit-button';
 import { ProjectInvitations } from '../../project-invitations';
 import { ProjectReports } from '../../project-reports';
 import { buttonVariants } from '@/components/ui/button';
+import { ResourceDelete } from '../../resource-delete';
 import { ProjectTabs } from '../../project-tabs';
 
 export default async function Project({ params, searchParams }: {
@@ -21,17 +22,19 @@ export default async function Project({ params, searchParams }: {
   const { supabase } = await requireUser();
   const { projectId } = await params;
   if (!isUuid(projectId)) notFound();
-  const [projectResult, environmentsResult, permissionResult, { message }] = await Promise.all([
+  const [projectResult, environmentsResult, permissionResult, adminResult, { message }] = await Promise.all([
     supabase.from('projects').select('id, name').eq('id', projectId).maybeSingle(),
     supabase.from('environments').select('id, name, origin').eq('project_id', projectId).order('created_at'),
     supabase.rpc('can_manage_project', { target: projectId }),
+    supabase.rpc('is_platform_admin'),
     searchParams,
   ]);
-  if (projectResult.error || environmentsResult.error || permissionResult.error) {
+  if (projectResult.error || environmentsResult.error || permissionResult.error || adminResult.error) {
     throw new Error('Impossibile caricare il progetto. Riprova tra poco.');
   }
   const project = projectResult.data;
   if (!project) notFound();
+  const isPlatformAdmin = adminResult.data === true;
   const canManage = permissionResult.data === true;
   const environments = environmentsResult.data ?? [];
   return (
@@ -39,7 +42,8 @@ export default async function Project({ params, searchParams }: {
       <Link href="/dashboard" className={buttonVariants({ variant: 'outline' })}>← Tutti i progetti</Link>
       <header className="flex flex-wrap items-center gap-3">
         <h1 className="text-3xl font-semibold tracking-tight">{project.name}</h1>
-        <Badge variant="secondary">{canManage ? 'Amministratore' : 'Membro'}</Badge>
+        <Badge variant="secondary">{isPlatformAdmin ? 'Amministratore generale' : canManage ? 'Amministratore' : 'Membro'}</Badge>
+        {isPlatformAdmin ? <div className="ml-auto"><ResourceDelete id={projectId} kind="project" name={project.name} /></div> : null}
       </header>
       <Feedback message={message} />
       <ProjectTabs reports={<ProjectReports environments={environments} />} environments={<>
@@ -63,6 +67,7 @@ export default async function Project({ params, searchParams }: {
               <div className="grid min-w-60 flex-1 gap-2"><Label htmlFor={`origin-${environment.id}`}>Origine del sito</Label><Input id={`origin-${environment.id}`} name="origin" type="url" defaultValue={environment.origin} required /></div>
               <SubmitButton>Salva ambiente</SubmitButton>
             </form> : null}
+            {canManage ? <ResourceDelete id={environment.id} kind="environment" name={environment.name} /> : null}
           </CardContent>
         </Card>)}
       </section>

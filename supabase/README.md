@@ -77,3 +77,11 @@ Eseguire `migrations/202610050006_report_priorities.sql` dopo la quinta migrazio
 Eseguire `migrations/202610050007_user_management.sql` dopo la sesta migrazione. Gli amministratori trovano la sezione **Utenti** nella sidebar e la gestione dei membri nella tab **Gestione accessi** del progetto. Possono invitare utenti, modificare il ruolo tra Membro e Amministratore e rimuovere accessi. Gli amministratori di progetto operano solo sui propri progetti; l'amministratore generale opera su tutti. Il database mantiene sempre almeno un amministratore per progetto, anche in caso di richieste concorrenti. Rimuovere un membro non elimina l'account o le segnalazioni e revoca l'accesso al progetto anche per le sessioni dell'estensione.
 
 Il dettaglio progetto è diviso nelle tab Segnalazioni, Ambienti e Gestione accessi; le segnalazioni si filtrano anche per pagina e si gestiscono in un dialogo. `npm run test:db` include permessi, isolamento dei progetti e protezione dell'ultimo amministratore.
+
+## Eliminazione progetti e ambienti
+
+Applicare `migrations/202610050008_platform_management.sql` dopo la settima migrazione. Solo gli amministratori generali di `platform_admins` possono eliminare progetti e ambienti. La cancellazione elimina anche segnalazioni e risposte; per i progetti elimina inoltre ambienti, membership e inviti. Il backend rimuove gli screenshot privati dopo la cancellazione (best effort). Gli amministratori di progetto mantengono i permessi sui propri progetti senza ottenere questo comando globale.
+
+### Permessi amministratori di progetto
+
+Applicare `202610050009_project_admin_permissions.sql` dopo la migrazione 008. Gli amministratori di progetto possono eliminare solo gli ambienti dei progetti che gestiscono, incluse le segnalazioni associate. L'eliminazione dei progetti rimane riservata agli amministratori generali. Le membership con ruolo Amministratore non possono essere rimosse né retrocesse, neppure dagli amministratori generali; resta possibile eliminare l'intero progetto.
