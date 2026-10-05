@@ -19,7 +19,7 @@ const labels = { open: 'Aperta', in_progress: 'In lavorazione', resolved: 'Risol
 export function ReportList({ reports, environments }: { reports: Report[]; environments: { id: string; name: string; origin: string }[] }) {
   const router = useRouter();
   const selectionVersion = useRef(0);
-  const [search, setSearch] = useState(''), [filter, setFilter] = useState<string[]>(['in_progress', 'resolved']), [priority, setPriority] = useState<string[]>([]), [environment, setEnvironment] = useState<string[]>([]), [page, setPage] = useState<string[]>([]);
+  const [search, setSearch] = useState(''), [filter, setFilter] = useState<string[]>(['open', 'in_progress']), [priority, setPriority] = useState<string[]>([]), [environment, setEnvironment] = useState<string[]>([]), [page, setPage] = useState<string[]>([]);
   const pages = [...new Set(reports.filter(report => !environment.length || environment.includes(report.environment_id)).map(report => report.page_path))].sort();
   const [selected, setSelected] = useState<Report | null>(null), [comments, setComments] = useState<ReportComment[]>([]);
   const [reply, setReply] = useState(''), [edited, setEdited] = useState(''), [image, setImage] = useState('');

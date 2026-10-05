@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowLeft, ChevronDown, Crosshair, Eye, EyeOff, MapPin, Plus } from 'lucide-react';
 import { getPageContext, priorityLabels, type ReportPriority, type Anchor, type Report, type ReportComment, type ReportContext } from '@reporty/shared';
 import type { Environment, Site } from '@/lib/session';
+import { captureHighlightedScreenshot } from '@/lib/screenshot';
 import { elementAnchor, anchorPosition } from '@/lib/anchor';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -85,13 +86,9 @@ export function ReviewOverlay({ site, environment, host }: { site: Site; environ
       const context: ReportContext = { ...getPageContext(location.href), anchor, viewport: { width: innerWidth, height: innerHeight, devicePixelRatio }, scroll: { x: Math.max(0, scrollX), y: Math.max(0, scrollY) } };
       setMode(null); setHover(null); setSelected(null); setDraft({ id: crypto.randomUUID(), context, body: '', priority: 'medium' }); setOpen(true);
       void run(async () => {
-        host.style.visibility = 'hidden';
-        try {
-          await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-          const screenshot = await message({ type: 'REPORTY_CAPTURE' });
-          if (screenshot.length > 3500000) throw new Error('Screenshot troppo grande. Puoi inviare il commento senza immagine.');
-          setDraft(previous => previous ? { ...previous, screenshot } : previous);
-        } finally { host.style.visibility = ''; }
+        const screenshot = await captureHighlightedScreenshot(host, context, () => message({ type: 'REPORTY_CAPTURE' }));
+        if (screenshot.length > 3500000) throw new Error('Screenshot troppo grande. Puoi inviare il commento senza immagine.');
+        setDraft(previous => previous ? { ...previous, screenshot } : previous);
       });
     };
     const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { setMode(null); setHover(null); setOpen(true); } };
@@ -123,9 +120,9 @@ export function ReviewOverlay({ site, environment, host }: { site: Site; environ
         <Label htmlFor="report-priority">Priorità</Label><select id="report-priority" className="rounded-lg border bg-background p-2" disabled={busy} value={draft.priority} onChange={event => setDraft({ ...draft, priority: event.target.value as ReportPriority })}>{Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
         {draft.screenshot ? <><img alt="Anteprima screenshot da inviare" src={draft.screenshot} className="rounded-lg border" /><Button type="button" variant="outline" onClick={() => setDraft({ ...draft, screenshot: undefined })}>Rimuovi screenshot</Button></> : <div className="grid gap-2"><p className="text-xs text-muted-foreground">Nessuno screenshot allegato.</p><Button type="button" variant="outline" disabled={busy} onClick={() => void run(async () => {
           if (location.href !== draft.context.url || Math.abs(scrollY - draft.context.scroll.y) > 2 || Math.abs(scrollX - draft.context.scroll.x) > 2) throw new Error('Torna alla pagina e alla posizione originali prima di acquisire lo screenshot.');
-          host.style.visibility = 'hidden';
-          try { await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))); const screenshot = await message({ type: 'REPORTY_CAPTURE' }); if (screenshot.length > 3500000) throw new Error('Screenshot troppo grande.'); setDraft(previous => previous ? { ...previous, screenshot } : previous); }
-          finally { host.style.visibility = ''; }
+          const screenshot = await captureHighlightedScreenshot(host, draft.context, () => message({ type: 'REPORTY_CAPTURE' }));
+          if (screenshot.length > 3500000) throw new Error('Screenshot troppo grande.');
+          setDraft(previous => previous ? { ...previous, screenshot } : previous);
         })}>Acquisisci screenshot</Button></div>}
         <Button type="submit" disabled={busy || !draft.body.trim()}>Invia segnalazione</Button><Button type="button" variant="ghost" disabled={busy} onClick={() => setDraft(null)}>Annulla</Button>
       </form> : selected ? <div className="space-y-4">

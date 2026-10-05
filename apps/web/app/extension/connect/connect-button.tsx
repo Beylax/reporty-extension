@@ -1,29 +1,44 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { ToastProvider, useToastManager } from '@/components/ui/toast';
 import { createHandoff } from './actions';
 
 type ChromeWeb = { runtime?: { sendMessage: (id: string, message: unknown, callback: (response?: { ok?: boolean; error?: string }) => void) => void; lastError?: { message?: string } } };
 
 export function ConnectButton({ extensionId, nonce, projectId }: { extensionId: string; nonce: string; projectId?: string }) {
-  const [status, setStatus] = useState('');
+  return <ToastProvider><ConnectionControl extensionId={extensionId} nonce={nonce} projectId={projectId} /></ToastProvider>;
+}
+
+function ConnectionControl({ extensionId, nonce, projectId }: { extensionId: string; nonce: string; projectId?: string }) {
+  const toast = useToastManager();
+  const [connected, setConnected] = useState(false);
   const [pending, setPending] = useState(false);
+  const locked = useRef(false);
+  function failure(description: string) { toast.add({ title: 'Collegamento non riuscito', description, type: 'error', priority: 'high' }); }
   async function connect() {
+    if (locked.current) return;
+    locked.current = true;
     setPending(true);
+    let succeeded = false;
     try {
       const chrome = (window as unknown as { chrome?: ChromeWeb }).chrome;
-      if (!chrome?.runtime?.sendMessage) { setStatus('Apri questa pagina dal pulsante Collega nell’estensione Chrome o Edge.'); return; }
+      if (!chrome?.runtime?.sendMessage) { failure('Apri questa pagina dal pulsante Collega nell’estensione Chrome o Edge.'); return; }
       const result = await createHandoff(projectId);
-      if (!result.code) { setStatus(result.error ?? 'Collegamento non riuscito.'); return; }
+      if (!result.code) { failure(result.error ?? 'Collegamento non riuscito.'); return; }
       const runtime = chrome.runtime;
       await new Promise<void>(resolve => runtime.sendMessage(extensionId, { type: 'REPORTY_CONNECT', nonce, code: result.code }, response => {
         const error = runtime.lastError;
-        setStatus(!error && response?.ok ? 'Estensione collegata. Puoi aprirla sul sito da revisionare.' : 'Collegamento non riuscito. Riapri questa pagina dal pulsante Collega dell’estensione.');
+        if (!error && response?.ok) {
+          succeeded = true;
+          setConnected(true);
+          toast.add({ title: 'Estensione collegata', description: 'Puoi aprirla sul sito da revisionare.', type: 'success' });
+        } else failure('Riapri questa pagina dal pulsante Collega dell’estensione.');
         resolve();
       }));
-    } catch { setStatus('Collegamento non riuscito. Riprova.'); }
-    finally { setPending(false); }
+    } catch { failure('Collegamento non riuscito. Riprova.'); }
+    finally { locked.current = succeeded; setPending(false); }
   }
-  return <div className="space-y-3"><Button disabled={pending} onClick={connect}>{pending ? 'Collegamento…' : 'Conferma collegamento'}</Button><p role="status" className="text-sm text-muted-foreground">{status}</p></div>;
+  return <Button disabled={pending || connected} onClick={connect}>{connected ? 'Estensione collegata' : pending ? 'Collegamento…' : 'Conferma collegamento'}</Button>;
 }
