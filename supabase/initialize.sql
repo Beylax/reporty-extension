@@ -18,7 +18,7 @@ declare item record;
 begin
   for item in select p.oid::regprocedure::text as signature from pg_proc p
     join pg_namespace n on n.oid=p.pronamespace
-    where n.nspname='public' and p.proname in ('is_platform_admin','can_read_project','can_manage_project','add_project_owner','create_member_invite','accept_member_invite','create_guest_invite','revoke_project_invite','list_project_members','preview_guest_invite','start_guest_session','get_guest_session','create_member_handoff','create_guest_handoff','redeem_extension_handoff','extension_context','revoke_extension_session','report_actor','report_operation','manage_project_member','platform_delete_resource','create_environment_guest_invite','preview_guest_review','save_project_review_link','create_environment_review_link','regenerate_environment_review_link')
+    where n.nspname='public' and p.proname in ('create_project_with_production','is_platform_admin','can_read_project','can_manage_project','add_project_owner','create_member_invite','accept_member_invite','create_guest_invite','revoke_project_invite','list_project_members','preview_guest_invite','start_guest_session','get_guest_session','create_member_handoff','create_guest_handoff','redeem_extension_handoff','extension_context','revoke_extension_session','report_actor','report_operation','manage_project_member','platform_delete_resource','create_environment_guest_invite','preview_guest_review','save_project_review_link','create_environment_review_link','regenerate_environment_review_link')
   loop execute format('drop function if exists %s cascade',item.signature); end loop;
 end;
 $$;
@@ -450,6 +450,22 @@ grant execute on function public.platform_delete_resource(uuid,text) to authenti
 revoke all on function public.create_environment_review_link() from public,anon,authenticated;
 revoke all on function public.regenerate_environment_review_link(uuid) from public,anon,authenticated;
 grant execute on function public.regenerate_environment_review_link(uuid) to authenticated;
+
+create or replace function public.create_project_with_production(project_name text, site_origin text) returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare project uuid;
+begin
+  if not public.can_manage_project(null) then raise exception 'Not authorized' using errcode='42501'; end if;
+  if project_name is null or char_length(trim(project_name)) not between 1 and 120 then raise exception 'Invalid name' using errcode='22023'; end if;
+  if site_origin is null or site_origin !~ '^https?://[^/?#[:space:]@]+$' then raise exception 'Invalid origin' using errcode='22023'; end if;
+  insert into public.projects(name,created_by) values(trim(project_name),auth.uid()) returning id into project;
+  -- The environment trigger creates its guest invitation and readable link.
+  insert into public.environments(project_id,name,origin) values(project,'Produzione',site_origin);
+  return project;
+end;
+$$;
+revoke all on function public.create_project_with_production(text,text) from public,anon,authenticated;
+grant execute on function public.create_project_with_production(text,text) to authenticated;
 
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
 values('screenshots','screenshots',false,2621440,array['image/jpeg'])

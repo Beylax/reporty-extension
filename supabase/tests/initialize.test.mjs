@@ -34,6 +34,15 @@ test('destructive bootstrap, shared permissions, guest updates and environment l
       await db.exec(`set role ${role}`);
     };
     await as(owner);
+    const automatic=(await db.query('select public.create_project_with_production($1,$2) as id',['Automatic','https://automatic.example'])).rows[0].id;
+    const production=(await db.query('select id,name,origin from public.environments where project_id=$1',[automatic])).rows[0];
+    assert.equal(production.name,'Produzione');
+    assert.equal(production.origin,'https://automatic.example');
+    assert.equal((await db.query('select * from public.environment_review_links where environment_id=$1',[production.id])).rows.length,1);
+    await assert.rejects(db.query('select public.create_project_with_production($1,$2)',['Invalid','bad']),/Invalid origin/);
+    assert.equal((await db.query('select * from public.projects')).rows.length,1);
+    await db.query('select public.platform_delete_resource($1,$2)',[automatic,'project']);
+
     await db.query('insert into public.projects(id,name,created_by) values($1,$2,$3)',[project,'Project',owner]);
     const env='66666666-6666-4666-8666-666666666666',env2='77777777-7777-4777-8777-777777777777';
     await db.query('insert into public.environments(id,project_id,name,origin) values($1,$2,$3,$4),($5,$2,$6,$7)',[env,project,'Production','https://one.example',env2,'Staging','https://stage.example']);
@@ -60,6 +69,7 @@ test('destructive bootstrap, shared permissions, guest updates and environment l
     await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:outsider,is_anonymous:true})]);
     assert.equal((await db.query('select * from public.projects')).rows.length,0);
     await as(null,'anon');
+    await assert.rejects(db.query('select public.create_project_with_production($1,$2)',['Guest','https://guest.example']),/permission denied/);
     assert.equal((await db.query('select * from public.preview_guest_review($1)',[token])).rows[0].environment_id,env);
     await db.query('select public.start_guest_session($1,$2,$3)',[token,'Client',guestSecret]);
     await db.query("select public.create_guest_handoff($1,encode(sha256(convert_to($2,'UTF8')),'hex'))",[guestSecret,guestCode]);

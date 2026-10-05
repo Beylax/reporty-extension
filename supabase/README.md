@@ -28,3 +28,7 @@ Abilitare Email e Google in Sign In / Providers. Le credenziali OAuth Google res
 ## Verifiche locali
 
 `npm run test:db` verifica con PGlite inizializzazione e riesecuzione, protezione del reset quando Storage non è vuoto, permessi degli sviluppatori e degli ospiti, link automatici per ambiente, revoca e operazioni sulle segnalazioni. Questi test non eseguono query sul progetto Supabase remoto.
+
+## Creazione progetto con Produzione
+
+La creazione del progetto richiede l’origine del sito e crea atomicamente l’ambiente Produzione e il relativo link ospite. Per aggiornare un database esistente senza cancellare dati, eseguire `create_project_with_production.sql`. La funzione è già inclusa in `initialize.sql`: non rieseguire il reset per applicare questo aggiornamento.

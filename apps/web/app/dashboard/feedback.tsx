@@ -6,7 +6,7 @@ const messages: Record<string, string> = {
   'duplicate-origin': 'Questo dominio è già presente nel progetto.',
   'save-error': 'Salvataggio non riuscito. Verifica i permessi e che lo schema del database sia aggiornato.',
   'signout-error': 'Uscita non riuscita. Riprova.',
-  created: 'Progetto creato. Aggiungi il primo ambiente.',
+  created: 'Progetto creato con ambiente Produzione e link ospite.',
   saved: 'Modifiche salvate.',
 };
 

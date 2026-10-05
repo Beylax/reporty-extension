@@ -1,6 +1,5 @@
 'use server';
 
-import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { isUuid, normalizeOrigin, validateName } from '@reporty/shared';
@@ -9,13 +8,15 @@ import { requireUser } from '@/lib/auth';
 function field(form: FormData, key: string) { return String(form.get(key) ?? ''); }
 
 export async function createProject(form: FormData) {
-  const { supabase, userId } = await requireUser();
+  const { supabase } = await requireUser();
   let name: string;
   try { name = validateName(field(form, 'name'), 120); }
   catch { redirect('/dashboard/new?message=invalid-name'); }
-  const id = randomUUID();
-  const { error } = await supabase.from('projects').insert({ id, name, created_by: userId });
-  if (error) redirect('/dashboard/new?message=save-error');
+  let origin: string;
+  try { origin = normalizeOrigin(field(form, 'origin')); }
+  catch { redirect('/dashboard/new?message=invalid-origin'); }
+  const { data: id, error } = await supabase.rpc('create_project_with_production', { project_name: name, site_origin: origin });
+  if (error || !id) redirect('/dashboard/new?message=save-error');
   revalidatePath('/dashboard');
   redirect(`/dashboard/projects/${id}?message=created`);
 }
