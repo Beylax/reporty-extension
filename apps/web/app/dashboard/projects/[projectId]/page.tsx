@@ -42,13 +42,13 @@ export default async function Project({ params, searchParams }: {
       <Link href="/dashboard" className={buttonVariants({ variant: 'outline' })}>← Tutti i progetti</Link>
       <header className="flex flex-wrap items-center gap-3">
         <h1 className="text-3xl font-semibold tracking-tight">{project.name}</h1>
-        <Badge variant="secondary">{isPlatformAdmin ? 'Amministratore generale' : canManage ? 'Amministratore' : 'Membro'}</Badge>
+        <Badge variant="secondary">{isPlatformAdmin ? 'Amministratore generale' : canManage ? 'Amministratore' : 'Sviluppatore'}</Badge>
         {isPlatformAdmin ? <div className="ml-auto"><ResourceDelete id={projectId} kind="project" name={project.name} /></div> : null}
       </header>
       <Feedback message={message} />
       <ProjectTabs reports={<ProjectReports environments={environments} />} environments={<>
       {canManage ? <Card>
-        <CardHeader><CardTitle>Nome del progetto</CardTitle><CardDescription>Il nome condiviso con tutti i membri.</CardDescription></CardHeader>
+        <CardHeader><CardTitle>Nome del progetto</CardTitle><CardDescription>Il nome condiviso con tutti gli sviluppatori.</CardDescription></CardHeader>
         <CardContent><form action={renameProject} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="projectId" value={projectId} />
           <div className="grid min-w-60 flex-1 gap-2"><Label htmlFor="project-name">Nome</Label><Input id="project-name" name="name" defaultValue={project.name} maxLength={120} required /></div>

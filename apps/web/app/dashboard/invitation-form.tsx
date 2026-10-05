@@ -8,14 +8,15 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
-export function InvitationForm({ projectId, kind }: { projectId: string; kind: 'member' | 'guest' }) {
+export function InvitationForm({ projectId, kind, environments = [] }: { projectId: string; kind: 'member' | 'guest'; environments?: { id: string; name: string }[] }) {
   const [state, action] = useActionState(createInvitation, {});
   const [copyStatus, setCopyStatus] = useState('');
   return <div className="space-y-4">
     <form action={action} className="grid gap-3">
       <input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="kind" value={kind} />
-      {kind === 'member' ? <div className="grid gap-2"><Label htmlFor="invite-email">Email del membro</Label><Input id="invite-email" name="email" type="email" required maxLength={254} placeholder="nome@azienda.it" /></div> : null}
-      <div><SubmitButton pendingLabel="Creazione…">{kind === 'member' ? 'Crea invito membro' : 'Crea link ospite'}</SubmitButton></div>
+      {kind === 'member' ? <div className="grid gap-2"><Label htmlFor="invite-email">Email dello sviluppatore</Label><Input id="invite-email" name="email" type="email" required maxLength={254} placeholder="nome@azienda.it" /></div> : null}
+      {kind === 'guest' ? <div className="grid gap-2"><Label htmlFor="invite-environment">Ambiente da revisionare</Label><select id="invite-environment" name="environmentId" required className="rounded-lg border bg-background p-2 text-sm" defaultValue={environments[0]?.id ?? ''}>{!environments.length ? <option value="">Aggiungi prima un ambiente</option> : environments.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div> : null}
+      <div><SubmitButton pendingLabel="Creazione…">{kind === 'member' ? 'Crea invito sviluppatore' : 'Crea link ospite'}</SubmitButton></div>
     </form>
     {state.error ? <Alert variant="destructive"><AlertDescription>{state.error}</AlertDescription></Alert> : null}
     {state.link ? <div className="space-y-2 rounded-lg border bg-muted/40 p-3">

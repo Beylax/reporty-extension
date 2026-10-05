@@ -22,7 +22,7 @@ export default async function ConnectPage({ searchParams }: { searchParams: Prom
   return <main className="mx-auto max-w-lg space-y-6 px-6 py-20"><p className="text-xl font-semibold">Reporty</p><Card><CardHeader><CardTitle>Collega l’estensione</CardTitle><CardDescription>La sessione scelta sarà disponibile nell’estensione di questo browser.</CardDescription></CardHeader><CardContent className="space-y-5">
     {!valid ? <p>Apri questa pagina dal pulsante Collega nell’estensione.</p> : <>
       {projectId ? <ConnectButton extensionId={extensionId} nonce={nonce} projectId={projectId} /> : <>
-        {member ? <div className="space-y-3"><p className="text-sm">Account del team: {String(data.claims.email ?? '')}</p><ConnectButton extensionId={extensionId} nonce={nonce} /></div> : <Link href="/login" className="underline">Accedi come membro del team</Link>}
+        {member ? <div className="space-y-3"><p className="text-sm">Account del team: {String(data.claims.email ?? '')}</p><ConnectButton extensionId={extensionId} nonce={nonce} /></div> : <Link href="/login" className="underline">Accedi come sviluppatore</Link>}
         {guests.map(guest => <Link key={guest.projectId} className="block rounded-lg border p-3 text-sm hover:bg-accent" href={`/extension/connect?extensionId=${extensionId}&nonce=${nonce}&projectId=${guest.projectId}`}>Collega come ospite di {guest.name} →</Link>)}
         {!guests.length ? <p className="text-sm text-muted-foreground">Se sei un cliente, apri prima il link di invito e inserisci il nome. Poi torna al pulsante Collega nell’estensione.</p> : null}
       </>}

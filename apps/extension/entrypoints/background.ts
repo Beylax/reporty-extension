@@ -61,7 +61,22 @@ export default defineBackground(() => {
       if (typeof sessionToken !== 'string' || !/^[0-9a-f]{64}$/.test(sessionToken)) throw new Error('Invalid session');
       const { sessionToken: oldToken } = await browser.storage.local.get('sessionToken');
       await browser.storage.local.set({ sessionToken });
-      sendResponse({ ok: true });
+      if (message.guestEnvironmentId) {
+        const context = await getContext();
+        const environment = context?.kind === 'guest' ? context.environments.find(item => item.id === message.guestEnvironmentId) : undefined;
+        if (!environment) throw new Error('Invalid guest environment');
+        const tabId = sender.tab!.id!;
+        if (await browser.permissions.contains({ origins: [pattern(environment.origin)] })) {
+          const { sites = {} } = await browser.storage.local.get('sites');
+          await browser.storage.local.set({ sites: { ...(sites as Sites), [environment.origin]: { environmentId: environment.id, position: 'bottom_right' } } });
+          sendResponse({ ok: true });
+          await browser.tabs.update(tabId, { url: environment.origin });
+        } else {
+          await browser.storage.local.set({ guestReviewStart: { environmentId: environment.id, tabId, expiresAt: Date.now() + 120000 } });
+          sendResponse({ ok: true });
+          await browser.tabs.update(tabId, { url: browser.runtime.getURL('/review.html') });
+        }
+      } else sendResponse({ ok: true });
       if (oldToken) await fetch(`${apiOrigin}/api/extension/context`, { method: 'DELETE', headers: { Authorization: `Bearer ${oldToken}` }, credentials: 'omit', signal: AbortSignal.timeout(10000) }).catch(() => undefined);
       void refreshTabs().catch(() => undefined);
     })().catch(() => sendResponse({ ok: false, error: 'Collegamento non riuscito. Riprova dal popup.' }));
@@ -71,6 +86,29 @@ export default defineBackground(() => {
     void (async () => {
       await protectStorage;
       if (sender.id !== browser.runtime.id) throw new Error('Invalid sender');
+      if (message?.type === 'REPORTY_GUEST_START') {
+        if (sender.url !== browser.runtime.getURL('/review.html') || !sender.tab?.id) throw new Error('Invalid sender');
+        const stored = await browser.storage.local.get('guestReviewStart');
+        const guestReviewStart = stored.guestReviewStart as { environmentId: string; tabId: number; expiresAt: number } | undefined;
+        if (!guestReviewStart || guestReviewStart.tabId !== sender.tab.id || guestReviewStart.expiresAt < Date.now()) throw new Error('Invito scaduto. Riapri il link ricevuto.');
+        const context = await getContext();
+        const environment = context?.kind === 'guest' ? context.environments.find(item => item.id === guestReviewStart.environmentId) : undefined;
+        if (!environment) throw new Error('Accesso revocato.');
+        if (!message.activate) return sendResponse({ ok: true, data: environment });
+        if (!await browser.permissions.contains({ origins: [pattern(environment.origin)] })) throw new Error('Consenti l’accesso al sito per iniziare.');
+        const { sites = {} } = await browser.storage.local.get('sites');
+        await browser.storage.local.set({ sites: { ...(sites as Sites), [environment.origin]: { environmentId: environment.id, position: 'bottom_right' } } });
+        await browser.storage.local.remove('guestReviewStart');
+        sendResponse({ ok: true });
+        await browser.tabs.update(sender.tab.id, { url: environment.origin });
+        return;
+      }
+      if (message?.type === 'REPORTY_GUEST_PREPARE') {
+        if (sender.frameId !== 0 || !sender.tab?.id || !sender.url || new URL(sender.url).origin !== apiOrigin || !/^\/guest\/[0-9a-f]{64}$/.test(new URL(sender.url).pathname)) throw new Error('Invalid guest page');
+        const nonce = token();
+        await browser.storage.local.set({ pendingConnection: { nonce, tabId: sender.tab.id, expiresAt: Date.now() + 120000 } });
+        return sendResponse({ ok: true, data: { nonce, extensionId: browser.runtime.id } });
+      }
       if (['REPORTY_REPORT', 'REPORTY_CAPTURE', 'REPORTY_SCREENSHOT'].includes(message?.type)) {
         if (sender.frameId !== 0 || !sender.tab?.id || !sender.url) throw new Error('Pagina non valida.');
         const tab = await browser.tabs.get(sender.tab.id);
@@ -127,7 +165,7 @@ export default defineBackground(() => {
       if (message?.type === 'REPORTY_DISCONNECT') {
         const { sessionToken } = await browser.storage.local.get('sessionToken');
         if (sessionToken) await fetch(`${apiOrigin}/api/extension/context`, { method: 'DELETE', headers: { Authorization: `Bearer ${sessionToken}` }, credentials: 'omit', signal: AbortSignal.timeout(10000) }).catch(() => undefined);
-        await browser.storage.local.remove(['sessionToken', 'pendingConnection', 'sites', 'pendingSites']);
+        await browser.storage.local.remove(['sessionToken', 'pendingConnection', 'sites', 'pendingSites', 'guestReviewStart']);
         await refreshTabs();
         return sendResponse({ ok: true });
       }

@@ -8,7 +8,7 @@ export async function manageMember(projectId: string, memberId: string, operatio
   if (!isUuid(projectId) || !isUuid(memberId) || !['role', 'remove'].includes(operation) || (operation === 'role' && !['admin', 'member'].includes(role ?? ''))) return { error: 'Dati non validi.' };
   const { supabase } = await requireUser();
   const { error } = await supabase.rpc('manage_project_member', { target: projectId, member_id: memberId, operation, new_role: role ?? null });
-  if (error) return { error: error.message.includes('Project administrators are protected') ? 'Gli amministratori di progetto non possono essere rimossi o retrocessi.' : error.message.includes('Keep at least') ? 'Il progetto deve mantenere almeno un amministratore.' : error.code === 'PGRST202' ? 'Applica la migrazione 007 per gestire i membri.' : 'Operazione non consentita o non riuscita.' };
+  if (error) return { error: error.message.includes('Project administrators are protected') ? 'Gli amministratori di progetto non possono essere rimossi o retrocessi.' : error.message.includes('Keep at least') ? 'Il progetto deve mantenere almeno un amministratore.' : error.code === 'PGRST202' ? 'Applica la migrazione 007 per gestire gli sviluppatori.' : 'Operazione non consentita o non riuscita.' };
   revalidatePath('/dashboard', 'layout');
   return {};
 }

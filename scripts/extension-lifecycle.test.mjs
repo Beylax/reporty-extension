@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 const source = await readFile(new URL('../apps/extension/.output/chrome-mv3/background.js', import.meta.url), 'utf8');
 const flush = async () => { for (let i = 0; i < 15; i++) await new Promise(resolve => setImmediate(resolve)); };
 function harness() {
-  const events = {}, stored = {}, injections = [], messages = [];
+  const events = {}, stored = {}, injections = [], messages = [], navigations = [];
   let granted = false;
   const environment = { id: 'env', projectId: 'project', projectName: 'Test', name: 'Production', origin: 'https://example.com' };
   const browser = {
@@ -17,6 +17,7 @@ function harness() {
       set: async values => Object.assign(stored, structuredClone(values)), remove: async keys => { for (const key of Array.isArray(keys) ? keys : [keys]) delete stored[key]; },
     } },
     tabs: {
+      update: async (id, options) => { navigations.push({ id, ...options }); },
       get: async id => ({ id, url: environment.origin + '/page', windowId: 1 }), query: async () => [{ id: 1 }],
       sendMessage: async (id, message) => { messages.push({ id, message }); return { ok: true }; }, onUpdated: { addListener: fn => events.updated = fn },
     },
@@ -30,7 +31,7 @@ function harness() {
     return { ok: true, status: 200, json: async () => ({ kind: 'guest', displayName: 'Client', environments: [environment] }) };
   };
   runInNewContext(source, { browser, URL, crypto: webcrypto, fetch, AbortSignal, setTimeout: (...args) => { const timer = setTimeout(...args); timer.unref(); return timer; }, clearTimeout, console });
-  return { events, stored, injections, messages, grant: () => { granted = true; events.permissions(); }, finishCleanup: () => cleanupResolve?.({ ok: true }) };
+  return { events, stored, injections, messages, navigations, grant: () => { granted = true; events.permissions(); }, finishCleanup: () => cleanupResolve?.({ ok: true }) };
 }
 const popup = { id: 'test', url: 'chrome-extension://test/popup.html' };
 
@@ -62,4 +63,39 @@ test('granting a site permission completes activation even after the popup close
   assert.deepEqual(h.injections, [1]);
   assert.equal(h.stored.sites['https://example.com'].environmentId, 'env');
   assert.equal(h.messages[0].message.type, 'REPORTY_REFRESH');
+});
+
+
+test('guest invite prepares only a trusted top-level guest page', async () => {
+  const h = harness();
+  let response;
+  h.events.internal({ type: 'REPORTY_GUEST_PREPARE' }, { id: 'test', frameId: 0, tab: { id: 1 }, url: 'https://example.com/guest/' + 'a'.repeat(64) }, value => response = value);
+  await flush();
+  assert.equal(response.ok, false);
+  assert.equal(h.stored.pendingConnection, undefined);
+  h.events.internal({ type: 'REPORTY_GUEST_PREPARE' }, { id: 'test', frameId: 0, tab: { id: 1 }, url: 'http://localhost:3000/guest/' + 'a'.repeat(64) }, value => response = value);
+  await flush();
+  assert.equal(response.ok, true);
+  assert.equal(h.stored.pendingConnection.tabId, 1);
+});
+
+for (const granted of [false, true]) test(`guest connection ${granted ? 'opens authorized site' : 'opens permission step'}`, async () => {
+  const h = harness();
+  if (granted) h.grant();
+  h.stored.pendingConnection = { nonce: 'request', tabId: 1, expiresAt: Date.now() + 10000 };
+  let response;
+  h.events.external({ type: 'REPORTY_CONNECT', nonce: 'request', code: 'code', guestEnvironmentId: 'env' }, { url: 'http://localhost:3000/guest/' + 'a'.repeat(64), tab: { id: 1 } }, value => response = value);
+  await flush();
+  assert.equal(response.ok, true);
+  assert.equal(h.navigations[0].url, granted ? 'https://example.com' : 'chrome-extension://test/review.html');
+  if (granted) assert.equal(h.stored.sites['https://example.com'].environmentId, 'env');
+  else {
+    assert.equal(h.stored.guestReviewStart.environmentId, 'env');
+    h.grant();
+    h.events.internal({ type: 'REPORTY_GUEST_START', activate: true }, { id: 'test', url: 'chrome-extension://test/review.html', tab: { id: 1 } }, value => response = value);
+    await flush();
+    assert.equal(response.ok, true);
+    assert.equal(h.navigations[1].url, 'https://example.com');
+    assert.equal(h.stored.guestReviewStart, undefined);
+  }
 });

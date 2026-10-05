@@ -22,7 +22,7 @@ test('member management checks administrator scope and preserves the last admini
       grant execute on function auth.uid(), auth.jwt() to anon, authenticated;
       create table storage.buckets(id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
       insert into auth.users values ('${owner}','owner@example.com',now()), ('${member}','member@example.com',now()), ('${outsider}','outsider@example.com',now()), ('${platform}','platform@example.com',now());`);
-    for (const file of ['202610050001_initial.sql', '202610050002_project_management.sql', '202610050003_invitations.sql', '202610050004_extension_sessions.sql', '202610050005_reports.sql', '202610050006_report_priorities.sql', '202610050007_user_management.sql', '202610050008_platform_management.sql', '202610050009_project_admin_permissions.sql']) await db.exec(await readFile(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
+    for (const file of ['202610050001_initial.sql', '202610050002_project_management.sql', '202610050003_invitations.sql', '202610050004_extension_sessions.sql', '202610050005_reports.sql', '202610050006_report_priorities.sql', '202610050007_user_management.sql', '202610050008_platform_management.sql', '202610050009_project_admin_permissions.sql', '202610050010_guest_review_start.sql']) await db.exec(await readFile(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
     const as = async (id, role = 'authenticated') => {
       await db.exec('reset role');
       await db.query("select set_config('request.jwt.claims', $1, false)", [JSON.stringify(id ? { sub: id, is_anonymous: false } : {})]);
@@ -65,6 +65,17 @@ test('member management checks administrator scope and preserves the last admini
     assert.equal((await db.query('select * from public.list_project_members($1)', [project])).rows.length,2);
     await assert.rejects(db.query('select public.platform_delete_resource($1,$2)', [project, 'unknown']), /Invalid resource/);
     const env = (await db.query('insert into public.environments(project_id,name,origin) values($1,$2,$3) returning id', [project,'Production','https://example.com'])).rows[0].id;
+    const inviteHash = 'd'.repeat(64);
+    await db.query('select public.create_environment_guest_invite($1,$2,$3)',[project,env,inviteHash]);
+    await assert.rejects(db.query('select public.create_environment_guest_invite($1,$2,$3)',[other,env,'e'.repeat(64)]), /Invalid environment/);
+    await as(null,'anon');
+    const inviteSecret = 'f'.repeat(64);
+    assert.equal((await db.query('select * from public.preview_guest_review($1)',[inviteSecret])).rows.length,0);
+    await db.exec('reset role');
+    await db.query("update public.guest_invites set token_hash=encode(sha256(convert_to($1,'UTF8')),'hex') where token_hash=$2",[inviteSecret,inviteHash]);
+    await as(null,'anon');
+    assert.equal((await db.query('select * from public.preview_guest_review($1)',[inviteSecret])).rows[0].environment_id,env);
+    await assert.rejects(db.query('select public.create_environment_guest_invite($1,$2,$3)',[project,env,'e'.repeat(64)]));
     await db.exec('reset role');
     const issue = (await db.query('insert into public.issues(project_id,environment_id,page_path,body,author_id,context,screenshot_path) values($1,$2,$3,$4,$5,$6,$7) returning id', [project,env,'/','Fix',member,{},project+'/screenshot.jpg'])).rows[0].id;
     await db.query('insert into public.comments(project_id,issue_id,body,author_id) values($1,$2,$3,$4)', [project,issue,'Reply',member]);

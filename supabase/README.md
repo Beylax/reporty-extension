@@ -85,3 +85,7 @@ Applicare `migrations/202610050008_platform_management.sql` dopo la settima migr
 ### Permessi amministratori di progetto
 
 Applicare `202610050009_project_admin_permissions.sql` dopo la migrazione 008. Gli amministratori di progetto possono eliminare solo gli ambienti dei progetti che gestiscono, incluse le segnalazioni associate. L'eliminazione dei progetti rimane riservata agli amministratori generali. Le membership con ruolo Amministratore non possono essere rimosse né retrocesse, neppure dagli amministratori generali; resta possibile eliminare l'intero progetto.
+
+## Avvio rapido revisione ospite
+
+Applicare `202610050010_guest_review_start.sql` dopo la migrazione 009, aggiornare dashboard ed estensione. I nuovi inviti ospiti specificano un ambiente iniziale; i precedenti ricevono il primo ambiente del progetto. Un invito senza ambiente disponibile non avvia la revisione. L'ambiente è la destinazione iniziale e non restringe l'accesso ospite alle altre segnalazioni del progetto. Il nome resta obbligatorio. Il link collega automaticamente l'estensione tramite codice monouso e apre il sito; se manca il consenso sul dominio, si passa prima dalla schermata estensione di richiesta permesso. Google e link email rimangono disponibili agli sviluppatori anche per creare il primo progetto.

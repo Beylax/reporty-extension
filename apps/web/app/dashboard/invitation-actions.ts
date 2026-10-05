@@ -17,11 +17,13 @@ export async function createInvitation(_state: InviteState, form: FormData): Pro
   if (kind === 'member' && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
     return { error: 'Inserisci un indirizzo email valido.' };
   }
+  const environmentId = String(form.get('environmentId') ?? '');
+  if (kind === 'guest' && !isUuid(environmentId)) return { error: 'Seleziona un ambiente da revisionare.' };
   const token = newToken();
   const origin = appOrigin();
   const { error } = kind === 'member'
     ? await supabase.rpc('create_member_invite', { target: projectId, invited_email: email, secret_hash: hashToken(token) })
-    : await supabase.rpc('create_guest_invite', { target: projectId, secret_hash: hashToken(token) });
+    : await supabase.rpc('create_environment_guest_invite', { target: projectId, environment: environmentId, secret_hash: hashToken(token) });
   if (error) return { error: 'Invito non creato. Verifica i permessi e la migrazione inviti.' };
   revalidatePath(`/dashboard/projects/${projectId}`);
   revalidatePath('/dashboard/users');

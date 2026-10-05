@@ -35,9 +35,9 @@ Per lo sviluppo con aggiornamenti automatici: `npm run dev:extension` dalla root
 ## Collegamento
 
 - Team: accedere alla dashboard nel browser, aprire il popup dell'estensione, premere Collega e confermare nella pagina aperta.
-- Cliente: aprire il link ospite, inserire il nome, poi premere Collega nel popup. Scegliere il progetto ospite nella pagina e confermare. Non occorre un account.
-- Tornare al popup dopo la conferma. I siti accessibili sono elencati nel popup; aprirne uno.
-- Sul sito, aprire il popup, scegliere progetto/ambiente e posizione, poi Abilita su questo sito. Il browser chiede il permesso di accesso a quel dominio.
+- Cliente: con l’estensione aggiornata già installata, aprire il link ospite, inserire il nome e premere Inizia revisione. Il collegamento è automatico e il sito si apre con Reporty attivo. Al primo accesso al dominio premere Consenti e apri il sito e accettare il permesso del browser. Non occorre un account.
+- Team: dopo la conferma, aprire il sito da revisionare.
+- Sul sito, aprire il popup, controllare progetto/ambiente determinati dall’URL e scegliere la posizione, poi Abilita su questo sito. Il browser chiede il permesso di accesso a quel dominio.
 - L'abilitazione viene ricordata per origine e ambiente. Protocolli e porte restano distinti anche se il permesso browser è assegnato a livello di dominio.
 - Scollega revoca la sessione corrente e rimuove le abilitazioni locali. Le sessioni durano 30 giorni; poi occorre ricollegare. La revoca di un invito ospite blocca subito le API; il pulsante in una pagina aperta si aggiorna entro 30 secondi.
 
