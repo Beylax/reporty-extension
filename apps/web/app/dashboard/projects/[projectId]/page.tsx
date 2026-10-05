@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { SubmitButton } from '@/components/submit-button';
 import { ProjectInvitations } from '../../project-invitations';
 import { ProjectReports } from '../../project-reports';
+import { buttonVariants } from '@/components/ui/button';
+import { ProjectTabs } from '../../project-tabs';
 
 export default async function Project({ params, searchParams }: {
   params: Promise<{ projectId: string }>;
@@ -34,13 +36,13 @@ export default async function Project({ params, searchParams }: {
   const environments = environmentsResult.data ?? [];
   return (
     <main className="mx-auto w-full max-w-5xl space-y-8 px-6 py-10">
-      <Link href="/dashboard" className="text-sm text-muted-foreground underline underline-offset-4">← Tutti i progetti</Link>
+      <Link href="/dashboard" className={buttonVariants({ variant: 'outline' })}>← Tutti i progetti</Link>
       <header className="flex flex-wrap items-center gap-3">
         <h1 className="text-3xl font-semibold tracking-tight">{project.name}</h1>
         <Badge variant="secondary">{canManage ? 'Amministratore' : 'Membro'}</Badge>
       </header>
       <Feedback message={message} />
-      <ProjectReports environments={environments} />
+      <ProjectTabs reports={<ProjectReports environments={environments} />} environments={<>
       {canManage ? <Card>
         <CardHeader><CardTitle>Nome del progetto</CardTitle><CardDescription>Il nome condiviso con tutti i membri.</CardDescription></CardHeader>
         <CardContent><form action={renameProject} className="flex flex-wrap items-end gap-3">
@@ -53,9 +55,8 @@ export default async function Project({ params, searchParams }: {
         <div><h2 id="environments-title" className="text-xl font-semibold">Ambienti</h2><p className="mt-1 text-sm text-muted-foreground">Produzione, staging e sviluppo mantengono segnalazioni separate.</p></div>
         {!environments.length ? <Card><CardContent className="py-6 text-muted-foreground">Nessun ambiente aggiunto.</CardContent></Card> : null}
         {environments.map(environment => <Card key={environment.id}>
-          <CardHeader><CardTitle>{environment.name}</CardTitle><CardDescription className="break-all">{environment.origin}</CardDescription></CardHeader>
+          <CardHeader><div className="flex items-center justify-between gap-3"><CardTitle>{environment.name}</CardTitle><a href={environment.origin} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: 'outline', size: 'sm' })}>Apri sito ↗</a></div><CardDescription className="break-all">{environment.origin}</CardDescription></CardHeader>
           <CardContent className="space-y-5">
-            <a href={environment.origin} target="_blank" rel="noopener noreferrer" className="text-sm font-medium underline underline-offset-4">Apri sito ↗</a>
             {canManage ? <form action={saveEnvironment} className="flex flex-wrap items-end gap-3">
               <input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="environmentId" value={environment.id} />
               <div className="grid flex-1 gap-2"><Label htmlFor={`name-${environment.id}`}>Nome ambiente</Label><Input id={`name-${environment.id}`} name="name" defaultValue={environment.name} maxLength={80} required /></div>
@@ -74,7 +75,7 @@ export default async function Project({ params, searchParams }: {
           <div className="sm:col-span-2"><SubmitButton>Aggiungi ambiente</SubmitButton></div>
         </form></CardContent>
       </Card> : null}
-      {canManage ? <ProjectInvitations projectId={projectId} /> : null}
+      </>} access={canManage ? <ProjectInvitations projectId={projectId} /> : <p className="text-sm text-muted-foreground">Solo gli amministratori possono gestire gli accessi al progetto.</p>} />
     </main>
   );
 }

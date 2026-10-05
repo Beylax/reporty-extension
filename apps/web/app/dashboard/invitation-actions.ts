@@ -24,6 +24,7 @@ export async function createInvitation(_state: InviteState, form: FormData): Pro
     : await supabase.rpc('create_guest_invite', { target: projectId, secret_hash: hashToken(token) });
   if (error) return { error: 'Invito non creato. Verifica i permessi e la migrazione inviti.' };
   revalidatePath(`/dashboard/projects/${projectId}`);
+  revalidatePath('/dashboard/users');
   return { link: `${origin}/${kind === 'member' ? 'invite' : 'guest'}/${token}` };
 }
 
@@ -36,5 +37,6 @@ export async function revokeInvitation(_state: InviteState, form: FormData): Pro
   const { error } = await supabase.rpc('revoke_project_invite', { target: projectId, invitation_id: id, invitation_kind: kind });
   if (error) return { error: 'Revoca non riuscita.' };
   revalidatePath(`/dashboard/projects/${projectId}`);
+  revalidatePath('/dashboard/users');
   return { success: 'Invito revocato.' };
 }

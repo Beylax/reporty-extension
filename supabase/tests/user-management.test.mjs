@@ -1,0 +1,63 @@
+import { PGlite } from '@electric-sql/pglite';
+import { readFile } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+const owner = '11111111-1111-4111-8111-111111111111';
+const member = '22222222-2222-4222-8222-222222222222';
+const outsider = '33333333-3333-4333-8333-333333333333';
+const platform = '99999999-9999-4999-8999-999999999999';
+const project = '44444444-4444-4444-8444-444444444444';
+const other = '55555555-5555-4555-8555-555555555555';
+
+test('member management checks administrator scope and preserves the last administrator', async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(`create role anon; create role authenticated;
+      create schema auth; create schema storage;
+      create table auth.users(id uuid primary key, email text, email_confirmed_at timestamptz);
+      create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
+      create function auth.uid() returns uuid language sql stable as $$ select (auth.jwt()->>'sub')::uuid $$;
+      grant usage on schema auth, public to anon, authenticated;
+      grant execute on function auth.uid(), auth.jwt() to anon, authenticated;
+      create table storage.buckets(id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
+      insert into auth.users values ('${owner}','owner@example.com',now()), ('${member}','member@example.com',now()), ('${outsider}','outsider@example.com',now()), ('${platform}','platform@example.com',now());`);
+    for (const file of ['202610050001_initial.sql', '202610050002_project_management.sql', '202610050003_invitations.sql', '202610050004_extension_sessions.sql', '202610050005_reports.sql', '202610050006_report_priorities.sql', '202610050007_user_management.sql']) await db.exec(await readFile(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
+    const as = async (id, role = 'authenticated') => {
+      await db.exec('reset role');
+      await db.query("select set_config('request.jwt.claims', $1, false)", [JSON.stringify(id ? { sub: id, is_anonymous: false } : {})]);
+      await db.exec(`set role ${role}`);
+    };
+    await db.query('insert into public.projects(id,name,created_by) values($1,$2,$3),($4,$5,$6)', [project,'Project',owner,other,'Other',outsider]);
+    await db.query('insert into public.project_members(project_id,user_id,role) values($1,$2,$3)', [project,member,'member']);
+    await db.query('insert into public.platform_admins(user_id) values($1)', [platform]);
+    const manage = (target, id, operation, role = null) => db.query('select public.manage_project_member($1,$2,$3,$4)', [target,id,operation,role]);
+    await as(null, 'anon');
+    await assert.rejects(manage(project,member,'role','admin'));
+    await as(member);
+    await assert.rejects(manage(project,member,'role','admin'), /Not authorized/);
+    await assert.rejects(manage(project,owner,'remove'), /Not authorized/);
+    await as(outsider);
+    await assert.rejects(manage(project,member,'role','admin'), /Not authorized/);
+    await as(owner);
+    await assert.rejects(manage(other,outsider,'remove'), /Not authorized/);
+    await assert.rejects(manage(project,owner,'remove'), /Keep at least/);
+    await assert.rejects(manage(project,owner,'role','member'), /Keep at least/);
+    await assert.rejects(manage(project,member,'role','invalid'), /Invalid role/);
+    await assert.rejects(manage(project,member,'unknown'), /Invalid operation/);
+    await assert.rejects(manage(project,outsider,'remove'), /Member unavailable/);
+    await manage(project,member,'role','admin');
+    assert.equal((await db.query('select role from public.project_members where project_id=$1 and user_id=$2', [project,member])).rows[0].role,'admin');
+    await manage(project,owner,'role','member');
+    await assert.rejects(manage(project,member,'remove'), /Not authorized/);
+    await as(member);
+    await assert.rejects(manage(project,member,'remove'), /Keep at least/);
+    await manage(project,owner,'remove');
+    await as(owner);
+    await assert.rejects(db.query('select * from public.list_project_members($1)', [project]), /Not authorized/);
+    await as(platform);
+    await assert.rejects(manage(other,outsider,'remove'), /Keep at least/);
+    await manage(project,member,'role','admin');
+    assert.equal((await db.query('select * from public.list_project_members($1)', [project])).rows.length,1);
+  } finally { await db.close(); }
+});

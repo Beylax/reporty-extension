@@ -71,3 +71,9 @@ Verifica: creare una segnalazione con elemento e una con pin libero; rimuovere u
 ## Priorità delle segnalazioni
 
 Eseguire `migrations/202610050006_report_priorities.sql` dopo la quinta migrazione. Aggiunge Bassa, Media e Alta: le segnalazioni esistenti e le richieste delle vecchie estensioni ricevono Media. Anche gli ospiti scelgono la priorità alla creazione; solo i membri del team possono cambiarla successivamente, con gli stessi permessi dello stato. La dashboard mostra la priorità e consente di filtrarla. Aggiornare backend ed estensione dopo aver applicato la migrazione.
+
+## Gestione utenti e dashboard
+
+Eseguire `migrations/202610050007_user_management.sql` dopo la sesta migrazione. Gli amministratori trovano la sezione **Utenti** nella sidebar e la gestione dei membri nella tab **Gestione accessi** del progetto. Possono invitare utenti, modificare il ruolo tra Membro e Amministratore e rimuovere accessi. Gli amministratori di progetto operano solo sui propri progetti; l'amministratore generale opera su tutti. Il database mantiene sempre almeno un amministratore per progetto, anche in caso di richieste concorrenti. Rimuovere un membro non elimina l'account o le segnalazioni e revoca l'accesso al progetto anche per le sessioni dell'estensione.
+
+Il dettaglio progetto è diviso nelle tab Segnalazioni, Ambienti e Gestione accessi; le segnalazioni si filtrano anche per pagina e si gestiscono in un dialogo. `npm run test:db` include permessi, isolamento dei progetti e protezione dell'ultimo amministratore.
