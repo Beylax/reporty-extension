@@ -5,9 +5,9 @@ import { isUuid } from '@reporty/shared';
 import { requireUser } from '@/lib/auth';
 import { storageClient } from '@/lib/supabase/storage';
 
-export async function mutateReport(environmentId: string, operation: string, payload: { id: string; body?: string; status?: string }) {
+export async function mutateReport(environmentId: string, operation: string, payload: { id: string; body?: string; status?: string; priority?: string }) {
   const { supabase } = await requireUser();
-  if (!isUuid(environmentId) || !isUuid(payload.id) || !['reply', 'edit', 'status', 'delete'].includes(operation)) return { error: 'Dati non validi.' };
+  if (!isUuid(environmentId) || !isUuid(payload.id) || !['reply', 'edit', 'status', 'priority', 'delete'].includes(operation)) return { error: 'Dati non validi.' };
   const { data, error } = await supabase.rpc('report_operation', { secret: null, target: environmentId, operation, payload });
   if (error) return { error: 'Operazione non riuscita. Verifica i permessi e riprova.' };
   if (operation === 'delete' && data?.screenshot_path) {

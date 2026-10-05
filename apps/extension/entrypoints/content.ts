@@ -17,17 +17,23 @@ export default defineContentScript({
     const mount = document.createElement('div'); shadow.append(style, mount);
     const root = createRoot(mount);
     let disposed = false;
+    let refreshVersion = 0;
     async function refresh() {
+      const version = ++refreshVersion;
       try {
         const response = await browser.runtime.sendMessage({ type: 'REPORTY_PAGE' });
-        if (disposed) return;
+        if (disposed || version !== refreshVersion) return;
         const data = response?.ok ? response.data as { site: Site; environment: Environment } | null : null;
         root.render(data ? React.createElement(ReviewOverlay, { ...data, host }) : null);
-      } catch { if (!disposed) root.render(null); }
+      } catch { if (!disposed && version === refreshVersion) root.render(null); }
     }
     void refresh();
     const timer = setInterval(() => void refresh(), 30000);
-    const listener = (message: { type?: string }) => { if (message.type === 'REPORTY_REFRESH') void refresh(); };
+    const listener = (message: { type?: string }, _sender: unknown, sendResponse: (response: { ok: boolean }) => void) => {
+      if (message.type !== 'REPORTY_REFRESH') return;
+      void refresh().then(() => sendResponse({ ok: true }), () => sendResponse({ ok: false }));
+      return true;
+    };
     browser.runtime.onMessage.addListener(listener);
     ctx.onInvalidated(() => { disposed = true; clearInterval(timer); browser.runtime.onMessage.removeListener(listener); root.unmount(); host.remove(); });
   },

@@ -1,7 +1,7 @@
 export { getPageContext } from './page';
 export { normalizeOrigin, validateName, isUuid } from './project';
-export { reportContextSchema, reportRequestSchema } from './reports';
-export type { Report, ReportComment } from './reports';
+export { reportContextSchema, reportRequestSchema, reportPrioritySchema, priorityLabels } from './reports';
+export type { Report, ReportComment, ReportPriority } from './reports';
 
 export const issueStatuses = ['open', 'in_progress', 'resolved'] as const;
 export type IssueStatus = (typeof issueStatuses)[number];

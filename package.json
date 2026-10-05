@@ -16,7 +16,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspace=@reporty/web",
     "test": "npm run test --workspace=@reporty/shared && npm run test:db",
-    "test:db": "node --test supabase/tests/*.test.mjs"
+    "test:db": "node --test supabase/tests/*.test.mjs",
+    "test:extension": "npm run build --workspace=@reporty/extension && node --test scripts/extension-lifecycle.test.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8"

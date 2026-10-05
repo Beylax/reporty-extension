@@ -67,3 +67,7 @@ Usare la Secret key da Settings → API Keys (oppure la legacy service-role key)
 Il bucket `screenshots` è quello creato nella prima migrazione, privato. I percorsi sono determinati dal server con progetto e UUID segnalazione. Le immagini visibili sono servite con URL firmati validi per 60 secondi e senza cache del server. Le richieste screenshot JPEG sono limitate a 2,5 MB per rispettare il limite delle funzioni Vercel. Se l'upload fallisce dopo il salvataggio, il commento resta salvato e viene mostrato un avviso. La rimozione dei file dopo l'eliminazione di una segnalazione è best effort; un errore Storage può lasciare un file privato orfano.
 
 Verifica: creare una segnalazione con elemento e una con pin libero; rimuovere uno screenshot prima dell'invio; aprire la pagina con un secondo membro e controllare pin e commenti; cambiare stato e rispondere; verificare dalla dashboard filtri e immagini. Cambiare o rimuovere l'elemento nel sito e verificare che la segnalazione resti nella lista con indicazione di elemento non trovato.
+
+## Priorità delle segnalazioni
+
+Eseguire `migrations/202610050006_report_priorities.sql` dopo la quinta migrazione. Aggiunge Bassa, Media e Alta: le segnalazioni esistenti e le richieste delle vecchie estensioni ricevono Media. Anche gli ospiti scelgono la priorità alla creazione; solo i membri del team possono cambiarla successivamente, con gli stessi permessi dello stato. La dashboard mostra la priorità e consente di filtrarla. Aggiornare backend ed estensione dopo aver applicato la migrazione.

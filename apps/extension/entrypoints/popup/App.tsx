@@ -41,10 +41,14 @@ export default function App() {
   async function save(enabled: boolean) {
     if (!tab) return;
     // Request optional host access directly from the user's click.
+    // Begin activation before the permissions dialog can close the popup.
+    const activation = command({ type: 'REPORTY_SITE', tabId: tab.id, environmentId, position, enabled }).then(() => null, error => error as Error);
     const granted = !enabled || await browser.permissions.request({ origins: [pattern(tab.origin)] });
-    if (!granted) { setStatus('Accesso al sito non concesso.'); return; }
+    if (!granted) { await activation.catch(() => undefined); setStatus('Accesso al sito non concesso.'); return; }
     await run(async () => {
-      await command({ type: 'REPORTY_SITE', tabId: tab.id, environmentId, position, enabled });
+      const error = await activation;
+      if (error) throw error;
+      if (enabled) await command({ type: 'REPORTY_APPLY_SITE', tabId: tab.id });
       await load(); setStatus(enabled ? 'Estensione attiva sul sito.' : 'Estensione disattivata sul sito.');
     });
   }

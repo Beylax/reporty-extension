@@ -1,15 +1,50 @@
-import { apiOrigin, getContext, token, type Sites, type Site } from '@/lib/session';
+import { apiOrigin, getContext, token, type Sites, type Site, pattern } from '@/lib/session';
 
 export default defineBackground(() => {
   const protectStorage = browser.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
   async function inject(tabId: number) {
     await browser.scripting.executeScript({ target: { tabId }, files: ['/content-scripts/content.js'] });
   }
+  async function refreshTab(tabId: number) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([browser.tabs.sendMessage(tabId, { type: 'REPORTY_REFRESH' }), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('La pagina non risponde.')), 10000); })]);
+    } finally { if (timer !== undefined) clearTimeout(timer); }
+  }
   async function refreshTabs() {
     const tabs = await browser.tabs.query({});
     await Promise.all(tabs.filter(tab => tab.id !== undefined).map(tab =>
-      browser.tabs.sendMessage(tab.id!, { type: 'REPORTY_REFRESH' }).catch(() => undefined)));
+      refreshTab(tab.id!).catch(() => undefined)));
   }
+  type PendingSite = Site & { origin: string; expiresAt: number };
+  const applying = new Map<number, Promise<void>>();
+  async function applySite(tabId: number) {
+    if (applying.has(tabId)) return applying.get(tabId);
+    const work = (async () => {
+      const { pendingSites = {} } = await browser.storage.local.get('pendingSites');
+      const pending = (pendingSites as Record<string, PendingSite>)[tabId];
+      if (!pending || pending.expiresAt < Date.now()) return;
+      if (!await browser.permissions.contains({ origins: [pattern(pending.origin)] })) return;
+      const tab = await browser.tabs.get(tabId);
+      const context = await getContext();
+      if (!tab.url || new URL(tab.url).origin !== pending.origin || !context?.environments.some(item => item.id === pending.environmentId && item.origin === pending.origin)) throw new Error('La pagina o i permessi sono cambiati.');
+      const { sites = {} } = await browser.storage.local.get('sites');
+      await browser.storage.local.set({ sites: { ...(sites as Sites), [pending.origin]: { environmentId: pending.environmentId, position: pending.position } } });
+      await inject(tabId);
+      await refreshTab(tabId);
+      const latest = await browser.storage.local.get('pendingSites');
+      const remaining = { ...(latest.pendingSites as Record<string, PendingSite> ?? {}) };
+      if (remaining[tabId]?.expiresAt === pending.expiresAt) { delete remaining[tabId]; await browser.storage.local.set({ pendingSites: remaining }); }
+    })();
+    applying.set(tabId, work);
+    try { await work; } finally { applying.delete(tabId); }
+  }
+  browser.permissions.onAdded.addListener(() => {
+    void protectStorage.then(async () => {
+      const { pendingSites = {} } = await browser.storage.local.get('pendingSites');
+      await Promise.allSettled(Object.keys(pendingSites as object).map(id => applySite(Number(id))));
+    }).catch(() => undefined);
+  });
   browser.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
     void (async () => {
       await protectStorage;
@@ -26,9 +61,9 @@ export default defineBackground(() => {
       if (typeof sessionToken !== 'string' || !/^[0-9a-f]{64}$/.test(sessionToken)) throw new Error('Invalid session');
       const { sessionToken: oldToken } = await browser.storage.local.get('sessionToken');
       await browser.storage.local.set({ sessionToken });
-      if (oldToken) await fetch(`${apiOrigin}/api/extension/context`, { method: 'DELETE', headers: { Authorization: `Bearer ${oldToken}` }, credentials: 'omit', signal: AbortSignal.timeout(10000) }).catch(() => undefined);
-      await refreshTabs();
       sendResponse({ ok: true });
+      if (oldToken) await fetch(`${apiOrigin}/api/extension/context`, { method: 'DELETE', headers: { Authorization: `Bearer ${oldToken}` }, credentials: 'omit', signal: AbortSignal.timeout(10000) }).catch(() => undefined);
+      void refreshTabs().catch(() => undefined);
     })().catch(() => sendResponse({ ok: false, error: 'Collegamento non riuscito. Riprova dal popup.' }));
     return true;
   });
@@ -73,6 +108,10 @@ export default defineBackground(() => {
         return sendResponse({ ok: true, data: environment ? { site, environment } : null });
       }
       if (sender.tab || sender.url !== browser.runtime.getURL('/popup.html')) throw new Error('Popup required');
+      if (message?.type === 'REPORTY_APPLY_SITE') {
+        await applySite(message.tabId);
+        return sendResponse({ ok: true });
+      }
       if (message?.type === 'REPORTY_STATE') {
         const context = await getContext();
         const { sites = {} } = await browser.storage.local.get('sites');
@@ -88,7 +127,7 @@ export default defineBackground(() => {
       if (message?.type === 'REPORTY_DISCONNECT') {
         const { sessionToken } = await browser.storage.local.get('sessionToken');
         if (sessionToken) await fetch(`${apiOrigin}/api/extension/context`, { method: 'DELETE', headers: { Authorization: `Bearer ${sessionToken}` }, credentials: 'omit', signal: AbortSignal.timeout(10000) }).catch(() => undefined);
-        await browser.storage.local.remove(['sessionToken', 'pendingConnection', 'sites']);
+        await browser.storage.local.remove(['sessionToken', 'pendingConnection', 'sites', 'pendingSites']);
         await refreshTabs();
         return sendResponse({ ok: true });
       }
@@ -103,11 +142,14 @@ export default defineBackground(() => {
           const environment = context?.environments.find(item => item.id === message.environmentId && item.origin === origin);
           if (!environment) throw new Error('Nessun accesso a questo ambiente.');
           if (!['bottom_right', 'bottom_left', 'top_right', 'top_left'].includes(message.position)) throw new Error('Posizione non valida.');
-          updated[origin] = { environmentId: environment.id, position: message.position as Site['position'] };
+          const { pendingSites = {} } = await browser.storage.local.get('pendingSites');
+          await browser.storage.local.set({ pendingSites: { ...(pendingSites as object), [message.tabId]: { origin, environmentId: environment.id, position: message.position, expiresAt: Date.now() + 120000 } } });
+          await applySite(message.tabId);
+          return sendResponse({ ok: true });
         } else delete updated[origin];
         await browser.storage.local.set({ sites: updated });
-        if (message.enabled) await inject(message.tabId);
-        await refreshTabs();
+        await refreshTab(message.tabId).catch(() => undefined);
+        void refreshTabs().catch(() => undefined);
         return sendResponse({ ok: true });
       }
       throw new Error('Unknown message');

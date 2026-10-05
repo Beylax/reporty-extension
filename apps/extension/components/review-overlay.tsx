@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getPageContext, type Anchor, type Report, type ReportComment, type ReportContext } from '@reporty/shared';
+import { getPageContext, priorityLabels, type ReportPriority, type Anchor, type Report, type ReportComment, type ReportContext } from '@reporty/shared';
 import type { Environment, Site } from '@/lib/session';
 import { elementAnchor, anchorPosition } from '@/lib/anchor';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ async function message(body: object) {
   return response.data;
 }
 const statusLabels = { open: 'Aperta', in_progress: 'In lavorazione', resolved: 'Risolta' };
-type Draft = { id: string; context: ReportContext; screenshot?: string; body: string };
+type Draft = { id: string; context: ReportContext; screenshot?: string; body: string; priority: ReportPriority };
 
 export function ReviewOverlay({ site, environment, host }: { site: Site; environment: Environment; host: HTMLElement }) {
   const [page, setPage] = useState(getPageContext(location.href));
@@ -78,7 +78,7 @@ export function ReviewOverlay({ site, environment, host }: { site: Site; environ
       if (!element) return;
       const anchor: Anchor = mode === 'pin' ? { kind: 'pin', documentX: event.clientX + scrollX, documentY: event.clientY + scrollY } : elementAnchor(element, event.clientX, event.clientY);
       const context: ReportContext = { ...getPageContext(location.href), anchor, viewport: { width: innerWidth, height: innerHeight, devicePixelRatio }, scroll: { x: Math.max(0, scrollX), y: Math.max(0, scrollY) } };
-      setMode(null); setHover(null); setSelected(null); setDraft({ id: crypto.randomUUID(), context, body: '' }); setOpen(true);
+      setMode(null); setHover(null); setSelected(null); setDraft({ id: crypto.randomUUID(), context, body: '', priority: 'medium' }); setOpen(true);
       void run(async () => {
         host.style.visibility = 'hidden';
         try {
@@ -110,10 +110,11 @@ export function ReviewOverlay({ site, environment, host }: { site: Site; environ
       <header className="flex justify-between gap-3"><div><h2 className="font-semibold">{environment.projectName}</h2><p className="text-xs text-muted-foreground">{environment.name} · {page.pagePath}</p></div><Button size="sm" variant="ghost" aria-label="Chiudi" onClick={() => setOpen(false)}>×</Button></header>
       <p role="status" className="text-xs text-muted-foreground">{busy ? 'Operazione in corso…' : status}</p>
       {draft ? <form className="grid gap-3" onSubmit={event => { event.preventDefault(); void run(async () => {
-        const result = await message({ type: 'REPORTY_REPORT', operation: 'create', payload: { id: draft.id, body: draft.body, context: draft.context }, screenshot: draft.screenshot });
+        const result = await message({ type: 'REPORTY_REPORT', operation: 'create', payload: { id: draft.id, body: draft.body, priority: draft.priority, context: draft.context }, screenshot: draft.screenshot });
         setDraft(null); await refresh(); setStatus(result.warning ?? 'Segnalazione inviata.');
       }); }}>
         <h3 className="font-medium">Nuova segnalazione</h3><Label htmlFor="report-body">Fix da effettuare</Label><textarea id="report-body" className="min-h-28 rounded-lg border bg-background p-3" value={draft.body} maxLength={10000} required onChange={event => setDraft({ ...draft, body: event.target.value })} />
+        <Label htmlFor="report-priority">Priorità</Label><select id="report-priority" className="rounded-lg border bg-background p-2" disabled={busy} value={draft.priority} onChange={event => setDraft({ ...draft, priority: event.target.value as ReportPriority })}>{Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
         {draft.screenshot ? <><img alt="Anteprima screenshot da inviare" src={draft.screenshot} className="rounded-lg border" /><Button type="button" variant="outline" onClick={() => setDraft({ ...draft, screenshot: undefined })}>Rimuovi screenshot</Button></> : <div className="grid gap-2"><p className="text-xs text-muted-foreground">Nessuno screenshot allegato.</p><Button type="button" variant="outline" disabled={busy} onClick={() => void run(async () => {
           if (location.href !== draft.context.url || Math.abs(scrollY - draft.context.scroll.y) > 2 || Math.abs(scrollX - draft.context.scroll.x) > 2) throw new Error('Torna alla pagina e alla posizione originali prima di acquisire lo screenshot.');
           host.style.visibility = 'hidden';
@@ -123,7 +124,7 @@ export function ReviewOverlay({ site, environment, host }: { site: Site; environ
         <Button type="submit" disabled={busy || !draft.body.trim()}>Invia segnalazione</Button><Button type="button" variant="ghost" disabled={busy} onClick={() => setDraft(null)}>Annulla</Button>
       </form> : selected ? <div className="space-y-4">
         <Button variant="outline" size="sm" onClick={() => setSelected(null)}>← Lista</Button>
-        <p className="whitespace-pre-wrap break-words">{selected.body}</p><p className="text-xs text-muted-foreground">{selected.authorName} · {statusLabels[selected.status]}</p><p className="text-xs text-muted-foreground">Viewport originale: {selected.context.viewport.width} × {selected.context.viewport.height} · scroll {Math.round(selected.context.scroll.y)} px</p>
+        <p className="whitespace-pre-wrap break-words">{selected.body}</p><p className="text-xs text-muted-foreground">{selected.authorName} · {statusLabels[selected.status]} · Priorità {priorityLabels[selected.priority ?? 'medium'].toLowerCase()}</p><p className="text-xs text-muted-foreground">Viewport originale: {selected.context.viewport.width} × {selected.context.viewport.height} · scroll {Math.round(selected.context.scroll.y)} px</p>
         {!locate(selected.context.anchor) ? <p className="rounded-lg bg-muted p-3">Elemento non trovato o modificato. Consulta lo screenshot originale.</p> : null}
         <Button variant="outline" disabled={busy} onClick={() => {
           const point = locate(selected.context.anchor);
@@ -133,6 +134,7 @@ export function ReviewOverlay({ site, environment, host }: { site: Site; environ
         {selected.screenshot_path ? <Button variant="outline" disabled={busy} onClick={() => void run(async () => { const result = await message({ type: 'REPORTY_SCREENSHOT', id: selected.id }); setImageUrl(result.url); })}>Mostra screenshot</Button> : null}
         {imageUrl ? <img alt="Screenshot originale della segnalazione" src={imageUrl} className="rounded-lg border" /> : null}
         {selected.canChangeStatus ? <div className="grid gap-2"><Label htmlFor="report-status">Stato</Label><select id="report-status" className="rounded-lg border bg-background p-2" disabled={busy} value={selected.status} onChange={event => void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'status', payload: { id: selected.id, status: event.target.value } }); const items = await refresh(); setSelected(items.find(item => item.id === selected.id) ?? null); })}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div> : null}
+        {selected.canChangeStatus ? <div className="grid gap-2"><Label htmlFor="selected-priority">Priorità</Label><select id="selected-priority" className="rounded-lg border bg-background p-2" disabled={busy} value={selected.priority ?? 'medium'} onChange={event => void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'priority', payload: { id: selected.id, priority: event.target.value } }); const items = await refresh(); setSelected(items.find(item => item.id === selected.id) ?? null); })}>{Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div> : null}
         {selected.canEdit ? <div className="space-y-2">{edit === null ? <Button variant="outline" onClick={() => setEdit(selected.body)}>Modifica testo</Button> : <form className="grid gap-2" onSubmit={event => { event.preventDefault(); void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'edit', payload: { id: selected.id, body: edit } }); const items = await refresh(); setSelected(items.find(item => item.id === selected.id) ?? null); setEdit(null); }); }}><textarea className="rounded-lg border p-2" required value={edit} maxLength={10000} onChange={event => setEdit(event.target.value)} /><Button type="submit" disabled={busy}>Salva testo</Button></form>}<Button variant="destructive" disabled={busy} onClick={() => { if (confirm('Eliminare questa segnalazione e le sue risposte?')) void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'delete', payload: { id: selected.id } }); setSelected(null); await refresh(); }); }}>Elimina</Button></div> : null}
         <h3 className="font-medium">Risposte</h3>{comments.map(comment => <div key={comment.id} className="rounded-lg bg-muted p-3"><p className="text-xs font-medium">{comment.authorName}</p><p className="whitespace-pre-wrap break-words">{comment.body}</p></div>)}
         <form className="grid gap-2" onSubmit={event => { event.preventDefault(); void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'reply', payload: { id: selected.id, body: reply } }); setReply(''); const result = await message({ type: 'REPORTY_REPORT', operation: 'thread', payload: { id: selected.id } }); setComments(result.data.comments); }); }}><Label htmlFor="reply">Aggiungi una risposta</Label><textarea id="reply" className="rounded-lg border bg-background p-2" maxLength={10000} required value={reply} onChange={event => setReply(event.target.value)} /><Button type="submit" disabled={busy || !reply.trim()}>Rispondi</Button></form>
@@ -140,7 +142,7 @@ export function ReviewOverlay({ site, environment, host }: { site: Site; environ
         <div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={() => { setMode('element'); setOpen(false); }}>Seleziona elemento</Button><Button disabled={busy} variant="outline" onClick={() => { setMode('pin'); setOpen(false); }}>Pin libero</Button></div>
         <h3 className="font-medium">Segnalazioni della pagina ({reports.length})</h3>
         {!reports.length ? <p className="text-muted-foreground">Nessuna segnalazione su questa pagina.</p> : null}
-        {reports.map((report, index) => <button key={report.id} className="rounded-lg border p-3 text-left hover:bg-accent" onClick={() => void view(report)}><p className="line-clamp-3 break-words">{index + 1}. {report.body}</p><p className="mt-1 text-xs text-muted-foreground">{statusLabels[report.status]} · {report.authorName}{!anchorPosition(report.context.anchor) ? ' · Elemento non trovato' : ''}</p></button>)}
+        {reports.map((report, index) => <button key={report.id} className="rounded-lg border p-3 text-left hover:bg-accent" onClick={() => void view(report)}><p className="line-clamp-3 break-words">{index + 1}. {report.body}</p><p className="mt-1 text-xs text-muted-foreground">{statusLabels[report.status]} · Priorità {priorityLabels[report.priority ?? 'medium'].toLowerCase()} · {report.authorName}{!anchorPosition(report.context.anchor) ? ' · Elemento non trovato' : ''}</p></button>)}
       </>}
     </section> : null}
   </>;

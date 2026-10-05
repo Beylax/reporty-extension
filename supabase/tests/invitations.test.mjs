@@ -27,7 +27,7 @@ test('invitation permissions, email binding and guest revocation on PostgreSQL',
         ('${member}', 'member@example.com', now()),
         ('${outsider}', 'outsider@example.com', now());
     `);
-    for (const file of ['202610050001_initial.sql', '202610050002_project_management.sql', '202610050003_invitations.sql', '202610050004_extension_sessions.sql', '202610050005_reports.sql']) {
+    for (const file of ['202610050001_initial.sql', '202610050002_project_management.sql', '202610050003_invitations.sql', '202610050004_extension_sessions.sql', '202610050005_reports.sql', '202610050006_report_priorities.sql']) {
       await db.exec(await readFile(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
     }
     const as = async (id, role = 'authenticated') => {
@@ -101,6 +101,13 @@ test('invitation permissions, email binding and guest revocation on PostgreSQL',
     assert.equal((await db.query('select public.report_operation($1,$2,$3,$4) as report', [extensionSecret, environmentId, 'thread', { id: issueId }])).rows[0].report.comments.length, 1);
     const pageReports = (await db.query('select public.report_operation($1,$2,$3,$4) as reports', [extensionSecret, environmentId, 'list', { pagePath: '/products' }])).rows[0].reports;
     assert.equal(pageReports.length, 1);
+    assert.equal(pageReports[0].priority, 'medium');
+    await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)', [extensionSecret, environmentId, 'priority', { id: issueId, priority: 'high' }]));
+    await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)', [extensionSecret, environmentId, 'create', { body: 'Invalid priority', context: reportContext, priority: 'urgent' }]));
+    const highPriorityId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const highPriority = (await db.query('select public.report_operation($1,$2,$3,$4) as report', [extensionSecret, environmentId, 'create', { id: highPriorityId, body: 'Urgent fix', context: reportContext, priority: 'high' }])).rows[0].report;
+    assert.equal(highPriority.priority, 'high');
+    await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)', [extensionSecret, environmentId, 'create', { id: highPriorityId, body: 'Urgent fix', context: reportContext, priority: 'low' }]));
     assert.equal(pageReports[0].canChangeStatus, false);
     assert.equal((await db.query('select public.report_operation($1,$2,$3,$4) as reports', [extensionSecret, environmentId, 'list', { pagePath: '/other' }])).rows[0].reports.length, 0);
     await as(outsider);
@@ -111,6 +118,9 @@ test('invitation permissions, email binding and guest revocation on PostgreSQL',
     await as(null, 'anon');
     await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)', [extensionSecret, otherEnv, 'list', {}]));
     await as(member);
+    await assert.rejects(db.query('select public.report_operation(null,$1,$2,$3)', [environmentId, 'priority', { id: issueId, priority: 'urgent' }]));
+    await db.query('select public.report_operation(null,$1,$2,$3)', [environmentId, 'priority', { id: issueId, priority: 'low' }]);
+    assert.equal((await db.query('select public.report_operation(null,$1,$2,$3) as report', [environmentId, 'thread', { id: issueId }])).rows[0].report.issue.priority, 'low');
     await db.query('select public.report_operation(null,$1,$2,$3)', [environmentId, 'status', { id: issueId, status: 'in_progress' }]);
     await assert.rejects(db.query('select public.report_operation(null,$1,$2,$3)', [environmentId, 'delete', { id: issueId }]));
     await as(owner);
