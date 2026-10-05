@@ -20,6 +20,7 @@ async function extensionMessage(body: object) {
 }
 const statusLabels = { open: 'Aperta', in_progress: 'In lavorazione', resolved: 'Risolta' };
 const statusColors = { open: 'bg-blue-100 text-blue-800', in_progress: 'bg-amber-100 text-amber-800', resolved: 'bg-emerald-100 text-emerald-800' };
+const pinColors = { open: 'bg-blue-600', in_progress: 'bg-amber-600', resolved: 'bg-emerald-600' };
 const priorityColors = { low: 'bg-slate-100 text-slate-700', medium: 'bg-amber-100 text-amber-800', high: 'bg-red-100 text-red-800' };
 const box = 'space-y-3 rounded-xl border bg-card p-4 shadow-sm';
 type Draft = { id: string; context: ReportContext; screenshot?: string; body: string; priority: ReportPriority };
@@ -61,8 +62,9 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
     setListLoading(true);
     try {
       const result = await message({ type: 'REPORTY_REPORT', operation: 'list', payload: { pagePath: getPageContext(location.href).pagePath } });
-      setReports(result.data);
-      return result.data as Report[];
+      const chronological = [...(result.data as Report[])].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id.localeCompare(b.id));
+      setReports(chronological);
+      return chronological;
     } finally { setListLoading(false); }
   }
   async function run(work: () => Promise<void>) {
@@ -131,7 +133,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
     {!mode && !draft ? reports.map((report, index) => {
       const position = anchorPosition(report.context.anchor);
       if (!position) return null;
-      return <button key={report.id} aria-label={`Segnalazione ${index + 1}: ${report.body.slice(0, 60)}`} className="pointer-events-auto fixed flex size-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-indigo-600 text-xs font-semibold text-white shadow-md focus-visible:outline-2 focus-visible:outline-indigo-500" style={{ left: position.x, top: position.y }} onClick={() => void view(report)}>{index + 1}</button>;
+      return <button key={report.id} aria-label={`Segnalazione ${index + 1}, ${statusLabels[report.status]}: ${report.body.slice(0, 60)}`} title={`Segnalazione ${index + 1} · ${statusLabels[report.status]}`} className={`pointer-events-auto fixed flex size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white ${pinColors[report.status]} text-sm font-semibold text-white shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`} style={{ left: position.x, top: position.y }} onClick={() => void view(report)}>{index + 1}</button>;
     }) : null}
     <Button aria-label={open ? "Chiudi segnalazioni Reporty" : "Apri segnalazioni Reporty"} aria-expanded={open} className="pointer-events-auto fixed size-13 rounded-full shadow-xl transition-transform duration-200 hover:scale-110 motion-reduce:transition-none" style={{ [top ? 'top' : 'bottom']: 24, [left ? 'left' : 'right']: 24 }} onClick={() => { setOpen(!open); if (!open) void run(async () => { await refresh(); }); }}><span className="flex transition-transform duration-200 motion-reduce:transition-none" style={{ transform: open ? 'rotate(45deg)' : 'rotate(0deg)' }}><Plus className="size-6" aria-hidden="true" /></span></Button>
     {open && !mode ? <section aria-label="Segnalazioni Reporty" className="pointer-events-auto fixed flex max-h-[75vh] w-[min(380px,calc(100vw-48px))] flex-col gap-4 overflow-y-auto rounded-xl border bg-muted/50 p-4 text-sm text-card-foreground shadow-2xl" style={panelPosition}>
