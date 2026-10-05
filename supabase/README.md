@@ -89,3 +89,9 @@ Applicare `202610050009_project_admin_permissions.sql` dopo la migrazione 008. G
 ## Avvio rapido revisione ospite
 
 Applicare `202610050010_guest_review_start.sql` dopo la migrazione 009, aggiornare dashboard ed estensione. I nuovi inviti ospiti specificano un ambiente iniziale; i precedenti ricevono il primo ambiente del progetto. Un invito senza ambiente disponibile non avvia la revisione. L'ambiente è la destinazione iniziale e non restringe l'accesso ospite alle altre segnalazioni del progetto. Il nome resta obbligatorio. Il link collega automaticamente l'estensione tramite codice monouso e apre il sito; se manca il consenso sul dominio, si passa prima dalla schermata estensione di richiesta permesso. Google e link email rimangono disponibili agli sviluppatori anche per creare il primo progetto.
+
+## Dashboard condivisa e link unico (011)
+
+Eseguire `migrations/202610050011_shared_dashboard.sql` dopo la 010. Tutti gli utenti registrati tramite Google o link email hanno accesso completo ai progetti e alle segnalazioni. Gli ospiti restano limitati al proprio progetto e all’estensione.
+
+La migrazione revoca i precedenti inviti individuali senza cancellare segnalazioni o autori. Nella tab Ambienti creare il link unico del progetto e scegliere l’ambiente di avvio; il link può essere copiato anche da altri sviluppatori. Rigenerarlo revoca il link precedente e le sessioni ospite associate. Cambiare solo l’ambiente di avvio conserva il link. Se l’ambiente viene eliminato, scegliere un nuovo ambiente per riattivare l’avvio della revisione.

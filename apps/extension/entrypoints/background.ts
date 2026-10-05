@@ -1,4 +1,4 @@
-import { apiOrigin, getContext, token, type Sites, type Site, pattern } from '@/lib/session';
+import { apiOrigin, getContext, getSessionToken, guestSessionKey, token, type Sites, type Site, pattern } from '@/lib/session';
 
 export default defineBackground(() => {
   const protectStorage = browser.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
@@ -26,7 +26,7 @@ export default defineBackground(() => {
       if (!pending || pending.expiresAt < Date.now()) return;
       if (!await browser.permissions.contains({ origins: [pattern(pending.origin)] })) return;
       const tab = await browser.tabs.get(tabId);
-      const context = await getContext();
+      const context = await getContext(pending.origin);
       if (!tab.url || new URL(tab.url).origin !== pending.origin || !context?.environments.some(item => item.id === pending.environmentId && item.origin === pending.origin)) throw new Error('La pagina o i permessi sono cambiati.');
       const { sites = {} } = await browser.storage.local.get('sites');
       await browser.storage.local.set({ sites: { ...(sites as Sites), [pending.origin]: { environmentId: pending.environmentId, position: pending.position } } });
@@ -49,20 +49,43 @@ export default defineBackground(() => {
     void (async () => {
       await protectStorage;
       if (!sender.url || new URL(sender.url).origin !== apiOrigin || message?.type !== 'REPORTY_CONNECT') throw new Error('Invalid sender');
-      const stored = await browser.storage.local.get('pendingConnection');
-      const pendingConnection = stored.pendingConnection as { nonce: string; tabId: number; expiresAt: number } | undefined;
+      const connectionKey = `pendingConnection:${sender.tab?.id}`;
+      const stored = await browser.storage.local.get(connectionKey);
+      const legacy = await browser.storage.local.get('pendingConnection');
+      const pendingConnection = (stored[connectionKey] ?? legacy.pendingConnection) as { nonce: string; tabId: number; expiresAt: number } | undefined;
       if (!pendingConnection || pendingConnection.nonce !== message.nonce || pendingConnection.tabId !== sender.tab?.id || pendingConnection.expiresAt < Date.now()) throw new Error('Invalid connection');
-      await browser.storage.local.remove('pendingConnection');
+      await browser.storage.local.remove(stored[connectionKey] ? connectionKey : 'pendingConnection');
       const response = await fetch(`${apiOrigin}/api/extension/connect`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: message.code }), credentials: 'omit', signal: AbortSignal.timeout(10000),
       });
       if (!response.ok) throw new Error('Connection expired');
       const { token: sessionToken } = await response.json();
       if (typeof sessionToken !== 'string' || !/^[0-9a-f]{64}$/.test(sessionToken)) throw new Error('Invalid session');
-      const { sessionToken: oldToken } = await browser.storage.local.get('sessionToken');
-      await browser.storage.local.set({ sessionToken });
+      const context = await getContext(undefined, sessionToken);
+      if (!context) throw new Error('Invalid session');
+      const selected = message.guestEnvironmentId ? context.environments.find(item => item.id === message.guestEnvironmentId) : undefined;
+      if (message.guestEnvironmentId && (context.kind !== 'guest' || !selected)) throw new Error('Invalid guest environment');
+      let oldToken: unknown;
+      if (context.kind === 'guest') {
+        // Preserve the guest connection created by older extension versions.
+        const legacyToken = (await browser.storage.local.get('sessionToken')).sessionToken;
+        if (typeof legacyToken === 'string') {
+          const legacyContext = await getContext(undefined, legacyToken);
+          if (legacyContext?.kind === 'guest') {
+            for (const item of legacyContext.environments) {
+              const key = guestSessionKey(item.origin);
+              if (!(await browser.storage.local.get(key))[key]) await browser.storage.local.set({ [key]: legacyToken });
+            }
+            await browser.storage.local.remove('sessionToken');
+          }
+        }
+        const environments = selected ? [selected] : context.environments;
+        await browser.storage.local.set(Object.fromEntries(environments.map(item => [guestSessionKey(item.origin), sessionToken])));
+      } else {
+        oldToken = (await browser.storage.local.get('sessionToken')).sessionToken;
+        await browser.storage.local.set({ sessionToken });
+      }
       if (message.guestEnvironmentId) {
-        const context = await getContext();
         const environment = context?.kind === 'guest' ? context.environments.find(item => item.id === message.guestEnvironmentId) : undefined;
         if (!environment) throw new Error('Invalid guest environment');
         const tabId = sender.tab!.id!;
@@ -72,7 +95,7 @@ export default defineBackground(() => {
           sendResponse({ ok: true });
           await browser.tabs.update(tabId, { url: environment.origin });
         } else {
-          await browser.storage.local.set({ guestReviewStart: { environmentId: environment.id, tabId, expiresAt: Date.now() + 120000 } });
+          await browser.storage.local.set({ [`guestReviewStart:${tabId}`]: { origin: environment.origin, environmentId: environment.id, tabId, expiresAt: Date.now() + 120000 } });
           sendResponse({ ok: true });
           await browser.tabs.update(tabId, { url: browser.runtime.getURL('/review.html') });
         }
@@ -88,17 +111,18 @@ export default defineBackground(() => {
       if (sender.id !== browser.runtime.id) throw new Error('Invalid sender');
       if (message?.type === 'REPORTY_GUEST_START') {
         if (sender.url !== browser.runtime.getURL('/review.html') || !sender.tab?.id) throw new Error('Invalid sender');
-        const stored = await browser.storage.local.get('guestReviewStart');
-        const guestReviewStart = stored.guestReviewStart as { environmentId: string; tabId: number; expiresAt: number } | undefined;
+        const startKey = `guestReviewStart:${sender.tab.id}`;
+        const stored = await browser.storage.local.get(startKey);
+        const guestReviewStart = stored[startKey] as { origin: string; environmentId: string; tabId: number; expiresAt: number } | undefined;
         if (!guestReviewStart || guestReviewStart.tabId !== sender.tab.id || guestReviewStart.expiresAt < Date.now()) throw new Error('Invito scaduto. Riapri il link ricevuto.');
-        const context = await getContext();
+        const context = await getContext(guestReviewStart.origin);
         const environment = context?.kind === 'guest' ? context.environments.find(item => item.id === guestReviewStart.environmentId) : undefined;
         if (!environment) throw new Error('Accesso revocato.');
         if (!message.activate) return sendResponse({ ok: true, data: environment });
         if (!await browser.permissions.contains({ origins: [pattern(environment.origin)] })) throw new Error('Consenti l’accesso al sito per iniziare.');
         const { sites = {} } = await browser.storage.local.get('sites');
         await browser.storage.local.set({ sites: { ...(sites as Sites), [environment.origin]: { environmentId: environment.id, position: 'bottom_right' } } });
-        await browser.storage.local.remove('guestReviewStart');
+        await browser.storage.local.remove(startKey);
         sendResponse({ ok: true });
         await browser.tabs.update(sender.tab.id, { url: environment.origin });
         return;
@@ -106,7 +130,7 @@ export default defineBackground(() => {
       if (message?.type === 'REPORTY_GUEST_PREPARE') {
         if (sender.frameId !== 0 || !sender.tab?.id || !sender.url || new URL(sender.url).origin !== apiOrigin || !/^\/guest\/[0-9a-f]{64}$/.test(new URL(sender.url).pathname)) throw new Error('Invalid guest page');
         const nonce = token();
-        await browser.storage.local.set({ pendingConnection: { nonce, tabId: sender.tab.id, expiresAt: Date.now() + 120000 } });
+        await browser.storage.local.set({ [`pendingConnection:${sender.tab.id}`]: { nonce, tabId: sender.tab.id, expiresAt: Date.now() + 120000 } });
         return sendResponse({ ok: true, data: { nonce, extensionId: browser.runtime.id } });
       }
       if (['REPORTY_REPORT', 'REPORTY_CAPTURE', 'REPORTY_SCREENSHOT'].includes(message?.type)) {
@@ -116,7 +140,8 @@ export default defineBackground(() => {
         const origin = new URL(tab.url).origin;
         const { sites = {} } = await browser.storage.local.get('sites');
         const site = (sites as Sites)[origin];
-        const context = await getContext();
+        const sessionToken = await getSessionToken(origin);
+        const context = sessionToken ? await getContext(origin, sessionToken) : null;
         if (!site || !context?.environments.some(item => item.id === site.environmentId && item.origin === origin)) throw new Error('Accesso al sito non disponibile.');
         if (message.type === 'REPORTY_CAPTURE') {
           const active = (await browser.tabs.query({ active: true, windowId: tab.windowId }))[0];
@@ -126,7 +151,6 @@ export default defineBackground(() => {
           if (after.url !== tab.url || !(await browser.tabs.get(tab.id!)).active) throw new Error('Pagina cambiata durante lo screenshot.');
           return sendResponse({ ok: true, data: image });
         }
-        const { sessionToken } = await browser.storage.local.get('sessionToken');
         if (message.type === 'REPORTY_REPORT' && message.operation === 'create' && message.payload?.context?.url !== tab.url) throw new Error('La pagina è cambiata: crea una nuova segnalazione.');
         const endpoint = message.type === 'REPORTY_SCREENSHOT' ? 'screenshot' : 'reports';
         const body = message.type === 'REPORTY_SCREENSHOT' ? { environmentId: site.environmentId, id: message.id } : { environmentId: site.environmentId, operation: message.operation, payload: message.payload, screenshot: message.screenshot };
@@ -141,7 +165,7 @@ export default defineBackground(() => {
         const { sites = {} } = await browser.storage.local.get('sites');
         const site = (sites as Sites)[origin];
         if (!site) return sendResponse({ ok: true, data: null });
-        const context = await getContext();
+        const context = await getContext(origin);
         const environment = context?.environments.find(item => item.id === site.environmentId && item.origin === origin);
         return sendResponse({ ok: true, data: environment ? { site, environment } : null });
       }
@@ -151,7 +175,9 @@ export default defineBackground(() => {
         return sendResponse({ ok: true });
       }
       if (message?.type === 'REPORTY_STATE') {
-        const context = await getContext();
+        const tab = (await browser.tabs.query({ active: true, currentWindow: true }))[0];
+        const origin = tab?.url?.startsWith('http') ? new URL(tab.url).origin : undefined;
+        const context = await getContext(origin);
         const { sites = {} } = await browser.storage.local.get('sites');
         return sendResponse({ ok: true, data: { context, sites } });
       }
@@ -159,13 +185,21 @@ export default defineBackground(() => {
         const nonce = token();
         const expiresAt = Date.now() + 15 * 60 * 1000;
         const tab = await browser.tabs.create({ url: `${apiOrigin}/extension/connect?extensionId=${browser.runtime.id}&nonce=${nonce}` });
-        await browser.storage.local.set({ pendingConnection: { nonce, tabId: tab.id, expiresAt } });
+        await browser.storage.local.set({ [`pendingConnection:${tab.id}`]: { nonce, tabId: tab.id, expiresAt } });
         return sendResponse({ ok: true });
       }
       if (message?.type === 'REPORTY_DISCONNECT') {
-        const { sessionToken } = await browser.storage.local.get('sessionToken');
-        if (sessionToken) await fetch(`${apiOrigin}/api/extension/context`, { method: 'DELETE', headers: { Authorization: `Bearer ${sessionToken}` }, credentials: 'omit', signal: AbortSignal.timeout(10000) }).catch(() => undefined);
-        await browser.storage.local.remove(['sessionToken', 'pendingConnection', 'sites', 'pendingSites', 'guestReviewStart']);
+        const tab = (await browser.tabs.query({ active: true, currentWindow: true }))[0];
+        const origin = tab?.url?.startsWith('http') ? new URL(tab.url).origin : undefined;
+        const key = origin ? guestSessionKey(origin) : 'sessionToken';
+        const scoped = await browser.storage.local.get(key);
+        const sessionToken = scoped[key] ?? (await browser.storage.local.get('sessionToken')).sessionToken;
+        await browser.storage.local.remove(scoped[key] ? key : 'sessionToken');
+        // Guest credentials may also serve other environments of the same project.
+        const remaining = await browser.storage.local.get(null);
+        if (sessionToken && !Object.entries(remaining).some(([name, value]) => (name === 'sessionToken' || name.startsWith('guestSession:')) && value === sessionToken)) {
+          await fetch(`${apiOrigin}/api/extension/context`, { method: 'DELETE', headers: { Authorization: `Bearer ${sessionToken}` }, credentials: 'omit', signal: AbortSignal.timeout(10000) }).catch(() => undefined);
+        }
         await refreshTabs();
         return sendResponse({ ok: true });
       }
@@ -176,7 +210,7 @@ export default defineBackground(() => {
         const { sites = {} } = await browser.storage.local.get('sites');
         const updated: Sites = { ...(sites as Sites) };
         if (message.enabled) {
-          const context = await getContext();
+          const context = await getContext(origin);
           const environment = context?.environments.find(item => item.id === message.environmentId && item.origin === origin);
           if (!environment) throw new Error('Nessun accesso a questo ambiente.');
           if (!['bottom_right', 'bottom_left', 'top_right', 'top_left'].includes(message.position)) throw new Error('Posizione non valida.');

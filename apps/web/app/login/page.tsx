@@ -7,8 +7,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SubmitButton } from '@/components/submit-button';
-import { cookies } from 'next/headers';
-import { validToken } from '@/lib/invitation-token';
 
 const messages: Record<string, string> = {
   'email-sent': 'Controlla la tua email: ti abbiamo inviato un link di accesso.',
@@ -24,8 +22,7 @@ export default async function Login({ searchParams }: {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   if (data?.claims && !data.claims.is_anonymous) {
-    const invitation = (await cookies()).get('reporty_pending_invite')?.value;
-    redirect(invitation && validToken(invitation) ? `/invite/${invitation}` : '/dashboard');
+    redirect('/dashboard');
   }
   const { message } = await searchParams;
   return (

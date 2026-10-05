@@ -54,3 +54,9 @@ Sono presenti le basi del monorepo, l'accesso Google/email, gestione sessione e 
 ## Download estensione
 
 Scaricare [`reporty-chrome.zip`](downloads/reporty-chrome.zip), estrarlo e caricare la cartella da Chrome o Edge in modalità sviluppatore. [Istruzioni complete](apps/extension/README.md#distribuzione-senza-marketplace). La build inclusa usa `https://reporty-extension.vercel.app`.
+
+Le sessioni ospite dell’estensione sono separate per origine del sito (protocollo, dominio e porta): aprire un altro invito non scollega i siti già collegati. Gli avvii della revisione sono separati anche per scheda del browser.
+
+### Accesso condiviso
+
+Tutti gli sviluppatori che accedono con Google o link email possono gestire tutti i progetti, ambienti e segnalazioni. Non sono necessari inviti o ruoli per progetto. Nella tab **Ambienti** si trova l’unico link ospite del progetto: scegli l’ambiente di avvio, crea e copia il link. **Rigenera link** invalida il precedente link e gli accessi ospite associati. Richiede la migrazione `202610050011_shared_dashboard.sql`; i vecchi inviti individuali vengono revocati mantenendo lo storico delle segnalazioni.

@@ -9,15 +9,35 @@ export function token() {
   return Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
-export async function getContext(): Promise<Context | null> {
+export const guestSessionKey = (origin: string) => `guestSession:${origin}`;
+
+export async function getSessionToken(origin?: string): Promise<string | null> {
+  if (origin) {
+    const key = guestSessionKey(origin);
+    const stored = await browser.storage.local.get(key);
+    if (typeof stored[key] === 'string') return stored[key];
+  }
   const { sessionToken } = await browser.storage.local.get('sessionToken');
-  if (typeof sessionToken !== 'string') return null;
+  return typeof sessionToken === 'string' ? sessionToken : null;
+}
+
+export async function getContext(origin?: string, credential?: string): Promise<Context | null> {
+  const sessionToken = credential ?? await getSessionToken(origin);
+  if (!sessionToken) return null;
   const response = await fetch(`${apiOrigin}/api/extension/context`, {
     headers: { Authorization: `Bearer ${sessionToken}` }, cache: 'no-store', credentials: 'omit', signal: AbortSignal.timeout(10000),
   });
-  if (response.status === 401) { await browser.storage.local.remove('sessionToken'); return null; }
+  if (response.status === 401) {
+    // A revoked site must not disconnect another site or a newer connection.
+    const key = origin ? guestSessionKey(origin) : 'sessionToken';
+    const stored = await browser.storage.local.get(key);
+    if (stored[key] === sessionToken) await browser.storage.local.remove(key);
+    return null;
+  }
   if (!response.ok) throw new Error('Servizio non disponibile. Riprova.');
-  return response.json();
+  const context: Context = await response.json();
+  if (origin && context.kind === 'guest' && !context.environments.some(item => item.origin === origin)) return null;
+  return context;
 }
 
 export function pattern(origin: string) {

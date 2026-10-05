@@ -32,16 +32,14 @@
 
 ## Permessi
 
-- Gli amministratori generali in `public.platform_admins` leggono e gestiscono tutti i progetti, ambienti, accessi e segnalazioni.
-- Gli amministratori di progetto gestiscono solo i propri progetti e possono eliminare i relativi ambienti. Solo gli amministratori generali eliminano interi progetti.
-- Le membership Amministratore non possono essere rimosse o retrocesse, nemmeno dagli amministratori generali. L'eliminazione dell'intero progetto resta consentita secondo i permessi precedenti.
-- I membri possono leggere, rispondere e cambiare stato/priorità; autori membri e amministratori possono modificare o eliminare segnalazioni.
+- Tutti gli sviluppatori autenticati (Google o link email, non account anonimi) vedono, modificano ed eliminano tutti i progetti, ambienti e segnalazioni. Non esistono più ruoli o membership nella UI né inviti sviluppatore.
+- Ogni progetto ha un unico link ospite recuperabile nella tab Ambienti, con ambiente di avvio selezionabile e rigenerazione che revoca il precedente link e le sessioni associate. Le tabelle dei vecchi ruoli restano solo per compatibilità e cronologia.
 - Gli inviti ospiti indicano un ambiente iniziale; nome obbligatorio e avvio dal link, collegamento automatico e consenso browser sul dominio quando necessario. Gli ospiti possono creare, leggere e rispondere e scegliere la priorità alla creazione; non cambiano stato/priorità successivamente né modificano/eliminano segnalazioni.
 - Autorizzare ogni operazione sul backend e nel database: nascondere un pulsante non è un controllo di sicurezza.
 
 ## Database, sessioni e screenshot
 
-- Aggiungere nuove migrazioni numerate, senza riscrivere quelle già distribuite. L'ultima al momento della creazione di questo file è `202610050009_project_admin_permissions.sql`.
+- Aggiungere nuove migrazioni numerate, senza riscrivere quelle già distribuite. L’ultima è `202610050011_shared_dashboard.sql`.
 - Mantenere RLS, controlli RPC e `search_path` esplicito nelle funzioni security definer; limitare gli execute grant.
 - Token ospite e invito memorizzati con hash. I codici di collegamento estensione sono monouso; verificare origine, scheda, nonce e scadenza.
 - La sessione estensione resta nello storage riservato ai contesti fidati; non deve essere esposta al sito revisionato.
@@ -52,7 +50,7 @@
 ## Convenzioni UI
 
 - Dashboard con sidebar progetti e ricerca; email troncata ed Esci sulla stessa riga.
-- Dettaglio progetto in tab: Segnalazioni, Ambienti, Gestione accessi.
+- Dettaglio progetto in tab: Segnalazioni e Ambienti; link ospite nella tab Ambienti.
 - Filtri segnalazioni multiselect su una riga, ricerca separata, pillole rimovibili sotto. Stati iniziali: Aperta e In lavorazione. Ordine priorità: Alta, Media, Bassa.
 - Dettaglio segnalazione in dialogo: descrizione e screenshot in evidenza, gestione sotto, autore in fondo. Colori per stato/priorità.
 - Estensione: floating `+` che ruota a `×`, creazione in evidenza, lista accordion, sezioni in riquadri verticali, back e chiudi sulla stessa riga.
