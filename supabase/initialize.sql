@@ -250,7 +250,8 @@ begin
   if operation='list' then
     select coalesce(jsonb_agg(row_data order by row_data->>'created_at' desc),'[]'::jsonb) into result from (
       select to_jsonb(i) || jsonb_build_object('authorName',coalesce(g.display_name,u.email,'Utente'),
-        'canEdit',manager or (actor is not null and i.author_id=actor), 'canChangeStatus',actor is not null or guest is not null) row_data
+        'canEdit',manager or (actor is not null and i.author_id=actor), 'canChangeStatus',actor is not null or guest is not null,
+        'commentCount',(select count(*) from public.comments c where c.issue_id=i.id)) row_data
       from public.issues i left join public.guest_sessions g on g.id=i.guest_session_id left join auth.users u on u.id=i.author_id
       where i.environment_id=target and (not(payload ? 'pagePath') or i.page_path=payload->>'pagePath')
     ) rows;

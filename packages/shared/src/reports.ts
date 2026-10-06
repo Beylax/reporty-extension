@@ -22,6 +22,6 @@ export const reportRequestSchema = z.object({
 export type Report = {
   id: string; environment_id: string; project_id: string; page_path: string; body: string;
   priority: ReportPriority; status: 'open' | 'in_progress' | 'validation' | 'resolved'; context: z.infer<typeof reportContextSchema>;
-  screenshot_path: string | null; created_at: string; authorName: string; canEdit: boolean; canChangeStatus: boolean;
+  screenshot_path: string | null; created_at: string; commentCount?: number; authorName: string; canEdit: boolean; canChangeStatus: boolean;
 };
 export type ReportComment = { id: string; body: string; authorName: string; created_at: string };

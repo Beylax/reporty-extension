@@ -25,6 +25,7 @@ test('destructive bootstrap, shared permissions, guest updates and environment l
       insert into auth.users values ('${owner}','owner@example.com',now()), ('${member}','member@example.com',now()), ('${outsider}','outsider@example.com',now()), ('${platform}','platform@example.com',now());`);
     const initialize = await readFile(new URL('../initialize.sql', import.meta.url),'utf8');
     await db.exec(initialize);
+    await db.exec(await readFile(new URL('../report_comment_counts.sql', import.meta.url),'utf8'));
     assert.equal((await db.query('select * from auth.users')).rows.length,0);
     await db.exec(initialize);
     await db.query('insert into auth.users(id,email,email_confirmed_at) values($1,$2,now()),($3,$4,now())',[owner,'owner@example.com',outsider,'developer@example.com']);
@@ -108,7 +109,11 @@ test('destructive bootstrap, shared permissions, guest updates and environment l
       await db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,operation,{id:issue,[field]:value}]);
       await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,operation,{id:issue,[field]:'invalid'}]),/Invalid/);
     }
+    const beforeReplies=(await db.query('select public.report_operation($1,$2,$3,$4) as reports',[guestExtension,env,'list',{}])).rows[0].reports;
+    assert.equal(beforeReplies.find(item => item.id === issue).commentCount,0);
+    for (const body of ['First reply','Second reply']) await db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,'reply',{id:issue,body}]);
     const reports=(await db.query('select public.report_operation($1,$2,$3,$4) as reports',[guestExtension,env,'list',{}])).rows[0].reports;
+    assert.equal(reports.find(item => item.id === issue).commentCount,2);
     assert.equal(reports[0].canChangeStatus,true);
     assert.equal(reports[0].canEdit,false);
     await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,'delete',{id:issue}]),/Not authorized/);

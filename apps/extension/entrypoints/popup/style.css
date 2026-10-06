@@ -206,3 +206,12 @@ label:has(:is(input[type="checkbox"], input[type="radio"]):not(:disabled)):not(:
 :is(button, select, input, [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="tab"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]):is(:disabled, [disabled], [aria-disabled="true"], [data-disabled]) {
   cursor: default;
 }
+
+@keyframes reporty-pin-highlight {
+  0%, 100% { background-color: var(--card); }
+  50% { background-color: color-mix(in oklch, var(--primary) 35%, var(--card)); }
+}
+.reporty-pin-highlight { animation: reporty-pin-highlight 1.25s ease-in-out 4; }
+@media (prefers-reduced-motion: reduce) {
+  .reporty-pin-highlight { animation: none; background-color: color-mix(in oklch, var(--primary) 20%, var(--card)); }
+}
