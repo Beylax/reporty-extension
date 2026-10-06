@@ -102,6 +102,8 @@ test('destructive bootstrap, shared permissions, guest updates and environment l
     await assert.rejects(db.query('select * from public.projects'),/permission denied/);
     await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,foreignEnv,'list',{}]),/Not authorized/);
     await assert.rejects(db.query('select * from public.environment_review_links'),/permission denied/);
+    await db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,'status',{id:issue,status:'validation'}]);
+    assert.equal((await db.query('select public.report_operation($1,$2,$3,$4) as result',[guestExtension,env,'thread',{id:issue}])).rows[0].result.issue.status,'validation');
     for(const [operation,field,value] of [['status','status','resolved'],['priority','priority','low']]) {
       await db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,operation,{id:issue,[field]:value}]);
       await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,operation,{id:issue,[field]:'invalid'}]),/Invalid/);

@@ -4,7 +4,7 @@ export { normalizeOrigin, validateName, isUuid } from './project';
 export { reportContextSchema, reportRequestSchema, reportPrioritySchema, priorityLabels } from './reports';
 export type { Report, ReportComment, ReportPriority } from './reports';
 
-export const issueStatuses = ['open', 'in_progress', 'resolved'] as const;
+export const issueStatuses = ['open', 'in_progress', 'validation', 'resolved'] as const;
 export type IssueStatus = (typeof issueStatuses)[number];
 export const floatingPositions = ['bottom_right', 'bottom_left', 'top_right', 'top_left'] as const;
 export type FloatingPosition = (typeof floatingPositions)[number];

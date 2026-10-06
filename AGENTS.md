@@ -25,7 +25,7 @@
 - I progetti contengono ambienti identificati da origini esplicite. Protocollo e porta fanno parte dell'origine.
 - Il termine workspace indica attualmente la dashboard: non esiste una tabella workspace separata.
 - Segnalazioni collegate a elementi DOM o pin liberi, con descrizione, screenshot opzionale e risposte.
-- Stati: `open`, `in_progress`, `resolved`. Priorità: `low`, `medium`, `high`, inizialmente `medium`.
+- Stati: `open`, `in_progress`, `validation`, `resolved`. Priorità: `low`, `medium`, `high`, inizialmente `medium`.
 - Identità pagina: ambiente e percorso; query conservate come contesto, percorsi hash distinti.
 - Non acquisire o ripristinare stato interno React, cookie o storage del sito. La modalità con script è disponibile per ambiente: chiave pubblica e toggle inizialmente disabilitato, nome obbligatorio, permessi completi limitati all’ambiente. API e database verificano il toggle; frontend lo controlla ogni 10 secondi.
 
@@ -51,7 +51,7 @@
 
 - Dashboard con sidebar progetti e ricerca; email troncata ed Esci sulla stessa riga.
 - Dettaglio progetto in tab: Segnalazioni e Ambienti; link ospite nella card di ciascun ambiente.
-- Filtri segnalazioni multiselect su una riga, ricerca separata, pillole rimovibili sotto. Stati iniziali: Aperta e In lavorazione. Ordine priorità: Alta, Media, Bassa.
+- Filtri segnalazioni multiselect su una riga, ricerca separata, pillole rimovibili sotto. Stati iniziali: Aperta, In lavorazione e Validazione. Ordine priorità: Alta, Media, Bassa.
 - Dettaglio segnalazione in dialogo: descrizione e screenshot in evidenza, gestione sotto, autore in fondo. Colori per stato/priorità.
 - Estensione e widget: floating `+` dedicato alla creazione; pulsante menu affiancato che diventa `×` quando la modale è aperta. Lista e dettaglio condividono una sola modale, con ritorno alla lista. Ricerca e filtri multipli solo stato/priorità, pillole arrotondate; lista e pin limitati alla pagina e all’ambiente correnti. Toggle risolte e tema nell’intestazione della modale accanto a Chiudi.
 - Il popup determina progetto/ambiente dall'URL senza select; informazioni revisore in fondo, senza elenco siti.

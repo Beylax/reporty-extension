@@ -74,7 +74,7 @@ create table public.issues (
   page_path text not null,
   body text not null check (char_length(body) between 1 and 10000),
   priority text not null default 'medium' check(priority in ('low','medium','high')),
-  status text not null default 'open' check (status in ('open', 'in_progress', 'resolved')),
+  status text not null default 'open' check (status in ('open', 'in_progress', 'validation', 'resolved')),
   author_id uuid references auth.users(id),
   guest_session_id uuid,
   context jsonb not null check (jsonb_typeof(context) = 'object'),
@@ -312,7 +312,7 @@ begin
     insert into public.comments(project_id,issue_id,body,author_id,guest_session_id) values(report.project_id,report.id,text_body,actor,guest);
   elsif operation='status' then
     if actor is null and guest is null then raise exception 'Not authorized' using errcode='42501'; end if;
-    if payload->>'status' not in ('open','in_progress','resolved') or payload->>'status' is null then raise exception 'Invalid status' using errcode='22023'; end if;
+    if payload->>'status' not in ('open','in_progress','validation','resolved') or payload->>'status' is null then raise exception 'Invalid status' using errcode='22023'; end if;
     update public.issues set status=payload->>'status' where id=report.id;
   elsif operation='priority' then
     if actor is null and guest is null then raise exception 'Not authorized' using errcode='42501'; end if;

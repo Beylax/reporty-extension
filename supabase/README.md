@@ -42,3 +42,5 @@ Chiunque visiti l’origine configurata, quando lo script è attivo, inserisce i
 Screenshot opzionali in HTTPS (o localhost) con `getDisplayMedia`: scegliere la scheda corrente e consentire ogni acquisizione. Vengono evidenziati punto o elemento e fermate tutte le tracce della condivisione dopo la cattura. Annullando il consenso si può comunque inviare la segnalazione senza screenshot. La funzione può non essere disponibile su browser mobile.
 
 Con CSP del sito autorizzare il dominio Reporty per `script-src`, `connect-src` e `img-src` (oltre ai domini delle immagini Supabase e `data:` per le anteprime); consentire gli stili del pannello isolato. Lo script non recupera lo stato interno React. Il bundle viene generato prima di `dev:web` e della build Vercel; `npm run build:widget` lo rigenera manualmente durante lo sviluppo.
+
+Per aggiungere lo stato **Validazione** a un database già inizializzato, eseguire `supabase/report_validation.sql` (non distruttivo) prima di pubblicare la nuova UI. Lo script di inizializzazione include già questo stato.
