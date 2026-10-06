@@ -195,3 +195,14 @@ dialog::backdrop { opacity: 0; transition: opacity 180ms ease, overlay 180ms all
 dialog[open]::backdrop { opacity: 1; }
 @starting-style { dialog[open], dialog[open]::backdrop { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { dialog, dialog::backdrop { transition: none; } }
+
+/* Interactive controls use the same cursor across all Reporty surfaces. */
+:is(a[href], button, summary, select, input[type="checkbox"], input[type="radio"], input[type="button"], input[type="submit"], [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="tab"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]):not(:disabled):not([disabled]):not([aria-disabled="true"]):not([data-disabled]) {
+  cursor: pointer;
+}
+label:has(:is(input[type="checkbox"], input[type="radio"]):not(:disabled)):not(:has([data-disabled], [aria-disabled="true"])) {
+  cursor: pointer;
+}
+:is(button, select, input, [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="tab"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]):is(:disabled, [disabled], [aria-disabled="true"], [data-disabled]) {
+  cursor: default;
+}

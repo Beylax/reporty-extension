@@ -30,7 +30,7 @@ async function extensionMessage(body: object) {
   return response.data;
 }
 const statusLabels = { open: 'Aperta', in_progress: 'In lavorazione', validation: 'Validazione', resolved: 'Chiusa' };
-const statusColors = { open: 'bg-red-100 text-red-800', in_progress: 'bg-orange-100 text-orange-800', validation: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200', resolved: 'bg-emerald-100 text-emerald-800' };
+const statusColors = { open: 'bg-red-100 text-red-800', in_progress: 'bg-orange-100 text-orange-800', validation: 'bg-blue-50 text-blue-900 dark:bg-blue-100 dark:text-blue-950', resolved: 'bg-emerald-100 text-emerald-800' };
 const pinColors = { open: 'bg-red-600', in_progress: 'bg-orange-500', validation: 'bg-blue-600', resolved: 'bg-emerald-600' };
 const priorityColors = { low: 'bg-slate-100 text-slate-700', medium: 'bg-amber-100 text-amber-800', high: 'bg-red-100 text-red-800' };
 type Draft = { id: string; context: ReportContext; screenshot?: string; body: string; priority: ReportPriority };
@@ -187,13 +187,13 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
       const position = anchorPosition(report.context.anchor);
       if (!position) return null;
       return <div key={report.id} className="group pointer-events-auto fixed" style={{left:position.x,top:position.y}}>
-        <button aria-label={`${statusLabels[report.status]}, priorità ${priorityLabels[report.priority ?? 'medium']}: ${report.body.slice(0,60)}`} className={`relative block min-h-[50px] w-[50px] -translate-y-full overflow-hidden rounded-tl-[25px] rounded-tr-[25px] rounded-br-[25px] border-[3px] border-muted-foreground bg-card text-card-foreground shadow-md transition-[width,translate] duration-300 ease-out group-hover:w-[min(320px,calc(100vw-16px))] focus-visible:outline-2 focus-visible:outline-ring motion-reduce:transition-none ${position.x + 320 > innerWidth - 8 ? 'group-hover:-translate-x-[calc(100%-50px)]' : ''}`} onClick={() => void view(report)}>
-          <span className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex size-8 items-center justify-center rounded-full ${pinColors[report.status]} text-xs font-semibold text-white transition-opacity duration-150 group-hover:opacity-0 motion-reduce:transition-none`}>{(report.authorName?.trim() || 'Utente').slice(0, 1).toLocaleUpperCase('it-IT')}</span>
+        <button aria-label={`${statusLabels[report.status]}, priorità ${priorityLabels[report.priority ?? 'medium']}: ${report.body.slice(0,60)}`} className={`relative block min-h-[44px] w-[44px] -translate-y-full overflow-hidden rounded-tl-[22px] rounded-tr-[22px] rounded-br-[22px] border-[3px] border-primary bg-primary text-primary-foreground shadow-md transition-[width,translate] duration-300 ease-out group-hover:w-[min(320px,calc(100vw-16px))] focus-visible:outline-2 focus-visible:outline-ring motion-reduce:transition-none ${position.x + 320 > innerWidth - 8 ? 'group-hover:-translate-x-[calc(100%-44px)]' : ''}`} onClick={() => void view(report)}>
+          <span className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex size-7 items-center justify-center rounded-full ${pinColors[report.status]} text-xs font-semibold text-white transition-opacity duration-150 group-hover:opacity-0 motion-reduce:transition-none`}>{(report.authorName?.trim() || 'Utente').slice(0, 1).toLocaleUpperCase('it-IT')}</span>
           <span className="invisible block max-h-0 opacity-0 transition-[max-height,opacity,visibility] duration-[300ms,150ms,0ms] delay-[0ms,0ms,150ms] ease-out group-hover:visible group-hover:max-h-64 group-hover:opacity-100 group-hover:delay-[0ms,250ms,0ms] motion-reduce:transition-none">
             <span className="block w-[min(314px,calc(100vw-22px))] p-3 text-left">
               <span className="mb-3 flex flex-wrap gap-2 text-xs"><span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 ${statusColors[report.status]}`}><ReportIcon value={report.status} />{statusLabels[report.status]}</span><span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 ${priorityColors[report.priority ?? 'medium']}`}><ReportIcon value={report.priority ?? 'medium'} />Priorità {priorityLabels[report.priority ?? 'medium'].toLowerCase()}</span></span>
               <span className="block max-h-40 overflow-hidden whitespace-pre-wrap break-words text-sm">{report.body}</span>
-              <span className="mt-3 block truncate text-xs text-muted-foreground" title={report.authorName}>Segnalata da {report.authorName || 'Utente'}</span>
+              <span className="mt-3 block truncate text-xs text-primary-foreground/80" title={report.authorName}>Segnalata da {report.authorName || 'Utente'}</span>
             </span>
           </span>
         </button>
