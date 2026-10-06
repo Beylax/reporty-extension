@@ -4,7 +4,7 @@ import { BrandLogo } from '@/components/brand-logo';
 import { useNotify } from '@/components/ui/toast';
 import { RepliesSkeleton, ReportRowsSkeleton, ScreenshotSkeleton } from '@/components/loading-skeletons';
 import { LoadingImage } from '@/components/loading-image';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ChevronDown, Crosshair, Eye, EyeOff, MapPin, Pencil, Plus, Target } from 'lucide-react';
 import { formatReportDateTime, getPageContext, priorityLabels, type ReportPriority, type Anchor, type Report, type ReportComment, type ReportContext } from '@reporty/shared';
 import type { Environment, Site } from '@/lib/session';
@@ -28,10 +28,12 @@ type Draft = { id: string; context: ReportContext; screenshot?: string; body: st
 
 export function ReviewOverlay({ site, environment, host, transport, logoUrl }: { site: Site; environment: Environment; host: HTMLElement; transport?: (body: Record<string, unknown>) => Promise<unknown>; logoUrl?: string }) {
   const message = async (body: Record<string, unknown>) => (transport ? await transport(body) : await extensionMessage(body)) as Awaited<ReturnType<typeof extensionMessage>>;
+  const deepLink = useRef(new URL(location.href).searchParams.get('__reporty_issue'));
   const [page, setPage] = useState(getPageContext(location.href));
   const [reports, setReports] = useState<Report[]>([]);
   const [open, setOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
+  const [showResolved, setShowResolved] = useState(true);
   const [mode, setMode] = useState<'element' | 'pin' | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [selected, setSelected] = useState<Report | null>(null);
@@ -88,6 +90,30 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
     return () => { disposed = true; };
   }, [page.pagePath, environment.id]);
   useEffect(() => {
+    const id = deepLink.current;
+    if (!id || listLoading) return;
+    const report = reports.find(item => item.id === id);
+    if (!report) return;
+    deepLink.current = null;
+    const url = new URL(location.href);
+    url.searchParams.delete('__reporty_issue');
+    history.replaceState(history.state, '', url.href);
+    void view(report);
+    let attempts = 0;
+    const move = () => {
+      const point = locate(report.context.anchor);
+      if (point) {
+        window.scrollBy({ top: point.y - innerHeight / 2, left: point.x - innerWidth / 2, behavior: 'smooth' });
+        return true;
+      }
+      return false;
+    };
+    if (move()) return;
+    window.scrollTo({ top: report.context.scroll.y, left: report.context.scroll.x });
+    const timer = setInterval(() => { if (move() || ++attempts >= 20) clearInterval(timer); }, 500);
+    return () => clearInterval(timer);
+  }, [reports, listLoading]);
+  useEffect(() => {
     const timer = setInterval(() => {
       const current = getPageContext(location.href);
       setPage(previous => previous.url !== current.url ? current : previous);
@@ -133,7 +159,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
     {mode ? <div className="pointer-events-auto fixed left-1/2 top-4 -translate-x-1/2 rounded-lg border bg-card p-3 text-sm shadow-xl">{mode === 'element' ? 'Seleziona un elemento' : 'Posiziona un pin'} · Esc per annullare <Button size="sm" variant="outline" onClick={() => { setMode(null); setOpen(true); }}>Annulla</Button></div> : null}
     {!mode && !draft ? reports.map((report, index) => {
       const position = anchorPosition(report.context.anchor);
-      if (!position) return null;
+      if (!position || (!showResolved && report.status === 'resolved')) return null;
       return <button key={report.id} aria-label={`Segnalazione ${index + 1}, ${statusLabels[report.status]}: ${report.body.slice(0, 60)}`} title={`Segnalazione ${index + 1} · ${statusLabels[report.status]}`} className={`pointer-events-auto fixed flex size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white ${pinColors[report.status]} text-sm font-semibold text-white shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`} style={{ left: position.x, top: position.y }} onClick={() => void view(report)}>{index + 1}</button>;
     }) : null}
     <Button aria-label={open ? "Chiudi segnalazioni Reporty" : "Apri segnalazioni Reporty"} aria-expanded={open} className="pointer-events-auto fixed size-13 rounded-full shadow-xl transition-transform duration-200 hover:scale-110 motion-reduce:transition-none" style={{ [top ? 'top' : 'bottom']: 24, [left ? 'left' : 'right']: 24 }} onClick={() => { setOpen(!open); if (!open) void run(async () => { await refresh(); }); }}><span className="flex transition-transform duration-200 motion-reduce:transition-none" style={{ transform: open ? 'rotate(45deg)' : 'rotate(0deg)' }}><Plus className="size-6" aria-hidden="true" /></span></Button>
@@ -175,11 +201,11 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
         </section><footer className="rounded-xl border bg-card p-4 text-xs text-muted-foreground"><p>Segnalata da {selected.authorName}</p><p>Viewport originale: {selected.context.viewport.width} × {selected.context.viewport.height} · scroll {Math.round(selected.context.scroll.y)} px</p></footer>
       </div> : <>
         <div className="grid gap-3 rounded-xl border bg-card p-4 shadow-sm"><h3 className="font-semibold">Crea una segnalazione</h3><Button className="w-full justify-start" disabled={busy} onClick={() => { setMode('element'); setOpen(false); }}><Crosshair className="size-4" aria-hidden="true" />Seleziona elemento</Button><Button className="w-full justify-start" disabled={busy} variant="outline" onClick={() => { setMode('pin'); setOpen(false); }}><MapPin className="size-4" aria-hidden="true" />Pin libero</Button></div>
-        <section className={box} aria-label="Lista segnalazioni"><Button className="w-full justify-between" variant="outline" aria-expanded={listOpen} aria-controls="reporty-page-reports" onClick={() => setListOpen(previous => !previous)}>Segnalazioni della pagina ({reports.length})<span className="flex transition-transform duration-200 motion-reduce:transition-none" style={{ transform: listOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}><ChevronDown className="size-4" aria-hidden="true" /></span></Button>
+        <section className={box} aria-label="Lista segnalazioni"><label className="flex cursor-pointer items-center justify-between gap-3 text-sm" htmlFor="reporty-show-resolved"><span>Mostra segnalazioni risolte</span><input id="reporty-show-resolved" type="checkbox" role="switch" className="size-4 accent-primary" checked={showResolved} onChange={event => setShowResolved(event.target.checked)} /></label><Button className="w-full justify-between" variant="outline" aria-expanded={listOpen} aria-controls="reporty-page-reports" onClick={() => setListOpen(previous => !previous)}>Segnalazioni della pagina ({reports.filter(report => showResolved || report.status !== 'resolved').length})<span className="flex transition-transform duration-200 motion-reduce:transition-none" style={{ transform: listOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}><ChevronDown className="size-4" aria-hidden="true" /></span></Button>
         <div id="reporty-page-reports" hidden={!listOpen} className={listOpen ? "grid gap-2" : "hidden"}>
           {listLoading ? <ReportRowsSkeleton /> : null}
-          {!listLoading && !reports.length ? <p className="text-muted-foreground">Nessuna segnalazione su questa pagina.</p> : null}
-          {!listLoading && reports.map((report, index) => <button key={report.id} className="rounded-lg border p-3 text-left hover:bg-accent" onClick={() => void view(report)}><p className="line-clamp-3 break-words">{index + 1}. {report.body}</p><time dateTime={report.created_at} className="block text-xs text-muted-foreground">{formatReportDateTime(report.created_at)}</time><div className="mt-2 flex flex-wrap gap-2 text-xs"><span className={`rounded-full px-2 py-1 ${statusColors[report.status]}`}>{statusLabels[report.status]}</span><span className={`rounded-full px-2 py-1 ${priorityColors[report.priority ?? 'medium']}`}>Priorità {priorityLabels[report.priority ?? 'medium'].toLowerCase()}</span>{!anchorPosition(report.context.anchor) ? <span className="text-muted-foreground">Elemento non trovato</span> : null}</div></button>)}
+          {!listLoading && !reports.some(report => showResolved || report.status !== 'resolved') ? <p className="text-muted-foreground">Nessuna segnalazione su questa pagina.</p> : null}
+          {!listLoading && reports.map((report, index) => !showResolved && report.status === 'resolved' ? null : <button key={report.id} className="rounded-lg border p-3 text-left hover:bg-accent" onClick={() => void view(report)}><p className="line-clamp-3 break-words">{index + 1}. {report.body}</p><time dateTime={report.created_at} className="block text-xs text-muted-foreground">{formatReportDateTime(report.created_at)}</time><div className="mt-2 flex flex-wrap gap-2 text-xs"><span className={`rounded-full px-2 py-1 ${statusColors[report.status]}`}>{statusLabels[report.status]}</span><span className={`rounded-full px-2 py-1 ${priorityColors[report.priority ?? 'medium']}`}>Priorità {priorityLabels[report.priority ?? 'medium'].toLowerCase()}</span>{!anchorPosition(report.context.anchor) ? <span className="text-muted-foreground">Elemento non trovato</span> : null}</div></button>)}
         </div></section>
       </>}
     </section> : null}
