@@ -1,3 +1,4 @@
+import { ReportPagination, useReportPagination, REPORT_PAGE_SIZE } from '@/components/report-pagination';
 import { FilterPill } from '@/components/filter-pill';
 import { ReportIcon } from '@/components/report-icon';
 import { Switch } from '@/components/ui/switch';
@@ -173,6 +174,9 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
   useEffect(() => () => { modal.current?.close(); }, []);
   const pageReports = reports.filter(report => report.page_path === page.pagePath);
   const filtered = pageReports.filter(report => (!statuses.length || statuses.includes(report.status)) && (!priorities.length || priorities.includes(report.priority ?? 'medium')) && `${report.body} ${report.page_path} ${report.authorName}`.toLocaleLowerCase('it').includes(search.toLocaleLowerCase('it'))).sort(compareReports);
+  const pagination = useReportPagination(filtered.length, JSON.stringify([search, statuses, priorities, page.pagePath, environment.id]));
+  const paginated = filtered.slice(pagination.start, pagination.start + REPORT_PAGE_SIZE);
+  const listRef = useRef<HTMLElement | null>(null);
   const filters = [
     ...statuses.map(value => ({key: 'status-'+value, label: 'Stato: '+statusLabels[value as keyof typeof statusLabels], remove: () => setStatuses(items => items.filter(item => item !== value))})),
     ...priorities.map(value => ({key: 'priority-'+value, label: 'Priorità: '+priorityLabels[value as ReportPriority], remove: () => setPriorities(items => items.filter(item => item !== value))})),
@@ -256,14 +260,15 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
   </div>
   {filters.length ? <div className="flex flex-wrap gap-2" aria-label="Filtri attivi">{filters.map(filter => <FilterPill key={filter.key} label={filter.label} onRemove={filter.remove}><ReportIcon value={filter.key.replace(/^(status|priority)-/, "")} /></FilterPill>)}</div> : null}
 
-  <section className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1" aria-label="Lista segnalazioni">
+  <section ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1" aria-label="Lista segnalazioni">
     {listLoading ? <ReportRowsSkeleton /> : null}
     {!listLoading && !filtered.length ? <p className="p-6 text-muted-foreground">Nessuna segnalazione trovata.</p> : null}
-    {!listLoading && filtered.map(report => <button key={report.id} className="block w-full space-y-3 rounded-xl border bg-card p-4 text-left transition-colors duration-150 hover:border-primary/30 hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none" onClick={() => void view(report)}>
+    {!listLoading && paginated.map(report => <button key={report.id} className="block w-full space-y-3 rounded-xl border bg-card p-4 text-left transition-colors duration-150 hover:border-primary/30 hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none" onClick={() => void view(report)}>
       <div className="flex flex-wrap items-start justify-between gap-3"><p className="min-w-0 flex-1 line-clamp-3 break-words font-medium">{report.body}</p><div className="flex shrink-0 flex-wrap gap-2 text-xs"><span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 ${statusColors[report.status]}`}><ReportIcon value={report.status} />{statusLabels[report.status]}</span><span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 ${priorityColors[report.priority ?? 'medium']}`}><ReportIcon value={report.priority ?? 'medium'} />Priorità {priorityLabels[report.priority ?? 'medium'].toLowerCase()}</span></div></div>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground"><div className="flex min-w-0 flex-wrap gap-2"><span>{report.authorName}</span><span className="break-all">· {report.page_path}</span></div><time dateTime={report.created_at} className="ml-auto shrink-0 text-right">{formatReportDateTime(report.created_at)}</time></div>
     </button>)}
   </section>
+  {!listLoading ? <ReportPagination total={filtered.length} page={pagination.page} pages={pagination.pages} onChange={next => { pagination.setPage(next); listRef.current?.scrollTo({ top: 0 }); }} /> : null}
 </div>}
       </div>
       {modalOpen ? floatingControls : null}
