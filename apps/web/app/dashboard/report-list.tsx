@@ -6,7 +6,7 @@ import { RepliesSkeleton } from '@/components/page-skeletons';
 import { ScreenshotGallery } from '@/components/screenshot-gallery';
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { formatReportDateTime, priorityLabels, type Report, type ReportComment } from '@reporty/shared';
+import { compareReports, formatReportDateTime, priorityLabels, type Report, type ReportComment } from '@reporty/shared';
 import { getReportThread, mutateReport } from './report-actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,7 +33,7 @@ export function ReportList({ reports, environments }: { reports: Report[]; envir
   const [imageLoading, setImageLoading] = useState(false);
   const [threadLoading, setThreadLoading] = useState(false);
   const current = reports.find(report => report.id === selected?.id) ?? null;
-  const filtered = reports.filter(report => (!page.length || page.includes(report.page_path)) && (!priority.length || priority.includes(report.priority ?? 'medium')) && (!filter.length || filter.includes(report.status)) && (!environment.length || environment.includes(report.environment_id)) && `${report.body} ${report.page_path}`.toLocaleLowerCase('it').includes(search.toLocaleLowerCase('it'))).sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.priority ?? 'medium'] - { high: 0, medium: 1, low: 2 }[b.priority ?? 'medium']));
+  const filtered = reports.filter(report => (!page.length || page.includes(report.page_path)) && (!priority.length || priority.includes(report.priority ?? 'medium')) && (!filter.length || filter.includes(report.status)) && (!environment.length || environment.includes(report.environment_id)) && `${report.body} ${report.page_path}`.toLocaleLowerCase('it').includes(search.toLocaleLowerCase('it'))).sort(compareReports);
   const activeFilters = [
     ...filter.map(value => ({ key: `status-${value}`, label: `Stato: ${labels[value as keyof typeof labels]}`, remove: () => setFilter(values => values.filter(item => item !== value)) })),
     ...priority.map(value => ({ key: `priority-${value}`, label: `Priorità: ${priorityLabels[value as keyof typeof priorityLabels]}`, remove: () => setPriority(values => values.filter(item => item !== value)) })),
