@@ -21,7 +21,7 @@ export function ProjectList({ projects }: { projects: Project[] }) {
     </div>
     <div className="overflow-hidden rounded-xl border bg-card">
       {filtered.length ? <ul className="divide-y">{filtered.map(project => <li key={project.id}>
-        <Link href={`/dashboard/projects/${project.id}`} className="flex flex-wrap items-center justify-between gap-4 p-5 transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2]">
+        <Link href={`/dashboard/projects/${project.id}`} className="flex flex-wrap items-center justify-between gap-4 p-5 transition-colors duration-150 hover:bg-primary/5 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2]">
           <div className="flex min-w-0 items-center gap-4">
             <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-muted font-semibold">{project.name.slice(0, 1).toUpperCase()}</span>
             <div className="min-w-0"><h2 className="font-medium">{project.name}</h2><p className="mt-1 break-all text-sm text-muted-foreground">{project.environments.map(environment => environment.origin).join(' · ') || 'Nessun ambiente configurato'}</p></div>
