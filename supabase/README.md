@@ -23,7 +23,7 @@ In Authentication → URL Configuration impostare Site URL e Redirect URLs:
 - Locale: `http://localhost:3000` e `http://localhost:3000/auth/callback`.
 - Produzione: `https://reporty-extension.vercel.app` e `https://reporty-extension.vercel.app/auth/callback`.
 
-Abilitare Email e Google in Sign In / Providers. Le credenziali OAuth Google restano nel pannello Supabase. Il link email PKCE va aperto nello stesso browser dal quale è stato richiesto.
+Abilitare Google e disabilitare il provider Email in Sign In / Providers. Le credenziali OAuth Google restano nel pannello Supabase. La dashboard consente l’accesso soltanto tramite Google.
 
 ## Verifiche locali
 

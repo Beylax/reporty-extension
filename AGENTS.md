@@ -21,7 +21,7 @@
 
 ## Modello di prodotto
 
-- Gli utenti della dashboard sono sviluppatori (Google o link email, anche per creare il primo progetto). Il team usa dashboard ed estensione. I clienti/revisori ospiti usano l'estensione tramite link e nome, senza registrazione o accesso alla dashboard.
+- Gli utenti della dashboard sono sviluppatori (Google, anche per creare il primo progetto). Il team usa dashboard ed estensione. I clienti/revisori ospiti usano l'estensione tramite link e nome, senza registrazione o accesso alla dashboard.
 - I progetti contengono ambienti identificati da origini esplicite. Protocollo e porta fanno parte dell'origine.
 - Il termine workspace indica attualmente la dashboard: non esiste una tabella workspace separata.
 - Segnalazioni collegate a elementi DOM o pin liberi, con descrizione, screenshot opzionale e risposte.
@@ -31,7 +31,7 @@
 
 ## Permessi
 
-- Tutti gli sviluppatori autenticati (Google o link email, non account anonimi) vedono, modificano ed eliminano tutti i progetti, ambienti e segnalazioni. Non esistono più ruoli o membership nella UI né inviti sviluppatore.
+- Tutti gli sviluppatori autenticati (Google, non account anonimi) vedono, modificano ed eliminano tutti i progetti, ambienti e segnalazioni. Non esistono più ruoli o membership nella UI né inviti sviluppatore.
 - Ogni ambiente ha un link ospite generato automaticamente alla creazione, recuperabile in sola lettura nella propria card della tab Ambienti. Rigenerarlo revoca solo quel link e le sessioni associate; gli altri link restano validi. Non esistono tabelle amministratori o membri di progetto.
 - Gli inviti ospiti indicano un ambiente iniziale; nome obbligatorio e avvio dal link, collegamento automatico e consenso browser sul dominio quando necessario. Gli ospiti possono creare, leggere e rispondere e modificare stato e priorità delle segnalazioni del proprio progetto; non modificano il testo né eliminano segnalazioni.
 - Autorizzare ogni operazione sul backend e nel database: nascondere un pulsante non è un controllo di sicurezza.

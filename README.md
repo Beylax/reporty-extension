@@ -59,7 +59,7 @@ Le sessioni ospite dell’estensione sono separate per origine del sito (protoco
 
 ### Accesso e database
 
-Tutti gli sviluppatori che accedono con Google o link email possono gestire tutti i progetti, ambienti e segnalazioni, senza inviti o ruoli amministratore. Ogni ambiente ha un link guest automatico nella sua card: **Copia link** e **Rigenera link**. La rigenerazione revoca solo il precedente link dell’ambiente e le sue sessioni.
+Tutti gli sviluppatori che accedono con Google possono gestire tutti i progetti, ambienti e segnalazioni, senza inviti o ruoli amministratore. Ogni ambiente ha un link guest automatico nella sua card: **Copia link** e **Rigenera link**. La rigenerazione revoca solo il precedente link dell’ambiente e le sue sessioni.
 
 Per inizializzare o ricostruire il database usare **`supabase/initialize.sql`**. Ogni esecuzione elimina i dati Reporty e tutti gli utenti Auth, poi ricrea lo schema. Svuotare prima il bucket screenshots tramite Storage. I dettagli sono in [supabase/README.md](supabase/README.md).
 
