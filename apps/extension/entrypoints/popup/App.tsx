@@ -1,3 +1,4 @@
+import { ThemeSwitch } from '@/components/theme-switch';
 
 import { BrandLogo } from '@/components/brand-logo';
 import { useNotify } from '@/components/ui/toast';
@@ -58,7 +59,7 @@ export default function App() {
     });
   }
   return <main className="space-y-4 p-4">
-    <header className="flex items-center justify-between"><h1><BrandLogo /></h1>{context?.kind !== 'guest' ? <a href={apiOrigin} target="_blank" rel="noreferrer" className="text-xs underline">Apri piattaforma</a> : null}</header>
+    <header className="flex items-center justify-between"><h1><BrandLogo /></h1><ThemeSwitch />{context?.kind !== 'guest' ? <a href={apiOrigin} target="_blank" rel="noreferrer" className="text-xs underline">Apri piattaforma</a> : null}</header>
     {!loading && context ? <Card><CardHeader><CardTitle>Sito corrente</CardTitle><CardDescription className="break-all">{tab?.origin ?? 'Apri una pagina HTTP o HTTPS.'}</CardDescription></CardHeader><CardContent className="space-y-4">
       {environments.length ? <>
         <div className="rounded-lg bg-muted p-3"><p className="font-medium">{environments.find(environment => environment.id === environmentId)?.projectName}</p><p className="text-xs text-muted-foreground">{environments.find(environment => environment.id === environmentId)?.name}</p></div>

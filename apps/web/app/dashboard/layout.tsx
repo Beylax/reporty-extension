@@ -1,3 +1,4 @@
+import { ThemeSwitch } from '@/components/theme-switch';
 
 import { BrandLogo } from '@/components/brand-logo';
 import Link from 'next/link';
@@ -15,7 +16,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div className="min-h-screen md:grid md:grid-cols-[248px_minmax(0,1fr)]">
       <aside className="border-b bg-sidebar text-sidebar-foreground md:sticky md:top-0 md:h-screen md:border-r md:border-b-0">
         <div className="flex h-full min-h-0 flex-col gap-6 p-5">
-          <Link href="/dashboard" className="flex items-center gap-3 text-xl font-semibold tracking-tight"><BrandLogo /></Link>
+          <div className="flex items-center justify-between gap-2"><Link href="/dashboard" className="min-w-0"><BrandLogo /></Link><ThemeSwitch /></div>
           <Link href="/dashboard/new" className={buttonVariants({ className: 'w-full justify-start' })}>+ Nuovo progetto</Link>
           <DashboardNav projects={projects.data ?? []} />
           <div className="mt-auto flex min-w-0 items-center gap-2 border-t pt-4">

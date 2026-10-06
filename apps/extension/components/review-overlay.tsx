@@ -1,3 +1,4 @@
+import { ThemeSwitch } from '@/components/theme-switch';
 
 import { BrandLogo } from '@/components/brand-logo';
 import { useNotify } from '@/components/ui/toast';
@@ -137,7 +138,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
     }) : null}
     <Button aria-label={open ? "Chiudi segnalazioni Reporty" : "Apri segnalazioni Reporty"} aria-expanded={open} className="pointer-events-auto fixed size-13 rounded-full shadow-xl transition-transform duration-200 hover:scale-110 motion-reduce:transition-none" style={{ [top ? 'top' : 'bottom']: 24, [left ? 'left' : 'right']: 24 }} onClick={() => { setOpen(!open); if (!open) void run(async () => { await refresh(); }); }}><span className="flex transition-transform duration-200 motion-reduce:transition-none" style={{ transform: open ? 'rotate(45deg)' : 'rotate(0deg)' }}><Plus className="size-6" aria-hidden="true" /></span></Button>
     {open && !mode ? <section aria-label="Segnalazioni Reporty" className="pointer-events-auto fixed flex max-h-[75vh] w-[min(380px,calc(100vw-48px))] flex-col gap-4 overflow-y-auto rounded-xl border bg-muted/50 p-4 text-sm text-card-foreground shadow-2xl" style={panelPosition}>
-      <div className="flex items-center justify-between gap-2">{selected ? <Button variant="outline" className="rounded-lg" onClick={() => { setSelected(null); setListOpen(true); }}><ArrowLeft className="size-4" aria-hidden="true" />Torna alle segnalazioni</Button> : <BrandLogo compact logoUrl={logoUrl} />}</div>
+      <div className="flex items-center justify-between gap-2">{selected ? <Button variant="outline" className="rounded-lg" onClick={() => { setSelected(null); setListOpen(true); }}><ArrowLeft className="size-4" aria-hidden="true" />Torna alle segnalazioni</Button> : <BrandLogo compact logoUrl={logoUrl} />}<ThemeSwitch host={host} /></div>
       <header className="rounded-xl border bg-card p-4"><h2 className="font-semibold">{environment.projectName}</h2><p className="break-all text-xs text-muted-foreground">{environment.name} · {page.pagePath}</p></header>
 
       {draft ? <form className="grid gap-3 rounded-xl border bg-card p-4 shadow-sm" onSubmit={event => { event.preventDefault(); void run(async () => {
