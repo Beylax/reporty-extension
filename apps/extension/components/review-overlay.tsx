@@ -12,6 +12,7 @@ import { ArrowLeft, Menu, X, Crosshair, Eye, MapPin, Pencil, Plus, Target } from
 import { compareReports, formatReportDateTime, getPageContext, priorityLabels, type ReportPriority, type Anchor, type Report, type ReportComment, type ReportContext } from '@reporty/shared';
 import type { Environment, Site } from '@/lib/session';
 import { captureHighlightedScreenshot } from '@/lib/screenshot';
+import { captureTab } from '@/lib/capture-tab';
 import { elementAnchor, anchorPosition } from '@/lib/anchor';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -66,7 +67,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
   }
   async function captureScreenshot(context: ReportContext) {
     setCapturing(true);
-    try { return await captureHighlightedScreenshot(host, context, () => message({ type: 'REPORTY_CAPTURE' })); } finally { setCapturing(false); }
+    try { return await captureHighlightedScreenshot(host, context, captureTab); } finally { setCapturing(false); }
   }
   async function refresh() {
     setListLoading(true);

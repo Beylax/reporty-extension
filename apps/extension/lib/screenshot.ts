@@ -35,7 +35,8 @@ export async function captureHighlightedScreenshot(host: HTMLElement, context: R
     // Hide the entire shadow tree, including fixed buttons and toast portals.
     surfaces.forEach(element => element.style.setProperty('display', 'none', 'important'));
     document.documentElement.append(marker);
-    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    // Start the permission request synchronously within the user gesture.
+    // captureTab waits for rendered frames before drawing the shared tab.
     return await capture();
   } finally {
     marker.remove();

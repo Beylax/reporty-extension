@@ -133,7 +133,7 @@ export default defineBackground(() => {
         await browser.storage.local.set({ [`pendingConnection:${sender.tab.id}`]: { nonce, tabId: sender.tab.id, expiresAt: Date.now() + 120000 } });
         return sendResponse({ ok: true, data: { nonce, extensionId: browser.runtime.id } });
       }
-      if (['REPORTY_REPORT', 'REPORTY_CAPTURE', 'REPORTY_SCREENSHOT'].includes(message?.type)) {
+      if (['REPORTY_REPORT', 'REPORTY_SCREENSHOT'].includes(message?.type)) {
         if (sender.frameId !== 0 || !sender.tab?.id || !sender.url) throw new Error('Pagina non valida.');
         const tab = await browser.tabs.get(sender.tab.id);
         if (!tab.url || new URL(tab.url).origin !== new URL(sender.url).origin) throw new Error('Pagina cambiata.');
@@ -143,14 +143,6 @@ export default defineBackground(() => {
         const sessionToken = await getSessionToken(origin);
         const context = sessionToken ? await getContext(origin, sessionToken) : null;
         if (!site || !context?.environments.some(item => item.id === site.environmentId && item.origin === origin)) throw new Error('Accesso al sito non disponibile.');
-        if (message.type === 'REPORTY_CAPTURE') {
-          const active = (await browser.tabs.query({ active: true, windowId: tab.windowId }))[0];
-          if (active?.id !== tab.id) throw new Error('Torna alla scheda da revisionare.');
-          const image = await browser.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 75 }).catch(() => { throw new Error('Apri il popup Reporty per autorizzare lo screenshot, oppure prosegui senza immagine.'); });
-          const after = await browser.tabs.get(tab.id!);
-          if (after.url !== tab.url || !(await browser.tabs.get(tab.id!)).active) throw new Error('Pagina cambiata durante lo screenshot.');
-          return sendResponse({ ok: true, data: image });
-        }
         if (message.type === 'REPORTY_REPORT' && message.operation === 'create' && message.payload?.context?.url !== tab.url) throw new Error('La pagina è cambiata: crea una nuova segnalazione.');
         const endpoint = message.type === 'REPORTY_SCREENSHOT' ? 'screenshot' : 'reports';
         const body = message.type === 'REPORTY_SCREENSHOT' ? { environmentId: site.environmentId, id: message.id } : { environmentId: site.environmentId, operation: message.operation, payload: message.payload, screenshot: message.screenshot };

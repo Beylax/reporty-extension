@@ -49,7 +49,7 @@ Sono implementati collegamento membri/ospiti, elenco ambienti, abilitazione per 
 
 Dopo ogni build ricaricare l’estensione dalla pagina del browser e ricaricare il sito. Il + apre la lista della pagina. Scegliere Seleziona elemento o Pin libero; selezionare il punto, scrivere il commento, controllare o rimuovere lo screenshot e inviare. Durante la selezione i click sulla pagina sono intercettati per non attivare link e pulsanti. Esc annulla la selezione.
 
-Lo screenshot riguarda solo la scheda attiva e l’area visibile. Se il permesso activeTab non è disponibile dopo una navigazione, riaprire il popup sul sito e riprovare; è possibile inviare senza immagine. Sono accettati screenshot JPEG fino a 2,5 MB, così la richiesta resta entro il limite di payload Vercel.
+Lo screenshot usa la condivisione della scheda corrente, con consenso del browser a ogni acquisizione, senza aprire il popup Reporty. Selezionare la scheda del sito da revisionare; è possibile annullare e inviare senza immagine. Richiede HTTPS (o localhost) e un browser desktop compatibile. Sono accettati screenshot JPEG fino a 2,5 MB, così la richiesta resta entro il limite di payload Vercel.
 
 Gli ancoraggi DOM usano selettori e un estratto del testo. Se l’elemento non è univoco, visibile o coerente con il testo originale il pin non viene mostrato; la segnalazione resta nella lista. I pin liberi usano coordinate documento e possono spostarsi rispetto al contenuto se il layout cambia. Nessuno stato React, cookie o storage del sito viene salvato o ripristinato. Elementi interni a iframe e shadow DOM non sono selezionabili in questa versione.
 

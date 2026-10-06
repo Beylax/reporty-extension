@@ -21,7 +21,7 @@
     "test:db": "node --test supabase/tests/*.test.mjs",
     "test:extension": "npm run build --workspace=@reporty/extension && node --test scripts/extension-lifecycle.test.mjs",
     "build:widget": "node scripts/build-widget.mjs",
-    "test:widget": "npm run build:widget && node --test scripts/widget-loader.test.mjs"
+    "test:widget": "npm run build:widget && node --experimental-strip-types --test scripts/widget-loader.test.mjs scripts/capture-tab.test.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8"
