@@ -66,3 +66,7 @@ Per inizializzare o ricostruire il database usare **`supabase/initialize.sql`**.
 ### Script per i siti in gestione
 
 Dopo aver applicato `supabase/widget.sql`, copiare lo snippet dalla card dell’ambiente e incollarlo nel sito. Abilitare la revisione dalla dashboard: i visitatori inseriscono il nome e hanno comandi completi sulle segnalazioni dell’ambiente. Disabilitando lo script le operazioni sono bloccate e il pannello scompare entro 10 secondi. Screenshot opzionali con condivisione della scheda e consenso del browser. Il loader scarica il pannello solo quando abilitato.
+
+### Tema e componenti UI
+
+Dashboard, estensione e widget usano il tema Violet Bloom di tweakcn, con modalità chiara/scura e font Plus Jakarta Sans incluso localmente (licenza OFL). Il marchio è testuale: Reporty. Select, checkbox, switch, input, textarea e accordion usano i componenti UI condivisi nello stile shadcn/Base UI; i popup dell’estensione restano nello shadow root o nella modale corrente.

@@ -1,3 +1,4 @@
+import { SelectField } from '@/components/ui/select';
 import { ThemeSwitch } from '@/components/theme-switch';
 
 import { BrandLogo } from '@/components/brand-logo';
@@ -63,7 +64,7 @@ export default function App() {
     {!loading && context ? <Card><CardHeader><CardTitle>Sito corrente</CardTitle><CardDescription className="break-all">{tab?.origin ?? 'Apri una pagina HTTP o HTTPS.'}</CardDescription></CardHeader><CardContent className="space-y-4">
       {environments.length ? <>
         <div className="rounded-lg bg-muted p-3"><p className="font-medium">{environments.find(environment => environment.id === environmentId)?.projectName}</p><p className="text-xs text-muted-foreground">{environments.find(environment => environment.id === environmentId)?.name}</p></div>
-        <div className="grid gap-2"><Label htmlFor="position">Posizione del pulsante</Label><select id="position" className="h-9 rounded-lg border bg-background px-2 text-sm" value={position} onChange={event => setPosition(event.target.value as Site['position'])}><option value="bottom_right">In basso a destra</option><option value="bottom_left">In basso a sinistra</option><option value="top_right">In alto a destra</option><option value="top_left">In alto a sinistra</option></select></div>
+        <div className="grid gap-2"><Label htmlFor="position">Posizione del pulsante</Label><SelectField id="position" value={position} onValueChange={value => setPosition(value as Site['position'])} options={[{"value": "bottom_right", "label": "In basso a destra"}, {"value": "bottom_left", "label": "In basso a sinistra"}, {"value": "top_right", "label": "In alto a destra"}, {"value": "top_left", "label": "In alto a sinistra"}]} /></div>
         <Button disabled={loading} className="w-full" onClick={() => void save(true).catch(error => setStatus(error instanceof Error ? error.message : 'Operazione non riuscita.'))}>{enabled ? 'Salva impostazioni' : 'Abilita su questo sito'}</Button>
         {enabled ? <Button disabled={loading} variant="outline" className="w-full" onClick={() => void save(false).catch(error => setStatus(error instanceof Error ? error.message : 'Operazione non riuscita.'))}>Disabilita su questo sito</Button> : null}
       </> : <p className="text-sm text-muted-foreground">Questo sito non è tra gli ambienti accessibili. Chiedi all’amministratore di aggiungerlo al progetto.</p>}
