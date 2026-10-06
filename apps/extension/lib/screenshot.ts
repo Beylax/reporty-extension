@@ -25,14 +25,23 @@ export async function captureHighlightedScreenshot(host: HTMLElement, context: R
   const pin = document.createElement('div');
   pin.className = 'point'; pin.style.left = `${point.x}px`; pin.style.top = `${point.y}px`;
   shadow.append(pin);
-  const previousVisibility = host.style.visibility;
+  const surfaces = [...new Set([host, document.getElementById('reporty-overlay'), document.getElementById('reporty-widget')])].filter((element): element is HTMLElement => element instanceof HTMLElement);
+  const previousDisplay = surfaces.map(element => ({
+    element,
+    value: element.style.getPropertyValue('display'),
+    priority: element.style.getPropertyPriority('display'),
+  }));
   try {
-    host.style.visibility = 'hidden';
+    // Hide the entire shadow tree, including fixed buttons and toast portals.
+    surfaces.forEach(element => element.style.setProperty('display', 'none', 'important'));
     document.documentElement.append(marker);
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     return await capture();
   } finally {
     marker.remove();
-    host.style.visibility = previousVisibility;
+    previousDisplay.forEach(({ element, value, priority }) => {
+      if (value) element.style.setProperty('display', value, priority);
+      else element.style.removeProperty('display');
+    });
   }
 }

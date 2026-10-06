@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   const secret=request.headers.get('authorization')?.replace(/^Bearer /,'') ?? '';
   if (!validToken(secret)) return cors(Response.json({error:'Inserisci nuovamente il nome.'},{status:401}),origin);
   const {data:environmentId,error}=await supabase.rpc('widget_authorize',{secret,request_origin:origin});
-  if(error || !environmentId) return cors(Response.json({error:'Segnalazioni disabilitate o sessione scaduta.'},{status:403}),origin);
+  if(error || !environmentId) return cors(Response.json({error:'Segnalazioni disabilitate o sessione scaduta.',code:'WIDGET_SESSION_INVALID'},{status:403}),origin);
   const body={...input,environmentId};
   const forwarded=new Request(request.url,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${secret}`},body:JSON.stringify(body)});
   return cors(await (input.action==='screenshot' ? screenshot(forwarded) : reports(forwarded)),origin);

@@ -12,6 +12,15 @@ const script=document.currentScript as HTMLScriptElement | null;
 const key=script?.dataset.reporty;
 const api=script ? new URL(script.src).origin : '';
 const storageKey=`reporty-widget:${key}`;
+function storedToken() {
+  try { const saved = localStorage.getItem(storageKey); if (saved) return saved; } catch { /* Storage unavailable. */ }
+  try { const legacy = sessionStorage.getItem(storageKey) ?? ''; if (legacy) { try { localStorage.setItem(storageKey, legacy); } catch { /* Keep legacy session. */ } } return legacy; } catch { return ''; }
+}
+function saveToken(value: string) {
+  for (const kind of ['localStorage', 'sessionStorage'] as const) {
+    try { if (value) window[kind].setItem(storageKey, value); else window[kind].removeItem(storageKey); } catch { /* Keep session in memory when storage is blocked. */ }
+  }
+}
 const host=document.createElement('div');
 host.id='reporty-widget';
 
@@ -42,7 +51,7 @@ async function captureTab() {
 }
 function Widget() {
   const [config,setConfig]=useState<{enabled:boolean;environment:Environment}|null>(null);
-  const [token,setToken]=useState(()=>{try{return sessionStorage.getItem(storageKey) ?? '';}catch{return '';}});
+  const [token,setToken]=useState(storedToken);
   const [name,setName]=useState(''),[open,setOpen]=useState(false),[busy,setBusy]=useState(false);
   const notify=useNotify();
   useEffect(()=>{
@@ -62,7 +71,7 @@ function Widget() {
     const response=await fetch(`${api}/api/widget`,{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({...message,action:message.type==='REPORTY_SCREENSHOT'?'screenshot':'reports'})});
     const result=await response.json();
     if(!response.ok){
-      if(response.status===403 || response.status===401){setToken('');try{sessionStorage.removeItem(storageKey);}catch{/* Storage unavailable. */}}
+      if(response.status===401 || result.code==='WIDGET_SESSION_INVALID'){setToken('');saveToken('');}
       throw new Error(result.error ?? 'Operazione non riuscita.');
     }
     return result;
@@ -70,7 +79,7 @@ function Widget() {
   if(!config?.enabled)return null;
   if(token)return <ReviewOverlay host={host} site={{environmentId:config.environment.id,position:'bottom_right'}} environment={config.environment} transport={transport} logoUrl={`${api}/brand/reporty-symbol.png`} />;
   return <><Button aria-label="Apri Reporty" className="pointer-events-auto fixed bottom-6 right-6 size-13 rounded-full shadow-xl" onClick={()=>setOpen(value=>!value)}>+</Button>{open?<section className="pointer-events-auto fixed bottom-22 right-6 w-[min(380px,calc(100vw-48px))] space-y-4 rounded-xl border bg-card p-4 shadow-xl"><div className="flex justify-between"><h2 className="font-semibold">Inizia la revisione</h2></div><p className="text-sm text-muted-foreground">{config.environment.projectName} · {config.environment.name}</p><form className="grid gap-3" onSubmit={event=>{event.preventDefault();if(busy)return;setBusy(true);void(async()=>{try{
-    const response=await fetch(`${api}/api/widget`,{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'start',key,name})});const result=await response.json();if(!response.ok)throw new Error(result.error);try{sessionStorage.setItem(storageKey,result.token);}catch{/* Keep session in memory. */}setToken(result.token);notify('Revisione pronta.','success');
+    const response=await fetch(`${api}/api/widget`,{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'start',key,name})});const result=await response.json();if(!response.ok)throw new Error(result.error);saveToken(result.token);setToken(result.token);notify('Revisione pronta.','success');
   }catch(error){notify(error instanceof Error?error.message:'Avvio non riuscito.');}finally{setBusy(false);}})();}}><label htmlFor="reporty-widget-name">Il tuo nome</label><input id="reporty-widget-name" className="h-9 rounded-lg border bg-background px-3" required maxLength={80} value={name} onChange={event=>setName(event.target.value)} /><Button type="submit" disabled={busy}>{busy?<Skeleton className="h-4 w-32 bg-current opacity-30" />:'Inizia revisione'}</Button></form></section>:null}</>;
 }
 if(key && !document.getElementById('reporty-overlay') && !document.getElementById('reporty-widget')) {
