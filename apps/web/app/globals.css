@@ -170,3 +170,9 @@
     @apply font-sans;
   }
 }
+dialog { opacity: 0;  transition: opacity 180ms ease, overlay 180ms allow-discrete, display 180ms allow-discrete; }
+dialog[open] { opacity: 1;  }
+dialog::backdrop { opacity: 0; transition: opacity 180ms ease, overlay 180ms allow-discrete, display 180ms allow-discrete; }
+dialog[open]::backdrop { opacity: 1; }
+@starting-style { dialog[open], dialog[open]::backdrop { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { dialog, dialog::backdrop { transition: none; } }

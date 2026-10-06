@@ -1,11 +1,13 @@
+import { ReportFilter } from '@/components/report-filter';
 import { ThemeSwitch } from '@/components/theme-switch';
 
 import { BrandLogo } from '@/components/brand-logo';
 import { useNotify } from '@/components/ui/toast';
 import { RepliesSkeleton, ReportRowsSkeleton, ScreenshotSkeleton } from '@/components/loading-skeletons';
 import { LoadingImage } from '@/components/loading-image';
+import { ScreenshotGallery } from '@/components/screenshot-gallery';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ChevronDown, Crosshair, Eye, EyeOff, MapPin, Pencil, Plus, Target } from 'lucide-react';
+import { ArrowLeft, Menu, X, Crosshair, Eye, MapPin, Pencil, Plus, Target } from 'lucide-react';
 import { formatReportDateTime, getPageContext, priorityLabels, type ReportPriority, type Anchor, type Report, type ReportComment, type ReportContext } from '@reporty/shared';
 import type { Environment, Site } from '@/lib/session';
 import { captureHighlightedScreenshot } from '@/lib/screenshot';
@@ -23,7 +25,6 @@ const statusLabels = { open: 'Aperta', in_progress: 'In lavorazione', resolved: 
 const statusColors = { open: 'bg-blue-100 text-blue-800', in_progress: 'bg-amber-100 text-amber-800', resolved: 'bg-emerald-100 text-emerald-800' };
 const pinColors = { open: 'bg-blue-600', in_progress: 'bg-amber-600', resolved: 'bg-emerald-600' };
 const priorityColors = { low: 'bg-slate-100 text-slate-700', medium: 'bg-amber-100 text-amber-800', high: 'bg-red-100 text-red-800' };
-const box = 'space-y-3 rounded-xl border bg-card p-4 shadow-sm';
 type Draft = { id: string; context: ReportContext; screenshot?: string; body: string; priority: ReportPriority };
 
 export function ReviewOverlay({ site, environment, host, transport, logoUrl }: { site: Site; environment: Environment; host: HTMLElement; transport?: (body: Record<string, unknown>) => Promise<unknown>; logoUrl?: string }) {
@@ -32,8 +33,12 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
   const [page, setPage] = useState(getPageContext(location.href));
   const [reports, setReports] = useState<Report[]>([]);
   const [open, setOpen] = useState(false);
-  const [listOpen, setListOpen] = useState(false);
-  const [showResolved, setShowResolved] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const modal = useRef<HTMLDialogElement>(null);
+  const [search, setSearch] = useState('');
+  const [statuses, setStatuses] = useState<string[]>(['open', 'in_progress']);
+  const [priorities, setPriorities] = useState<string[]>([]);
+  const [showResolved, setShowResolved] = useState(false);
   const [mode, setMode] = useState<'element' | 'pin' | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [selected, setSelected] = useState<Report | null>(null);
@@ -41,6 +46,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
   const [reply, setReply] = useState('');
   const [edit, setEdit] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState('');
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const setStatus = useNotify();
   const [listLoading, setListLoading] = useState(true);
   const [threadLoading, setThreadLoading] = useState(false);
@@ -64,7 +70,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
   async function refresh() {
     setListLoading(true);
     try {
-      const result = await message({ type: 'REPORTY_REPORT', operation: 'list', payload: { pagePath: getPageContext(location.href).pagePath } });
+      const result = await message({ type: 'REPORTY_REPORT', operation: 'list', payload: {} });
       const chronological = [...(result.data as Report[])].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id.localeCompare(b.id));
       setReports(chronological);
       return chronological;
@@ -76,7 +82,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
     finally { setBusy(false); }
   }
   async function view(report: Report) {
-    setSelected(report); setReply(''); setDraft(null); setEdit(null); setComments([]); setImageUrl(''); setOpen(true);
+    setSelected(report); setReply(''); setDraft(null); setEdit(null); setComments([]); setImageUrl(''); setOpen(false); setModalOpen(true);
     await run(async () => {
       const result = await loadThread(report.id);
       setComments(result.data.comments);
@@ -152,22 +158,36 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
     document.addEventListener('mousemove', move, true); document.addEventListener('click', click, true); document.addEventListener('keydown', escape, true);
     return () => { document.removeEventListener('pointerdown', preventActivation, true); document.removeEventListener('mousedown', preventActivation, true); document.removeEventListener('mousemove', move, true); document.removeEventListener('click', click, true); document.removeEventListener('keydown', escape, true); };
   }, [mode, host]);
+  useEffect(() => {
+    if (modalOpen && !modal.current?.open) modal.current?.showModal();
+    if (!modalOpen && modal.current?.open) modal.current?.close();
+  }, [modalOpen]);
+  useEffect(() => () => { modal.current?.close(); }, []);
+  const pageReports = reports.filter(report => report.page_path === page.pagePath);
+  const filtered = pageReports.filter(report => (!statuses.length || statuses.includes(report.status)) && (!priorities.length || priorities.includes(report.priority ?? 'medium')) && `${report.body} ${report.page_path} ${report.authorName}`.toLocaleLowerCase('it').includes(search.toLocaleLowerCase('it'))).sort((a,b) => ({high:0,medium:1,low:2}[a.priority ?? 'medium'] - {high:0,medium:1,low:2}[b.priority ?? 'medium']));
+  const filters = [
+    ...statuses.map(value => ({key: 'status-'+value, label: 'Stato: '+statusLabels[value as keyof typeof statusLabels], remove: () => { const next = statuses.filter(item => item !== value); setStatuses(next); setShowResolved(!next.length || next.includes('resolved')); }})),
+    ...priorities.map(value => ({key: 'priority-'+value, label: 'Priorità: '+priorityLabels[value as ReportPriority], remove: () => setPriorities(items => items.filter(item => item !== value))})),
+  ];
   const top = site.position.startsWith('top'), left = site.position.endsWith('left');
   const panelPosition = { [top ? 'top' : 'bottom']: 88, [left ? 'left' : 'right']: 24 };
   return <>
     {hover && mode ? <div className="pointer-events-none fixed border-2 border-indigo-500 bg-indigo-500/10" style={{ left: hover.left, top: hover.top, width: hover.width, height: hover.height }} /> : null}
     {mode ? <div className="pointer-events-auto fixed left-1/2 top-4 -translate-x-1/2 rounded-lg border bg-card p-3 text-sm shadow-xl">{mode === 'element' ? 'Seleziona un elemento' : 'Posiziona un pin'} · Esc per annullare <Button size="sm" variant="outline" onClick={() => { setMode(null); setOpen(true); }}>Annulla</Button></div> : null}
-    {!mode && !draft ? reports.map((report, index) => {
+    {!mode && !draft ? pageReports.map((report, index) => {
       const position = anchorPosition(report.context.anchor);
       if (!position || (!showResolved && report.status === 'resolved')) return null;
       return <button key={report.id} aria-label={`Segnalazione ${index + 1}, ${statusLabels[report.status]}: ${report.body.slice(0, 60)}`} title={`Segnalazione ${index + 1} · ${statusLabels[report.status]}`} className={`pointer-events-auto fixed flex size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white ${pinColors[report.status]} text-sm font-semibold text-white shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`} style={{ left: position.x, top: position.y }} onClick={() => void view(report)}>{index + 1}</button>;
     }) : null}
-    <Button aria-label={open ? "Chiudi segnalazioni Reporty" : "Apri segnalazioni Reporty"} aria-expanded={open} className="pointer-events-auto fixed size-13 rounded-full shadow-xl transition-transform duration-200 hover:scale-110 motion-reduce:transition-none" style={{ [top ? 'top' : 'bottom']: 24, [left ? 'left' : 'right']: 24 }} onClick={() => { setOpen(!open); if (!open) void run(async () => { await refresh(); }); }}><span className="flex transition-transform duration-200 motion-reduce:transition-none" style={{ transform: open ? 'rotate(45deg)' : 'rotate(0deg)' }}><Plus className="size-6" aria-hidden="true" /></span></Button>
-    {open && !mode ? <section aria-label="Segnalazioni Reporty" className="pointer-events-auto fixed flex max-h-[75vh] w-[min(380px,calc(100vw-48px))] flex-col gap-4 overflow-y-auto rounded-xl border bg-muted/50 p-4 text-sm text-card-foreground shadow-2xl" style={panelPosition}>
-      <div className="flex items-center justify-between gap-2">{selected ? <Button variant="outline" className="rounded-lg" onClick={() => { setSelected(null); setListOpen(true); }}><ArrowLeft className="size-4" aria-hidden="true" />Torna alle segnalazioni</Button> : <BrandLogo compact logoUrl={logoUrl} />}<ThemeSwitch host={host} /></div>
-      <header className="rounded-xl border bg-card p-4"><h2 className="font-semibold">{environment.projectName}</h2><p className="break-all text-xs text-muted-foreground">{environment.name} · {page.pagePath}</p></header>
 
-      {draft ? <form className="grid gap-3 rounded-xl border bg-card p-4 shadow-sm" onSubmit={event => { event.preventDefault(); void run(async () => {
+    <Button aria-label={open ? 'Chiudi creazione segnalazione' : 'Crea segnalazione'} aria-expanded={open} className="pointer-events-auto fixed size-13 rounded-full shadow-xl" style={{ [top ? 'top' : 'bottom']: 24, [left ? 'left' : 'right']: 24 }} onClick={() => { setOpen(!open); setModalOpen(false); }}><span className="flex transition-transform motion-reduce:transition-none" style={{transform:open?'rotate(45deg)':'rotate(0deg)'}}><Plus className="size-6" /></span></Button>
+<Button aria-label={modalOpen ? 'Chiudi segnalazioni' : 'Apri lista segnalazioni'} aria-expanded={modalOpen} className="pointer-events-auto fixed size-7 rounded-full p-0 shadow-xl" style={{ [top ? 'top' : 'bottom']: 36, [left ? 'left' : 'right']: 88 }} onClick={() => { if (modalOpen) { setModalOpen(false); } else { setOpen(false); setSelected(null); setModalOpen(true); void run(async () => { await refresh(); }); } }}>{modalOpen ? <X className="size-4" /> : <Menu className="size-4" />}</Button>
+    {!mode && !draft ? <div className="pointer-events-none fixed flex flex-col gap-3" style={{ [top ? 'top' : 'bottom']: 88, [left ? 'left' : 'right']: 28 }} aria-hidden={!open}>
+      <Button variant="outline" size="icon" aria-label="Seleziona elemento" title="Seleziona elemento" disabled={busy} tabIndex={open ? 0 : -1} className={`size-11 rounded-full shadow-lg transition-all duration-200 motion-reduce:transition-none ${open ? 'pointer-events-auto scale-100 opacity-100' : 'pointer-events-none scale-75 opacity-0'}`} style={{ transform: open ? 'translateY(0)' : `translateY(${top ? '-12px' : '12px'})` }} onClick={() => { setMode('element'); setOpen(false); }}><Crosshair className="size-5" aria-hidden="true" /></Button>
+      <Button variant="outline" size="icon" aria-label="Pin libero" title="Pin libero" disabled={busy} tabIndex={open ? 0 : -1} className={`size-11 rounded-full shadow-lg transition-all duration-200 motion-reduce:transition-none ${open ? 'pointer-events-auto scale-100 opacity-100' : 'pointer-events-none scale-75 opacity-0'}`} style={{ transitionDelay: open ? '50ms' : '0ms', transform: open ? 'translateY(0)' : `translateY(${top ? '-20px' : '20px'})` }} onClick={() => { setMode('pin'); setOpen(false); }}><MapPin className="size-5" aria-hidden="true" /></Button>
+    </div> : null}
+    {open && !mode && draft ? <section aria-label="Crea segnalazione" className="pointer-events-auto fixed max-h-[75vh] w-[min(380px,calc(100vw-48px))] space-y-4 overflow-y-auto rounded-xl border bg-background p-4 text-sm text-foreground shadow-xl" style={panelPosition}>
+      {<form className="grid gap-3 rounded-xl border bg-card p-4 shadow-sm" onSubmit={event => { event.preventDefault(); void run(async () => {
         const result = await message({ type: 'REPORTY_REPORT', operation: 'create', payload: { id: draft.id, body: draft.body, priority: draft.priority, context: draft.context }, screenshot: draft.screenshot });
         setDraft(null); await refresh(); setStatus(result.warning ?? 'Segnalazione inviata.', result.warning ? 'error' : 'success');
       }); }}>
@@ -180,34 +200,54 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
           setDraft(previous => previous ? { ...previous, screenshot } : previous);
         })}>Acquisisci screenshot</Button></div>}
         <Button type="submit" disabled={busy || !draft.body.trim()}>Invia segnalazione</Button><Button type="button" variant="ghost" disabled={busy} onClick={() => setDraft(null)}>Annulla</Button>
-      </form> : selected ? <div className="space-y-4">
-        <section className={box} aria-label="Segnalazione"><div className="flex items-center justify-between gap-2"><h3 className="font-semibold">Segnalazione</h3><Button variant="outline" size="icon" aria-label="Vai al punto" title="Vai al punto" disabled={busy} onClick={() => {
+      </form>}
+    </section> : null}
+    <dialog ref={modal} aria-labelledby="reporty-modal-title" className="pointer-events-auto fixed inset-0 m-auto max-h-[85dvh] w-[calc(100vw-2rem)] max-w-3xl overflow-visible rounded-xl border bg-background p-0 text-sm text-foreground shadow-2xl backdrop:bg-black/50" onClick={event => {
+        if (event.target !== modal.current) return;
+        const rect = modal.current.getBoundingClientRect();
+        if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) setModalOpen(false);
+      }} onCancel={event => { if (event.target === modal.current) setModalOpen(false); }} onClose={event => { if (event.target === modal.current) setModalOpen(false); }}>
+      <div className={selected ? "max-h-[85dvh] space-y-5 overflow-y-auto p-6" : "flex h-[80dvh] max-h-[85dvh] flex-col gap-5 overflow-hidden p-6"}>
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3"><h2 id="reporty-modal-title" className="text-xl font-semibold">{selected ? 'Dettaglio segnalazione' : `${environment.projectName} · ${environment.name}`}</h2><div className="flex flex-wrap items-center gap-2">{!selected ? <ThemeSwitch host={host} /> : null}{selected ? <Button variant="outline" onClick={() => { setSelected(null); setImageUrl(''); }}><ArrowLeft className="size-4" />Torna alle segnalazioni</Button> : null}<Button variant="ghost" size="icon" aria-label="Chiudi modale" onClick={() => setModalOpen(false)}><X /></Button></div></header>
+        {selected ? <div className="space-y-4">
+        <section className="space-y-4" aria-label="Segnalazione"><div className="flex items-center justify-between gap-2"><div className="flex flex-wrap gap-2 text-xs"><span className={`rounded-full px-2 py-1 ${statusColors[selected.status]}`}>{statusLabels[selected.status]}</span><span className={`rounded-full px-2 py-1 ${priorityColors[selected.priority ?? 'medium']}`}>Priorità {priorityLabels[selected.priority ?? 'medium'].toLowerCase()}</span></div><div className="flex items-center gap-2">{selected.screenshot_path ? <Button variant="outline" disabled={busy || imageLoading} onClick={() => { setImageUrl(''); setGalleryOpen(true); void run(async () => { try { const result = await loadScreenshot(selected.id); setImageUrl(result.url); } catch (error) { setGalleryOpen(false); throw error; } }); }}><Eye className="size-4" aria-hidden="true" />Mostra screenshot</Button> : null}<Button variant="outline" aria-label="Vai alla segnalazione" title="Vai al punto" disabled={busy} onClick={() => {
+          if (selected.page_path !== page.pagePath) { const url = new URL(selected.context.url); url.searchParams.set('__reporty_issue', selected.id); location.assign(url.href); return; }
+          setModalOpen(false);
           const point = locate(selected.context.anchor);
           if (point) window.scrollBy({ top: point.y - innerHeight / 2, left: 0, behavior: 'smooth' });
           else window.scrollTo({ top: selected.context.scroll.y, left: selected.context.scroll.x, behavior: 'smooth' });
-        }}><Target className="size-4" aria-hidden="true" /></Button></div>
-        <p className="whitespace-pre-wrap break-words rounded-lg bg-muted p-3 text-sm leading-relaxed">{selected.body}</p>
-        {selected.canEdit ? <div className="flex flex-col items-end gap-2">{edit === null ? <Button variant="outline" size="icon" aria-label="Modifica testo" title="Modifica testo" disabled={busy} onClick={() => setEdit(selected.body)}><Pencil className="size-4" aria-hidden="true" /></Button> : <form className="grid w-full gap-2" onSubmit={event => { event.preventDefault(); void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'edit', payload: { id: selected.id, body: edit } }); setStatus('Testo aggiornato.', 'success'); const items = await refresh(); setSelected(items.find(item => item.id === selected.id) ?? null); setEdit(null); }); }}><textarea className="rounded-lg border p-2" required value={edit} maxLength={10000} onChange={event => setEdit(event.target.value)} /><Button type="submit" disabled={busy}>Salva testo</Button></form>}</div> : null}
-        {selected.screenshot_path ? <Button variant="outline" disabled={busy} aria-expanded={Boolean(imageUrl)} onClick={() => { if (imageUrl) { setImageUrl(''); return; } void run(async () => { const result = await loadScreenshot(selected.id); setImageUrl(result.url); }); }}>{imageUrl ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}{imageUrl ? 'Nascondi screenshot' : 'Mostra screenshot'}</Button> : null}
-        {imageLoading ? <ScreenshotSkeleton aspectRatio={`${selected.context.viewport.width} / ${selected.context.viewport.height}`} /> : null}
-        {imageUrl ? <LoadingImage key={imageUrl} alt="Screenshot originale della segnalazione" src={imageUrl} aspectRatio={`${selected.context.viewport.width} / ${selected.context.viewport.height}`} /> : null}
-        <div className="flex flex-wrap gap-2 text-xs"><span className={`rounded-full px-2 py-1 ${statusColors[selected.status]}`}>{statusLabels[selected.status]}</span><span className={`rounded-full px-2 py-1 ${priorityColors[selected.priority ?? 'medium']}`}>Priorità {priorityLabels[selected.priority ?? 'medium'].toLowerCase()}</span></div>
-        {!locate(selected.context.anchor) ? <p className="rounded-lg bg-muted p-3">Elemento non trovato o modificato. Consulta lo screenshot originale.</p> : null}
+        }}><Target className="size-4" aria-hidden="true" />Vai alla segnalazione</Button></div></div>
+        <section className="space-y-3 rounded-xl border bg-card p-4"><h4 className="text-sm font-semibold">Descrizione</h4>{edit === null ? <p className="whitespace-pre-wrap break-words leading-relaxed">{selected.body}</p> : null}
+        {selected.canEdit ? <div className="flex flex-col items-end gap-2">{edit === null ? <Button variant="outline" size="icon" aria-label="Modifica testo" title="Modifica testo" disabled={busy} onClick={() => setEdit(selected.body)}><Pencil className="size-4" aria-hidden="true" /></Button> : <form className="grid w-full gap-2" onSubmit={event => { event.preventDefault(); if (busy || !edit?.trim() || edit.trim() === selected.body.trim()) return; void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'edit', payload: { id: selected.id, body: edit } }); setStatus('Testo aggiornato.', 'success'); const items = await refresh(); setSelected(items.find(item => item.id === selected.id) ?? null); setEdit(null); }); }}><textarea aria-label="Modifica descrizione" className="min-h-28 rounded-lg border bg-background p-3" required value={edit} maxLength={10000} onChange={event => setEdit(event.target.value)} /><div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={busy} onClick={() => setEdit(null)}>Annulla</Button><Button type="submit" disabled={busy || !edit.trim() || edit.trim() === selected.body.trim()}>Salva testo</Button></div></form>}</div> : null}</section>
+        {galleryOpen ? <ScreenshotGallery autoOpen loading={imageLoading || !imageUrl} onClose={() => { setGalleryOpen(false); setImageUrl(''); }} src={imageUrl} aspectRatio={`${selected.context.viewport.width} / ${selected.context.viewport.height}`} /> : null}
+        {selected.page_path === page.pagePath && !locate(selected.context.anchor) ? <p className="rounded-lg bg-muted p-3">Elemento non trovato o modificato. Consulta lo screenshot originale.</p> : null}
+        <section className="space-y-4 rounded-xl border bg-card p-4" aria-label="Gestione segnalazione">
         {selected.canChangeStatus ? <div className="grid gap-2"><Label htmlFor="report-status">Stato</Label><select id="report-status" className="rounded-lg border bg-background p-2" disabled={busy} value={selected.status} onChange={event => void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'status', payload: { id: selected.id, status: event.target.value } }); setStatus('Stato aggiornato.', 'success'); const items = await refresh(); setSelected(items.find(item => item.id === selected.id) ?? null); })}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div> : null}
         {selected.canChangeStatus ? <div className="grid gap-2"><Label htmlFor="selected-priority">Priorità</Label><select id="selected-priority" className="rounded-lg border bg-background p-2" disabled={busy} value={selected.priority ?? 'medium'} onChange={event => void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'priority', payload: { id: selected.id, priority: event.target.value } }); setStatus('Priorità aggiornata.', 'success'); const items = await refresh(); setSelected(items.find(item => item.id === selected.id) ?? null); })}>{Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div> : null}
         {selected.canEdit ? <div className="flex justify-end"><Button variant="destructive" disabled={busy} onClick={() => { if (confirm('Eliminare questa segnalazione e le sue risposte?')) void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'delete', payload: { id: selected.id } }); setStatus('Segnalazione eliminata.', 'success'); setSelected(null); await refresh(); }); }}>Elimina</Button></div> : null}
-        </section><section className={box} aria-label="Risposte"><h3 className="font-medium">Risposte</h3>{threadLoading ? <RepliesSkeleton /> : null}{!threadLoading && comments.map(comment => <div key={comment.id} className="rounded-lg bg-muted p-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-medium">{comment.authorName}</p><time dateTime={comment.created_at} className="text-xs text-muted-foreground">{formatReportDateTime(comment.created_at)}</time></div><p className="whitespace-pre-wrap break-words">{comment.body}</p></div>)}
+        </section></section><section className="space-y-4 rounded-xl border bg-card p-4" aria-label="Risposte"><h3 className="font-medium">Risposte</h3>{threadLoading ? <RepliesSkeleton /> : null}{!threadLoading && comments.map(comment => <div key={comment.id} className="rounded-lg bg-muted p-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-medium">{comment.authorName}</p><time dateTime={comment.created_at} className="text-xs text-muted-foreground">{formatReportDateTime(comment.created_at)}</time></div><p className="whitespace-pre-wrap break-words">{comment.body}</p></div>)}
         <form className="grid gap-2" onSubmit={event => { event.preventDefault(); void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'reply', payload: { id: selected.id, body: reply } }); setStatus('Risposta inviata.', 'success'); setReply(''); const result = await loadThread(selected.id); setComments(result.data.comments); }); }}><Label htmlFor="reply">Aggiungi una risposta</Label><textarea id="reply" className="rounded-lg border bg-background p-2" maxLength={10000} required value={reply} onChange={event => setReply(event.target.value)} /><Button type="submit" disabled={busy || !reply.trim()}>Rispondi</Button></form>
         </section><footer className="rounded-xl border bg-card p-4 text-xs text-muted-foreground"><p>Segnalata da {selected.authorName}</p><p>Viewport originale: {selected.context.viewport.width} × {selected.context.viewport.height} · scroll {Math.round(selected.context.scroll.y)} px</p></footer>
-      </div> : <>
-        <div className="grid gap-3 rounded-xl border bg-card p-4 shadow-sm"><h3 className="font-semibold">Crea una segnalazione</h3><Button className="w-full justify-start" disabled={busy} onClick={() => { setMode('element'); setOpen(false); }}><Crosshair className="size-4" aria-hidden="true" />Seleziona elemento</Button><Button className="w-full justify-start" disabled={busy} variant="outline" onClick={() => { setMode('pin'); setOpen(false); }}><MapPin className="size-4" aria-hidden="true" />Pin libero</Button></div>
-        <section className={box} aria-label="Lista segnalazioni"><label className="flex cursor-pointer items-center justify-between gap-3 text-sm" htmlFor="reporty-show-resolved"><span>Mostra segnalazioni risolte</span><input id="reporty-show-resolved" type="checkbox" role="switch" className="size-4 accent-primary" checked={showResolved} onChange={event => setShowResolved(event.target.checked)} /></label><Button className="w-full justify-between" variant="outline" aria-expanded={listOpen} aria-controls="reporty-page-reports" onClick={() => setListOpen(previous => !previous)}>Segnalazioni della pagina ({reports.filter(report => showResolved || report.status !== 'resolved').length})<span className="flex transition-transform duration-200 motion-reduce:transition-none" style={{ transform: listOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}><ChevronDown className="size-4" aria-hidden="true" /></span></Button>
-        <div id="reporty-page-reports" hidden={!listOpen} className={listOpen ? "grid gap-2" : "hidden"}>
-          {listLoading ? <ReportRowsSkeleton /> : null}
-          {!listLoading && !reports.some(report => showResolved || report.status !== 'resolved') ? <p className="text-muted-foreground">Nessuna segnalazione su questa pagina.</p> : null}
-          {!listLoading && reports.map((report, index) => !showResolved && report.status === 'resolved' ? null : <button key={report.id} className="rounded-lg border p-3 text-left hover:bg-accent" onClick={() => void view(report)}><p className="line-clamp-3 break-words">{index + 1}. {report.body}</p><time dateTime={report.created_at} className="block text-xs text-muted-foreground">{formatReportDateTime(report.created_at)}</time><div className="mt-2 flex flex-wrap gap-2 text-xs"><span className={`rounded-full px-2 py-1 ${statusColors[report.status]}`}>{statusLabels[report.status]}</span><span className={`rounded-full px-2 py-1 ${priorityColors[report.priority ?? 'medium']}`}>Priorità {priorityLabels[report.priority ?? 'medium'].toLowerCase()}</span>{!anchorPosition(report.context.anchor) ? <span className="text-muted-foreground">Elemento non trovato</span> : null}</div></button>)}
-        </div></section>
-      </>}
-    </section> : null}
+      </div> : <div className="flex min-h-0 flex-1 flex-col gap-5">
+  <input aria-label="Cerca segnalazioni" placeholder="Cerca commento o pagina…" className="h-10 w-full rounded-lg border bg-background px-3" value={search} onChange={event => setSearch(event.target.value)} />
+  <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex flex-wrap gap-3">
+    <ReportFilter label="Stato" options={Object.entries(statusLabels).map(([value,label]) => ({value,label}))} selected={statuses} onChange={values => { setStatuses(values); setShowResolved(!values.length || values.includes('resolved')); }} />
+    <ReportFilter label="Priorità" options={Object.entries(priorityLabels).map(([value,label]) => ({value,label}))} selected={priorities} onChange={setPriorities} />
+    </div><div className="flex items-center gap-2"><span id="reporty-resolved-label" className="text-sm">Mostra risolte</span><button type="button" role="switch" aria-checked={showResolved} aria-labelledby="reporty-resolved-label" className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none ${showResolved ? 'bg-primary' : 'bg-input'}`} onClick={() => { const enabled = !showResolved; setShowResolved(enabled); setStatuses(items => enabled ? (items.length ? [...new Set([...items, 'resolved'])] : []) : (items.length ? items.filter(item => item !== 'resolved') : ['open', 'in_progress'])); }}><span aria-hidden="true" className={`size-5 rounded-full bg-white shadow-sm transition-transform motion-reduce:transition-none ${showResolved ? 'translate-x-5' : 'translate-x-0'}`} /></button></div>
+  </div>
+  {filters.length ? <div className="flex flex-wrap gap-2">{filters.map(filter => <Button key={filter.key} variant="secondary" size="sm" className="rounded-full px-3" onClick={filter.remove}>{filter.label}<X className="size-3" /></Button>)}</div> : null}
+
+  <section className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1" aria-label="Lista segnalazioni">
+    {listLoading ? <ReportRowsSkeleton /> : null}
+    {!listLoading && !filtered.length ? <p className="p-6 text-muted-foreground">Nessuna segnalazione trovata.</p> : null}
+    {!listLoading && filtered.map(report => <button key={report.id} className="block w-full space-y-3 rounded-xl border bg-card p-4 text-left hover:bg-accent" onClick={() => void view(report)}>
+      <div className="flex flex-wrap items-start justify-between gap-3"><p className="min-w-0 flex-1 line-clamp-3 break-words font-medium">{report.body}</p><div className="flex shrink-0 flex-wrap gap-2 text-xs"><span className={`rounded-full px-2 py-1 ${statusColors[report.status]}`}>{statusLabels[report.status]}</span><span className={`rounded-full px-2 py-1 ${priorityColors[report.priority ?? 'medium']}`}>Priorità {priorityLabels[report.priority ?? 'medium'].toLowerCase()}</span></div></div>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground"><div className="flex min-w-0 flex-wrap gap-2"><span>{report.authorName}</span><span className="break-all">· {report.page_path}</span></div><time dateTime={report.created_at} className="ml-auto shrink-0 text-right">{formatReportDateTime(report.created_at)}</time></div>
+    </button>)}
+  </section>
+</div>}
+      </div>
+      <Button aria-label={modalOpen ? 'Chiudi segnalazioni' : 'Apri lista segnalazioni'} aria-expanded={modalOpen} className="pointer-events-auto fixed size-7 rounded-full p-0 shadow-xl" style={{ [top ? 'top' : 'bottom']: 36, [left ? 'left' : 'right']: 88 }} onClick={() => { if (modalOpen) { setModalOpen(false); } else { setOpen(false); setSelected(null); setModalOpen(true); void run(async () => { await refresh(); }); } }}>{modalOpen ? <X className="size-4" /> : <Menu className="size-4" />}</Button>
+    </dialog>
   </>;
 }

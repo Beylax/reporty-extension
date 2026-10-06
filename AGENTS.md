@@ -53,7 +53,7 @@
 - Dettaglio progetto in tab: Segnalazioni e Ambienti; link ospite nella card di ciascun ambiente.
 - Filtri segnalazioni multiselect su una riga, ricerca separata, pillole rimovibili sotto. Stati iniziali: Aperta e In lavorazione. Ordine priorità: Alta, Media, Bassa.
 - Dettaglio segnalazione in dialogo: descrizione e screenshot in evidenza, gestione sotto, autore in fondo. Colori per stato/priorità.
-- Estensione: floating `+` che ruota a `×`, creazione in evidenza, lista accordion, sezioni in riquadri verticali, back e chiudi sulla stessa riga.
+- Estensione e widget: floating `+` dedicato alla creazione; pulsante menu affiancato che diventa `×` quando la modale è aperta. Lista e dettaglio condividono una sola modale, con ritorno alla lista. Ricerca e filtri multipli solo stato/priorità, pillole arrotondate; lista e pin limitati alla pagina e all’ambiente correnti. Toggle risolte e tema nell’intestazione della modale accanto a Chiudi.
 - Il popup determina progetto/ambiente dall'URL senza select; informazioni revisore in fondo, senza elenco siti.
 - Collegamento: toast di successo/errore, pulsante disabilitato dopo successo e protezione dai doppi clic.
 - Tutti i caricamenti usano skeleton specifici che riprendono layout, dimensioni e sezioni della UI caricata (pagine, operazioni, dettagli e immagini), senza placeholder generici; tutti i feedback delle operazioni usano toast. Le istruzioni e gli stati vuoti restano nel contenuto. Dashboard: ToastProvider globale Base UI; estensione: provider nelle superfici popup, review e shadow root, senza portali nel sito ospitante.
