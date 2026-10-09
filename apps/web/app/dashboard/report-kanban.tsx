@@ -7,7 +7,8 @@ import { ReportIcon } from '@/components/report-icon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { SelectField } from '@/components/ui/select';
+import { RadioButtons } from '@/components/ui/radio-buttons';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 
 type Status = Report['status'];
@@ -74,15 +75,15 @@ export function ReportKanban({ reports, environments, busy, movingId, onOpen, on
           <InfiniteColumn total={items.length} visible={limits[column.value]} onLoadMore={() => setLimits(current => ({ ...current, [column.value]: current[column.value] + COLUMN_BATCH_SIZE }))}>
             {!items.length ? <p className="py-8 text-center text-xs text-muted-foreground">Nessuna segnalazione</p> : null}
             {items.slice(0, limits[column.value]).map(report => <Card key={report.id} size="sm" className={`cursor-pointer border shadow-none ring-0 transition-colors hover:border-primary/30 hover:bg-primary/5 ${draggedId === report.id ? 'opacity-40' : ''}`}
-              onClick={event => { if (!busy && !suppressClick.current && !(event.target as HTMLElement).closest('button, input, a, [role="combobox"]')) onOpen(report); }}
+              onClick={event => { if (!busy && !suppressClick.current && !(event.target as HTMLElement).closest('button, input, a, [role="radiogroup"]')) onOpen(report); }}
               draggable={report.canChangeStatus && !busy}
-              onDragStart={event => { if (busy || !report.canChangeStatus || (event.target as HTMLElement).closest('[data-slot="select-trigger"]')) { event.preventDefault(); return; } dragging.current = report.id; suppressClick.current = true; setDraggedId(report.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', report.id); }}
+              onDragStart={event => { if (busy || !report.canChangeStatus || (event.target as HTMLElement).closest('[role="radiogroup"]')) { event.preventDefault(); return; } dragging.current = report.id; suppressClick.current = true; setDraggedId(report.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', report.id); }}
               onDragEnd={() => { resetDrag(); setTimeout(() => { suppressClick.current = false; }, 0); }}>
               <CardHeader className="gap-2"><div className="flex items-center justify-between gap-2"><Badge className={`border-[color-mix(in_oklab,currentColor_25%,transparent)] ${priorityColors[report.priority ?? 'medium']}`}><ReportIcon value={report.priority ?? 'medium'} />{priorityLabels[report.priority ?? 'medium']}</Badge>{report.canChangeStatus ? <GripVertical aria-hidden="true" className="size-4 text-muted-foreground" /> : null}</div>
                 <CardTitle><Button variant="ghost" className="h-auto w-full justify-start whitespace-normal p-0 text-left hover:bg-transparent" disabled={busy} onClick={() => { if (!suppressClick.current) onOpen(report); }}><span className="line-clamp-4 break-words">{report.body}</span></Button></CardTitle>
               </CardHeader>
               <CardContent className="space-y-3"><div className="space-y-1 text-xs text-muted-foreground"><p className="truncate" title={report.authorName}>{report.authorName}</p><p className="truncate" title={report.page_path}>{environments.find(item => item.id === report.environment_id)?.name} · {report.page_path}</p><time dateTime={report.created_at} className="block">{formatReportDateTime(report.created_at)}</time></div>
-                {movingId === report.id ? <Skeleton className="h-10 w-full" aria-label="Aggiornamento segnalazione" /> : <SelectField label="Modifica priorità segnalazione" value={report.priority ?? 'medium'} options={Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))} disabled={busy || !report.canChangeStatus} onValueChange={value => onPriorityChange(report, value as Report['priority'])} />}
+                <div className="grid gap-2"><Label htmlFor={`kanban-priority-${report.id}`}>Priorità</Label>{movingId === report.id ? <Skeleton className="h-10 w-full" aria-label="Aggiornamento segnalazione" /> : <RadioButtons id={`kanban-priority-${report.id}`} label="Priorità" value={report.priority ?? 'medium'} options={Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))} disabled={busy || !report.canChangeStatus} onValueChange={value => onPriorityChange(report, value as Report['priority'])} />}</div>
               </CardContent>
             </Card>)}
           </InfiniteColumn>
