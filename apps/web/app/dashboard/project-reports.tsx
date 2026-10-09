@@ -3,7 +3,7 @@ import { ReportList } from './report-list';
 import { FeedbackToast } from '@/components/feedback-toast';
 import type { Report } from '@reporty/shared';
 
-export async function ProjectReports({ environments }: { environments: { id: string; name: string; origin: string }[] }) {
+export async function ProjectReports({ environments }: { environments: { id: string; name: string; origin: string; repositoryLinked?: boolean }[] }) {
   const supabase = await createClient();
   const results = await Promise.all(environments.map(async environment => {
     const { data, error } = await supabase.rpc('report_operation', { secret: null, target: environment.id, operation: 'list', payload: {} });

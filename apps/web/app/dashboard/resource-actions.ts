@@ -9,7 +9,7 @@ export async function deletePlatformResource(id: string, kind: 'project' | 'envi
   if (!isUuid(id) || !['project', 'environment'].includes(kind)) return { error: 'Dati non validi.' };
   const { supabase } = await requireUser();
   const { data, error } = await supabase.rpc('platform_delete_resource', { target: id, kind });
-  if (error) return { error: error.code === 'PGRST202' ? 'Verifica lo schema del database.' : 'Eliminazione non consentita o non riuscita.' };
+  if (error) return { error: error.code === '55000' ? 'Claude sta lavorando a una segnalazione. Attendi il completamento prima di eliminare questo elemento.' : error.code === 'PGRST202' ? 'Verifica lo schema del database.' : 'Eliminazione non consentita o non riuscita.' };
   let warning: string | undefined;
   const paths = data as string[];
   if (paths.length) {

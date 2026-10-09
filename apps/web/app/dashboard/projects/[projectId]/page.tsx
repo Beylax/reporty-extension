@@ -1,3 +1,5 @@
+import { RepositoryFields } from '../../repository-fields';
+import type { RepositoryLink } from '@/lib/automation/types';
 import { AccordionSection } from '@/components/ui/accordion';
 import { EnvironmentWidget } from '../../environment-widget';
 import Link from 'next/link';
@@ -19,6 +21,8 @@ import { buttonVariants } from '@/components/ui/button';
 import { ResourceDelete } from '../../resource-delete';
 import { ProjectTabs } from '../../project-tabs';
 
+export const maxDuration = 120;
+
 export default async function Project({ params, searchParams }: {
   params: Promise<{ projectId: string }>;
   searchParams: Promise<{ message?: string }>;
@@ -26,12 +30,13 @@ export default async function Project({ params, searchParams }: {
   const { supabase } = await requireUser();
   const { projectId } = await params;
   if (!isUuid(projectId)) notFound();
-  const [projectResult, environmentsResult, permissionResult, linksResult, widgetsResult, { message }] = await Promise.all([
+  const [projectResult, environmentsResult, permissionResult, linksResult, widgetsResult, repositoriesResult, { message }] = await Promise.all([
     supabase.from('projects').select('id, name').eq('id', projectId).maybeSingle(),
     supabase.from('environments').select('id, name, origin').eq('project_id', projectId).order('created_at'),
     supabase.rpc('can_manage_project', { target: projectId }),
     supabase.from('environment_review_links').select('environment_id,token,environments!inner(project_id)').eq('environments.project_id', projectId),
     supabase.from('environment_widgets').select('environment_id,public_key,enabled'),
+    supabase.from('environment_repositories').select('*,environments!inner(project_id)').eq('environments.project_id', projectId),
     searchParams,
   ]);
   if (projectResult.error || environmentsResult.error || permissionResult.error) {
@@ -50,7 +55,7 @@ export default async function Project({ params, searchParams }: {
         {canManage ? <div className="ml-auto"><ResourceDelete id={projectId} kind="project" name={project.name} /></div> : null}
       </header>
       <Feedback message={message} />
-      <ProjectTabs reports={<ProjectReports environments={environments} />} environments={<>
+      <ProjectTabs reports={<ProjectReports environments={environments.map(environment => ({ ...environment, repositoryLinked: Boolean(repositoriesResult.data?.some(item => item.environment_id === environment.id)) }))} />} environments={<>
       {canManage ? <Card>
         <CardHeader><CardTitle>Nome del progetto</CardTitle><CardDescription>Il nome condiviso con tutti gli sviluppatori.</CardDescription></CardHeader>
         <CardContent><form action={renameProject} className="flex flex-wrap items-end gap-3">
@@ -69,6 +74,7 @@ export default async function Project({ params, searchParams }: {
               <input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="environmentId" value={environment.id} />
               <div className="grid flex-1 gap-2"><Label htmlFor={`name-${environment.id}`}>Nome ambiente</Label><Input id={`name-${environment.id}`} name="name" defaultValue={environment.name} maxLength={80} required /></div>
               <div className="grid min-w-60 flex-1 gap-2"><Label htmlFor={`origin-${environment.id}`}>Origine del sito</Label><Input id={`origin-${environment.id}`} name="origin" type="url" defaultValue={environment.origin} required /></div>
+              <div className="w-full"><RepositoryFields existing={repositoriesResult.data?.find(item => item.environment_id === environment.id) as RepositoryLink | undefined} returnTo={`/dashboard/projects/${projectId}`} /></div>
               <SubmitButton>Salva ambiente</SubmitButton>
             </form> : null}
             <AccordionSection title="Link ospite e script di revisione">
@@ -85,6 +91,7 @@ export default async function Project({ params, searchParams }: {
           <input type="hidden" name="projectId" value={projectId} />
           <div className="grid gap-2"><Label htmlFor="new-name">Nome ambiente</Label><Input id="new-name" name="name" placeholder="Produzione" maxLength={80} required /></div>
           <div className="grid gap-2"><Label htmlFor="new-origin">Origine del sito</Label><Input id="new-origin" name="origin" type="url" placeholder="https://example.com" required /></div>
+          <RepositoryFields returnTo={`/dashboard/projects/${projectId}`} />
           <div className="sm:col-span-2"><SubmitButton>Aggiungi ambiente</SubmitButton></div>
         </form></CardContent>
       </Card> : null}

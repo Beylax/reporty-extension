@@ -25,6 +25,16 @@ npm run dev:extension
 Verifiche: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`.
 Il monorepo usa un solo `package-lock.json` nella root.
 
+## GitHub e task Claude
+
+Gli sviluppatori possono collegare una repository GitHub e il branch di destinazione alla creazione del progetto/ambiente oppure dalla card dell’ambiente. Il collegamento usa una GitHub App e diventa disponibile a tutti gli sviluppatori di Reporty.
+
+Nel dettaglio della segnalazione, **Assegna task a Claude** avvia una sessione Claude Managed Agents con la chiave API centrale. La dashboard mostra avanzamento ed esito; il backend crea una PR pronta per la revisione sul branch scelto. Durante il task descrizione, stato, priorità, screenshot ed eliminazione sono bloccati anche nel database. I commenti restano disponibili. Alla PR la segnalazione passa in Validazione; in caso di fallimento torna allo stato precedente.
+
+Per attivare la funzionalità servono la migrazione incrementale `supabase/github_claude.sql`, la configurazione GitHub/Anthropic e il processo periodico di riconciliazione. Seguire [la configurazione web](apps/web/README.md#github-e-claude-managed-agents). Lo ZIP già distribuito non viene aggiornato automaticamente; rigenerarlo e ricaricare l’estensione per visualizzare il nuovo messaggio di blocco. Il blocco backend vale anche per le versioni precedenti.
+
+`npm run test:automation` verifica le integrazioni con HTTP simulato; `npm run test:db` verifica autorizzazioni, migrazione e blocchi. Queste verifiche non sostituiscono una prova su GitHub e Anthropic reali.
+
 ## Specifiche concordate
 
 - Account con Google o link via email tramite Supabase Auth.

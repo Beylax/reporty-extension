@@ -13,7 +13,7 @@ const other = '55555555-5555-4555-8555-555555555555';
 test('destructive bootstrap, shared permissions, guest updates and environment links', async () => {
   const db = new PGlite();
   try {
-    await db.exec(`create role anon; create role authenticated;
+    await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
       create schema auth; create schema storage;
       create table auth.users(id uuid primary key, email text, email_confirmed_at timestamptz);
       create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;

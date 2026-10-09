@@ -9,7 +9,7 @@ export async function mutateReport(environmentId: string, operation: string, pay
   const { supabase } = await requireUser();
   if (!isUuid(environmentId) || !isUuid(payload.id) || !['reply', 'edit', 'status', 'priority', 'delete'].includes(operation)) return { error: 'Dati non validi.' };
   const { data, error } = await supabase.rpc('report_operation', { secret: null, target: environmentId, operation, payload });
-  if (error) return { error: 'Operazione non riuscita. Verifica i permessi e riprova.' };
+  if (error) return { error: error.code === '55000' ? 'Claude sta lavorando a questa segnalazione. Puoi continuare a commentare.' : 'Operazione non riuscita. Verifica i permessi e riprova.' };
   if (operation === 'delete' && data?.screenshot_path) {
     try { await storageClient().remove([data.screenshot_path]); } catch { /* The report remains deleted. */ }
   }

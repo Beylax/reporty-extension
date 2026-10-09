@@ -17,8 +17,9 @@
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspace=@reporty/web",
-    "test": "npm run test --workspace=@reporty/shared && npm run test:db && npm run test:widget",
+    "test": "npm run test --workspace=@reporty/shared && npm run test:db && npm run test:automation && npm run test:widget",
     "test:db": "node --test supabase/tests/*.test.mjs",
+    "test:automation": "node --test scripts/claude-integration.test.mjs",
     "test:extension": "npm run build --workspace=@reporty/extension && node --test scripts/extension-lifecycle.test.mjs",
     "build:widget": "node scripts/build-widget.mjs",
     "test:widget": "npm run build:widget && node --experimental-strip-types --test scripts/widget-loader.test.mjs scripts/capture-tab.test.mjs"

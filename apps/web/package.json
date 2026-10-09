@@ -12,6 +12,7 @@
     "predev": "node ../../scripts/build-widget.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.132.1",
     "@base-ui/react": "^1.8.0",
     "@reporty/shared": "*",
     "@supabase/ssr": "^0.12.7",
@@ -27,6 +28,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -34,7 +36,6 @@
     "eslint-config-next": "16.3.8",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vite": "^8.3.2",
-    "@tailwindcss/vite": "^4.3.3"
+    "vite": "^8.3.2"
   }
 }

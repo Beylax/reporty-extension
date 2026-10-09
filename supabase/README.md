@@ -46,3 +46,13 @@ Con CSP del sito autorizzare il dominio Reporty per `script-src`, `connect-src` 
 Per aggiungere lo stato **Validazione** a un database già inizializzato, eseguire `supabase/report_validation.sql` (non distruttivo) prima di pubblicare la nuova UI. Lo script di inizializzazione include già questo stato.
 
 Per visualizzare il numero delle risposte sui pin di un database esistente, eseguire `report_comment_counts.sql` nel SQL Editor. È un aggiornamento non distruttivo; `initialize.sql` include già il conteggio.
+
+## GitHub e Claude
+
+Per database esistenti applicare **una volta** `github_claude.sql`, dopo gli eventuali aggiornamenti precedenti (inclusi widget, Validazione e conteggio commenti), prima di distribuire la nuova dashboard. La migrazione conserva utenti, progetti, segnalazioni e screenshot. Non usare `initialize.sql` per aggiornare dati da conservare: lo script rimane distruttivo e incorpora già le nuove definizioni.
+
+La migrazione aggiunge `environment_repositories`, `claude_tasks`, le RPC per assegnazione/esecuzione e trigger di blocco. La RPC originale viene rinominata `report_operation_without_claude`, privata dei grant pubblici e richiamata da un wrapper che aggiunge `claudeLocked` e adegua `canEdit`/`canChangeStatus`. Non riapplicare successivamente le vecchie patch che sostituiscono `report_operation`.
+
+I client autenticati leggono solo i metadati pubblici dei task. Snapshot, sessione esterna e lease sono riservati al backend. Gli ospiti non possono assegnare task né leggere le tabelle dell’integrazione. Il ruolo `service_role` è necessario per collegamenti verificati dal server, acquisizione dei task e completamento; in produzione è già fornito da Supabase. `SUPABASE_AUTOMATION_KEY` è una chiave backend dedicata a questa integrazione, separata dalla variabile Storage `SUPABASE_SECRET_KEY`.
+
+Un task attivo impedisce anche di cambiare origine/collegamento o cancellare l’ambiente/progetto. I commenti restano consentiti. Il completamento aggiorna stato del task e segnalazione nella stessa transazione. Non cancellare manualmente task attivi per sbloccare una segnalazione: riconciliare prima la sessione remota.

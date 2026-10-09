@@ -2,6 +2,10 @@
 import { BrandLogo } from '@/components/brand-logo';
 import { Skeleton } from '@/components/ui/skeleton';
 
+export function RepositorySkeleton() {
+  return <div className="space-y-3 rounded-lg border p-4"><Skeleton className="h-4 w-52" /><div className="flex flex-wrap gap-2"><Skeleton className="h-10 w-32" /><Skeleton className="h-10 w-36" /><Skeleton className="h-10 w-48" /></div><div className="grid gap-3 sm:grid-cols-2">{[0,1].map(item => <div key={item} className="space-y-2"><Skeleton className="h-4 w-28" /><Skeleton className="h-10 w-full" /></div>)}</div><Skeleton className="h-4 w-5/6" /></div>;
+}
+
 export function ReportRowsSkeleton() {
   return <div role="status" aria-label="Caricamento segnalazioni" className="divide-y rounded-xl border bg-card">{[0,1,2].map(item => <div key={item} className="space-y-3 p-4"><Skeleton className="h-4 w-5/6" /><Skeleton className="h-4 w-2/3" /><div className="flex gap-2"><Skeleton className="h-5 w-20 rounded-full" /><Skeleton className="h-5 w-24 rounded-full" /><Skeleton className="h-4 w-28" /></div></div>)}</div>;
 }
