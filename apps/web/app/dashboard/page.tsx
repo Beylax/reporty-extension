@@ -15,7 +15,6 @@ export default async function Dashboard({ searchParams }: {
   return (
     <main className="mx-auto w-full max-w-7xl space-y-8 px-6 py-10 lg:px-10">
       <header className="space-y-3">
-        <p className="text-sm text-muted-foreground">Workspace / Progetti</p>
         <div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-semibold tracking-tight">Tutti i progetti</h1></div>
         <p className="text-muted-foreground">Gestisci tutti i siti, gli ambienti e le segnalazioni insieme agli altri sviluppatori.</p>
       </header>

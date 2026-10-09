@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Plus } from 'lucide-react';
 
 type Project = { id: string; name: string; environments: { id: string; name: string; origin: string }[] };
 
@@ -17,7 +19,7 @@ export function ProjectList({ projects }: { projects: Project[] }) {
   return <section className="space-y-5" aria-label="Lista progetti">
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div className="w-full max-w-md"><Label htmlFor="project-search" className="sr-only">Cerca progetti, ambienti o domini</Label><Input id="project-search" type="search" placeholder="Cerca progetti, ambienti o domini…" value={search} onChange={event => setSearch(event.target.value)} className="bg-background" /></div>
-      <p role="status" className="text-sm text-muted-foreground">{filtered.length} di {projects.length} progetti</p>
+      <div className="flex items-center gap-3"><p role="status" className="text-sm text-muted-foreground">{filtered.length} di {projects.length} progetti</p><Button nativeButton={false} render={<Link href="/dashboard/new" />}><Plus className="size-4" aria-hidden="true" />Nuovo progetto</Button></div>
     </div>
     <div className="overflow-hidden rounded-xl border bg-card">
       {filtered.length ? <ul className="divide-y">{filtered.map(project => <li key={project.id}>
@@ -28,7 +30,7 @@ export function ProjectList({ projects }: { projects: Project[] }) {
           </div>
           <div className="flex shrink-0 items-center gap-4"><Badge variant="secondary">{project.environments.length} ambienti</Badge><span aria-hidden="true" className="text-muted-foreground">→</span></div>
         </Link>
-      </li>)}</ul> : <div className="space-y-2 px-6 py-16 text-center"><h2 className="font-medium">{projects.length ? 'Nessun risultato' : 'Il tuo workspace è pronto'}</h2><p className="text-sm text-muted-foreground">{projects.length ? 'Prova un altro nome o dominio.' : 'Crea il primo progetto dal pulsante nella sidebar.'}</p></div>}
+      </li>)}</ul> : <div className="space-y-2 px-6 py-16 text-center"><h2 className="font-medium">{projects.length ? 'Nessun risultato' : 'Il tuo workspace è pronto'}</h2><p className="text-sm text-muted-foreground">{projects.length ? 'Prova un altro nome o dominio.' : 'Crea il primo progetto con il pulsante Nuovo progetto.'}</p></div>}
     </div>
   </section>;
 }

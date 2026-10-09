@@ -5,10 +5,10 @@ import { useRouter } from 'next/navigation';
 import { useToastManager } from '@/components/ui/toast';
 import { deletePlatformResource } from './resource-actions';
 
-export function ResourceDelete({ id, kind, name }: { id: string; kind: 'project' | 'environment'; name: string }) {
+export function ResourceDelete({ id, kind, name, fullWidth = false }: { fullWidth?: boolean; id: string; kind: 'project' | 'environment'; name: string }) {
   const toast = useToastManager();
   const router = useRouter();
-  return <div className="space-y-2"><DeleteConfirm description={`Eliminare definitivamente ${name}? Verranno eliminate anche tutte le segnalazioni e le risposte${kind === 'project' ? ", gli ambienti e gli accessi del progetto" : ' di questo ambiente'}.`} onConfirm={async () => {
+  return <div className="space-y-2"><DeleteConfirm fullWidth={fullWidth} description={`Eliminare definitivamente ${name}? Verranno eliminate anche tutte le segnalazioni e le risposte${kind === 'project' ? ", gli ambienti e gli accessi del progetto" : ' di questo ambiente'}.`} onConfirm={async () => {
 
 
       try {

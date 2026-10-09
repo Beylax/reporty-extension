@@ -42,25 +42,16 @@ export default async function Project({ params, searchParams }: {
   const canManage = permissionResult.data === true;
   const environments = environmentsResult.data ?? [];
   return (
-    <main className="mx-auto w-full max-w-5xl space-y-8 px-6 py-10">
+    <main className="mx-auto w-full max-w-7xl space-y-8 px-6 py-10 lg:px-10">
       <Link href="/dashboard" className={buttonVariants({ variant: 'outline' })}>← Tutti i progetti</Link>
       <header className="flex flex-wrap items-center gap-3">
         <h1 className="text-3xl font-semibold tracking-tight">{project.name}</h1>
         <Badge variant="secondary">Sviluppatore</Badge>
-        {canManage ? <div className="ml-auto"><ResourceDelete id={projectId} kind="project" name={project.name} /></div> : null}
       </header>
       <Feedback message={message} />
       <ProjectTabs reports={<ProjectReports environments={environments} />} environments={<>
-      {canManage ? <Card>
-        <CardHeader><CardTitle>Nome del progetto</CardTitle><CardDescription>Il nome condiviso con tutti gli sviluppatori.</CardDescription></CardHeader>
-        <CardContent><form action={renameProject} className="flex flex-wrap items-end gap-3">
-          <input type="hidden" name="projectId" value={projectId} />
-          <div className="grid min-w-60 flex-1 gap-2"><Label htmlFor="project-name">Nome</Label><Input id="project-name" name="name" defaultValue={project.name} maxLength={120} required /></div>
-          <SubmitButton>Salva nome</SubmitButton>
-        </form></CardContent>
-      </Card> : null}
       <section className="space-y-4" aria-labelledby="environments-title">
-        <div><h2 id="environments-title" className="text-xl font-semibold">Ambienti</h2><p className="mt-1 text-sm text-muted-foreground">Produzione, staging e sviluppo mantengono segnalazioni separate.</p></div>
+        <div><h2 id="environments-title" className="text-xl font-semibold">Ambienti</h2></div>
         {!environments.length ? <Card><CardContent className="py-6 text-muted-foreground">Nessun ambiente aggiunto.</CardContent></Card> : null}
         {environments.map(environment => <Card key={environment.id}>
           <CardHeader><div className="flex items-center justify-between gap-3"><CardTitle>{environment.name}</CardTitle><a href={environment.origin} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: 'outline', size: 'sm' })}>Apri sito ↗</a></div><CardDescription className="break-all">{environment.origin}</CardDescription></CardHeader>
@@ -79,7 +70,7 @@ export default async function Project({ params, searchParams }: {
           </CardContent>
         </Card>)}
       </section>
-      {canManage ? <Card>
+      {canManage ? <Card className="bg-primary/5 ring-primary/15">
         <CardHeader><CardTitle>Aggiungi un ambiente</CardTitle><CardDescription>Inserisci protocollo e dominio, senza percorsi. Per localhost includi la porta.</CardDescription></CardHeader>
         <CardContent><form action={saveEnvironment} className="grid gap-4 sm:grid-cols-2">
           <input type="hidden" name="projectId" value={projectId} />
@@ -88,7 +79,14 @@ export default async function Project({ params, searchParams }: {
           <div className="sm:col-span-2"><SubmitButton>Aggiungi ambiente</SubmitButton></div>
         </form></CardContent>
       </Card> : null}
-      </>} />
+      </>} settings={canManage ? <><Card>
+        <CardHeader><CardTitle>Nome del progetto</CardTitle><CardDescription>Il nome condiviso con tutti gli sviluppatori.</CardDescription></CardHeader>
+        <CardContent><form action={renameProject} className="flex flex-wrap items-end gap-3">
+          <input type="hidden" name="projectId" value={projectId} />
+          <div className="grid min-w-60 flex-1 gap-2"><Label htmlFor="project-name">Nome</Label><Input id="project-name" name="name" defaultValue={project.name} maxLength={120} required /></div>
+          <SubmitButton>Salva nome</SubmitButton>
+        </form></CardContent>
+      </Card><section aria-label="Zona pericolosa" className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4"><h3 className="text-sm font-semibold text-destructive">Zona pericolosa</h3><ResourceDelete fullWidth id={projectId} kind="project" name={project.name} /></section></> : null} />
     </main>
   );
 }
