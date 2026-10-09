@@ -45,7 +45,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
   const [modalOpen, setModalOpen] = useState(false);
   const modal = useRef<HTMLDialogElement>(null);
   const [search, setSearch] = useState('');
-  const [statuses, setStatuses] = useState<string[]>(['open', 'in_progress', 'validation']);
+  const [statuses, setStatuses] = useState<string[]>([]);
   const [priorities, setPriorities] = useState<string[]>([]);
   const [showResolved, setShowResolved] = useState(false);
   const [mode, setMode] = useState<'element' | 'pin' | null>(null);
