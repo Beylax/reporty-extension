@@ -98,6 +98,25 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
     try { await work(); } catch (error) { setStatus(error instanceof Error ? error.message : 'Operazione non riuscita.'); }
     finally { setBusy(false); }
   }
+  const updateLock = useRef(false);
+  function updateReportField(field: 'status' | 'priority', value: string) {
+    if (!selected || busy || updateLock.current || !selected.canChangeStatus || selected[field] === value) return;
+    const previous = selected;
+    const patch = { [field]: value } as Partial<Report>;
+    updateLock.current = true;
+    setReports(items => items.map(item => item.id === previous.id ? { ...item, ...patch } : item));
+    setSelected(item => item?.id === previous.id ? { ...item, ...patch } : item);
+    void run(async () => {
+      try {
+        await message({ type: 'REPORTY_REPORT', operation: field, payload: { id: previous.id, [field]: value } });
+        setStatus(field === 'status' ? 'Stato aggiornato.' : 'Priorità aggiornata.', 'success');
+      } catch (error) {
+        setReports(items => items.map(item => item.id === previous.id ? { ...item, [field]: previous[field] } : item));
+        setSelected(item => item?.id === previous.id ? { ...item, [field]: previous[field] } : item);
+        throw error;
+      } finally { updateLock.current = false; }
+    });
+  }
   async function view(report: Report) {
     setSettingsOpen(false); setSelected(report); setReply(''); setDraft(null); setEdit(null); setComments([]); setImageUrl(''); setOpen(false); setModalOpen(true);
     await run(async () => {
@@ -273,8 +292,8 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
         {galleryOpen ? <ScreenshotGallery autoOpen loading={imageLoading || !imageUrl} onClose={() => { setGalleryOpen(false); setImageUrl(''); }} src={imageUrl} aspectRatio={`${selected.context.viewport.width} / ${selected.context.viewport.height}`} /> : null}
         {selected.page_path === page.pagePath && !locate(selected.context.anchor) ? <p className="rounded-lg bg-muted p-3">Elemento non trovato o modificato. Consulta lo screenshot originale.</p> : null}
         <section className="space-y-4 rounded-xl border bg-muted/50 dark:bg-card p-4" aria-label="Gestione segnalazione">
-        {selected.canChangeStatus ? <div className="grid gap-2"><Label htmlFor="report-status">Stato</Label><RadioButtons label="Stato" id="report-status" disabled={busy} value={selected.status} onValueChange={value => void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'status', payload: { id: selected.id, status: value } }); setStatus('Stato aggiornato.', 'success'); const items = await refresh(); setSelected(items.find(item => item.id === selected.id) ?? null); })} options={Object.entries(statusLabels).map(([value, label]) => ({ value, label }))} /></div> : null}
-        {selected.canChangeStatus ? <div className="grid gap-2"><Label htmlFor="selected-priority">Priorità</Label><RadioButtons label="Priorità" id="selected-priority" disabled={busy} value={selected.priority ?? 'medium'} onValueChange={value => void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'priority', payload: { id: selected.id, priority: value } }); setStatus('Priorità aggiornato.', 'success'); const items = await refresh(); setSelected(items.find(item => item.id === selected.id) ?? null); })} options={Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))} /></div> : null}
+        {selected.canChangeStatus ? <div className="grid gap-2"><Label htmlFor="report-status">Stato</Label><RadioButtons label="Stato" id="report-status" disabled={busy} value={selected.status} onValueChange={value => updateReportField('status', value)} options={Object.entries(statusLabels).map(([value, label]) => ({ value, label }))} /></div> : null}
+        {selected.canChangeStatus ? <div className="grid gap-2"><Label htmlFor="selected-priority">Priorità</Label><RadioButtons label="Priorità" id="selected-priority" disabled={busy} value={selected.priority ?? 'medium'} onValueChange={value => updateReportField('priority', value)} options={Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))} /></div> : null}
 
         </section></section><section className="space-y-4 rounded-xl border bg-muted/50 dark:bg-card p-4" aria-label="Risposte"><h3 className="font-medium">Risposte</h3>{threadLoading ? <RepliesSkeleton /> : null}{!threadLoading && comments.map(comment => <div key={comment.id} className="rounded-lg border bg-background p-3 dark:bg-muted"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-medium">{comment.authorName}</p><time dateTime={comment.created_at} className="text-xs text-muted-foreground">{formatReportDateTime(comment.created_at)}</time></div><p className="whitespace-pre-wrap break-words">{comment.body}</p></div>)}
         <form className="grid gap-2" onSubmit={event => { event.preventDefault(); void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'reply', payload: { id: selected.id, body: reply } }); setStatus('Risposta inviata.', 'success'); setReply(''); const result = await loadThread(selected.id); setComments(result.data.comments); setReports(items => items.map(item => item.id === selected.id ? { ...item, commentCount: result.data.comments.length } : item)); }); }}><Label htmlFor="reply">Aggiungi una risposta</Label><Textarea id="reply" className="rounded-lg border bg-background p-2" maxLength={10000} required value={reply} onChange={event => setReply(event.target.value)} /><Button type="submit" disabled={busy || !reply.trim()}>Rispondi</Button></form>
