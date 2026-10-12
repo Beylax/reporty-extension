@@ -59,9 +59,17 @@ export function ReportKanban({ reports, environments, busy, movingId, onOpen, on
   const [limits, setLimits] = useState<Record<Status, number>>({ open: COLUMN_BATCH_SIZE, in_progress: COLUMN_BATCH_SIZE, validation: COLUMN_BATCH_SIZE, resolved: COLUMN_BATCH_SIZE });
   const dragging = useRef<string | null>(null);
   const suppressClick = useRef(false);
+  const clickResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (clickResetTimer.current !== null) clearTimeout(clickResetTimer.current); }, []);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [target, setTarget] = useState<Status | null>(null);
-  function resetDrag() { dragging.current = null; setDraggedId(null); setTarget(null); }
+  function resetDrag() {
+    dragging.current = null; setDraggedId(null); setTarget(null);
+    // The optimistic move unmounts the source card, so its dragend may never fire.
+    // Release click suppression on drop too, after any synthetic drag click.
+    if (clickResetTimer.current !== null) clearTimeout(clickResetTimer.current);
+    clickResetTimer.current = setTimeout(() => { suppressClick.current = false; clickResetTimer.current = null; }, 0);
+  }
   return <div className="space-y-3">
     <p className="text-xs text-muted-foreground">Trascina una card in un’altra colonna per cambiarne lo stato. Usa il menu nella card per cambiare la priorità.</p>
     <div className="grid grid-cols-4 items-start gap-4 overflow-x-auto pb-3" style={{ gridTemplateColumns: 'repeat(4, minmax(300px, 1fr))' }}>
@@ -77,8 +85,8 @@ export function ReportKanban({ reports, environments, busy, movingId, onOpen, on
             {items.slice(0, limits[column.value]).map(report => <Card key={report.id} aria-busy={movingId === report.id} size="sm" className={`cursor-pointer border shadow-none ring-0 transition-colors hover:border-primary/30 hover:bg-primary/5 ${draggedId === report.id ? 'opacity-40' : ''}`}
               onClick={event => { if (!busy && !suppressClick.current && !(event.target as HTMLElement).closest('button, input, a, [role="radiogroup"]')) onOpen(report); }}
               draggable={report.canChangeStatus && !busy}
-              onDragStart={event => { if (busy || !report.canChangeStatus || (event.target as HTMLElement).closest('[role="radiogroup"]')) { event.preventDefault(); return; } dragging.current = report.id; suppressClick.current = true; setDraggedId(report.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', report.id); }}
-              onDragEnd={() => { resetDrag(); setTimeout(() => { suppressClick.current = false; }, 0); }}>
+              onDragStart={event => { if (busy || !report.canChangeStatus || (event.target as HTMLElement).closest('[role="radiogroup"]')) { event.preventDefault(); return; } if (clickResetTimer.current !== null) { clearTimeout(clickResetTimer.current); clickResetTimer.current = null; } dragging.current = report.id; suppressClick.current = true; setDraggedId(report.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', report.id); }}
+              onDragEnd={resetDrag}>
               <CardHeader className="gap-2"><div className="flex items-center justify-between gap-2"><Badge className={`border-[color-mix(in_oklab,currentColor_25%,transparent)] ${priorityColors[report.priority ?? 'medium']}`}><ReportIcon value={report.priority ?? 'medium'} />{priorityLabels[report.priority ?? 'medium']}</Badge>{report.canChangeStatus ? <GripVertical aria-hidden="true" className="size-4 text-muted-foreground" /> : null}</div>
                 <CardTitle><Button variant="ghost" className="h-auto w-full justify-start whitespace-normal p-0 text-left hover:bg-transparent" disabled={busy} onClick={() => { if (!suppressClick.current) onOpen(report); }}><span className="line-clamp-4 break-words">{report.body}</span></Button></CardTitle>
               </CardHeader>
