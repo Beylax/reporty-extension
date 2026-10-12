@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 import { GripVertical } from 'lucide-react';
 import { compareReports, formatReportDateTime, priorityLabels, type Report } from '@reporty/shared';
 import { ReportIcon } from '@/components/report-icon';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioButtons } from '@/components/ui/radio-buttons';
@@ -17,7 +16,6 @@ const columns: { value: Status; label: string }[] = [
   { value: 'validation', label: 'Validazione' }, { value: 'resolved', label: 'Chiusa' },
 ];
 const colors = { open: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200', in_progress: 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200', validation: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200', resolved: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' };
-const priorityColors = { high: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200', medium: 'bg-amber-100 text-amber-800 dark:bg-orange-950 dark:text-orange-200', low: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200' };
 
 const COLUMN_BATCH_SIZE = 20;
 
@@ -41,7 +39,7 @@ function InfiniteColumn({ children, total, visible, onLoadMore }: {
   return <div ref={root} className="max-h-[65vh] min-h-40 space-y-3 overflow-y-auto p-3">
     {children}
     {hasMore ? <div ref={sentinel} role="status" aria-label="Caricamento altre segnalazioni" className="space-y-3">
-      <div className="space-y-3 rounded-xl border bg-card p-4"><Skeleton className="h-5 w-20" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /><Skeleton className="h-10 w-full" /></div>
+      <div className="space-y-3 rounded-xl border bg-card p-4"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /><Skeleton className="h-10 w-full" /></div>
       <Button variant="outline" className="w-full" onClick={onLoadMore}>Carica altre segnalazioni</Button>
     </div> : null}
   </div>;
@@ -87,11 +85,12 @@ export function ReportKanban({ reports, environments, busy, movingId, onOpen, on
               draggable={report.canChangeStatus && !busy}
               onDragStart={event => { if (busy || !report.canChangeStatus || (event.target as HTMLElement).closest('[role="radiogroup"]')) { event.preventDefault(); return; } if (clickResetTimer.current !== null) { clearTimeout(clickResetTimer.current); clickResetTimer.current = null; } dragging.current = report.id; suppressClick.current = true; setDraggedId(report.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', report.id); }}
               onDragEnd={resetDrag}>
-              <CardHeader className="gap-2"><div className="flex items-center justify-between gap-2"><Badge className={`border-[color-mix(in_oklab,currentColor_25%,transparent)] ${priorityColors[report.priority ?? 'medium']}`}><ReportIcon value={report.priority ?? 'medium'} />{priorityLabels[report.priority ?? 'medium']}</Badge>{report.canChangeStatus ? <GripVertical aria-hidden="true" className="size-4 text-muted-foreground" /> : null}</div>
-                <CardTitle><Button variant="ghost" className="h-auto w-full justify-start whitespace-normal p-0 text-left hover:bg-transparent" disabled={busy} onClick={() => { if (!suppressClick.current) onOpen(report); }}><span className="line-clamp-4 break-words">{report.body}</span></Button></CardTitle>
-              </CardHeader>
+              <CardHeader className="gap-2"><div className="flex items-start gap-2">
+                <CardTitle className="min-w-0 flex-1"><Button variant="ghost" className="h-auto w-full justify-start whitespace-normal p-0 text-left hover:bg-transparent" disabled={busy} onClick={() => { if (!suppressClick.current) onOpen(report); }}><span className="line-clamp-4 break-words">{report.body}</span></Button></CardTitle>
+                {report.canChangeStatus ? <GripVertical aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" /> : null}
+              </div></CardHeader>
               <CardContent className="space-y-5"><div className="space-y-1 text-xs text-muted-foreground"><p className="truncate" title={report.authorName}>{report.authorName}</p><p className="truncate" title={report.page_path}>{environments.find(item => item.id === report.environment_id)?.name} · {report.page_path}</p><time dateTime={report.created_at} className="block">{formatReportDateTime(report.created_at)}</time></div>
-                <div className="grid gap-2"><Label htmlFor={`kanban-priority-${report.id}`}>Priorità</Label><RadioButtons compact id={`kanban-priority-${report.id}`} label="Priorità" value={report.priority ?? 'medium'} options={Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))} disabled={busy || !report.canChangeStatus} onValueChange={value => onPriorityChange(report, value as Report['priority'])} /></div>
+                <div className="grid gap-2"><Label className="text-xs text-muted-foreground" htmlFor={`kanban-priority-${report.id}`}>Priorità</Label><RadioButtons compact id={`kanban-priority-${report.id}`} label="Priorità" value={report.priority ?? 'medium'} options={Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))} disabled={busy || !report.canChangeStatus} onValueChange={value => onPriorityChange(report, value as Report['priority'])} /></div>
               </CardContent>
             </Card>)}
           </InfiniteColumn>
