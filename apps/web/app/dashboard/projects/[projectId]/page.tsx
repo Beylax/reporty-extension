@@ -21,12 +21,12 @@ import { ProjectTabs } from '../../project-tabs';
 
 export default async function Project({ params, searchParams }: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<{ message?: string }>;
+  searchParams: Promise<{ message?: string; report?: string }>;
 }) {
   const { supabase } = await requireUser();
   const { projectId } = await params;
   if (!isUuid(projectId)) notFound();
-  const [projectResult, environmentsResult, permissionResult, linksResult, widgetsResult, participantsResult, { message }] = await Promise.all([
+  const [projectResult, environmentsResult, permissionResult, linksResult, widgetsResult, participantsResult, { message, report }] = await Promise.all([
     supabase.from('projects').select('id, name').eq('id', projectId).maybeSingle(),
     supabase.from('environments').select('id, name, origin').eq('project_id', projectId).order('created_at'),
     supabase.rpc('can_manage_project', { target: projectId }),
@@ -51,7 +51,7 @@ export default async function Project({ params, searchParams }: {
         <Badge variant="secondary">Sviluppatore</Badge>
       </header>
       <Feedback message={message} />
-      <ProjectTabs reports={<ProjectReports environments={environments} participants={participants} />} environments={<>
+      <ProjectTabs key={report ?? "project"} reports={<ProjectReports initialReportId={report} environments={environments} participants={participants} />} environments={<>
       <section className="space-y-4" aria-labelledby="environments-title">
         <div><h2 id="environments-title" className="text-xl font-semibold">Ambienti</h2></div>
         {!environments.length ? <Card><CardContent className="py-6 text-muted-foreground">Nessun ambiente aggiunto.</CardContent></Card> : null}

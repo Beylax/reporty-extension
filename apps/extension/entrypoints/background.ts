@@ -1,3 +1,4 @@
+import { getPageContext } from '@reporty/shared';
 import { apiOrigin, getContext, getSessionToken, guestSessionKey, token, type Sites, type Site, pattern } from '@/lib/session';
 
 export default defineBackground(() => {
@@ -144,6 +145,7 @@ export default defineBackground(() => {
         const context = sessionToken ? await getContext(origin, sessionToken) : null;
         if (!site || !context?.environments.some(item => item.id === site.environmentId && item.origin === origin)) throw new Error('Accesso al sito non disponibile.');
         if (message.type === 'REPORTY_REPORT' && message.operation === 'create' && message.payload?.context?.url !== tab.url) throw new Error('La pagina è cambiata: crea una nuova segnalazione.');
+        if (message.type === 'REPORTY_REPORT' && String(message.operation).startsWith('notification') && message.payload?.pagePath !== getPageContext(tab.url).pagePath) throw new Error('La pagina è cambiata: riapri le notifiche.');
         const endpoint = message.type === 'REPORTY_SCREENSHOT' ? 'screenshot' : 'reports';
         const body = message.type === 'REPORTY_SCREENSHOT' ? { environmentId: site.environmentId, id: message.id } : { environmentId: site.environmentId, operation: message.operation, payload: message.payload, screenshot: message.screenshot };
         const response = await fetch(`${apiOrigin}/api/extension/${endpoint}`, { method: 'POST', credentials: 'omit', headers: { Authorization: `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(30000) });

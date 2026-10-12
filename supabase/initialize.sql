@@ -18,12 +18,12 @@ declare item record;
 begin
   for item in select p.oid::regprocedure::text as signature from pg_proc p
     join pg_namespace n on n.oid=p.pronamespace
-    where n.nspname='public' and p.proname in ('list_project_participants','widget_config','widget_authorize','start_widget_session','add_environment_widget','create_project_with_production','is_platform_admin','can_read_project','can_manage_project','add_project_owner','create_member_invite','accept_member_invite','create_guest_invite','revoke_project_invite','list_project_members','preview_guest_invite','start_guest_session','get_guest_session','create_member_handoff','create_guest_handoff','redeem_extension_handoff','extension_context','revoke_extension_session','report_actor','report_operation','manage_project_member','platform_delete_resource','create_environment_guest_invite','preview_guest_review','save_project_review_link','create_environment_review_link','regenerate_environment_review_link')
+    where n.nspname='public' and p.proname in ('notification_operation','notify_issue_status','list_project_participants','widget_config','widget_authorize','start_widget_session','add_environment_widget','create_project_with_production','is_platform_admin','can_read_project','can_manage_project','add_project_owner','create_member_invite','accept_member_invite','create_guest_invite','revoke_project_invite','list_project_members','preview_guest_invite','start_guest_session','get_guest_session','create_member_handoff','create_guest_handoff','redeem_extension_handoff','extension_context','revoke_extension_session','report_actor','report_operation','manage_project_member','platform_delete_resource','create_environment_guest_invite','preview_guest_review','save_project_review_link','create_environment_review_link','regenerate_environment_review_link')
   loop execute format('drop function if exists %s cascade',item.signature); end loop;
 end;
 $$;
 
-drop table if exists public.widget_sessions, public.environment_widgets, public.environment_review_links, public.project_review_links,
+drop table if exists public.notifications, public.widget_sessions, public.environment_widgets, public.environment_review_links, public.project_review_links,
  public.extension_handoffs, public.extension_sessions, public.comments, public.issues,
  public.member_invites, public.guest_sessions, public.guest_invites,
  public.environments, public.project_members, public.projects, public.platform_admins cascade;
@@ -328,7 +328,7 @@ begin
   elsif operation='status' then
     if actor is null and guest is null then raise exception 'Not authorized' using errcode='42501'; end if;
     if payload->>'status' not in ('open','in_progress','validation','resolved') or payload->>'status' is null then raise exception 'Invalid status' using errcode='22023'; end if;
-    update public.issues set status=payload->>'status' where id=report.id;
+    update public.issues set status=payload->>'status', updated_at=clock_timestamp(), updated_by=actor, updated_guest_session_id=guest where id=report.id and status is distinct from payload->>'status';
   elsif operation='priority' then
     if actor is null and guest is null then raise exception 'Not authorized' using errcode='42501'; end if;
     if payload->>'priority' is null or payload->>'priority' not in ('low','medium','high') then raise exception 'Invalid priority' using errcode='22023'; end if;
@@ -345,11 +345,12 @@ begin
     if not coalesce(editable,false) then raise exception 'Not authorized' using errcode='42501'; end if;
     delete from public.issues where id=report.id;
   else raise exception 'Unknown operation' using errcode='22023'; end if;
-  if operation in ('status','priority','edit','screenshot') then
+  if operation in ('priority','edit','screenshot') then
     update public.issues set updated_at=clock_timestamp(),updated_by=actor,updated_guest_session_id=guest where id=report.id
       and (operation='screenshot' or body is distinct from report.body or status is distinct from report.status or priority is distinct from report.priority);
     select * into report from public.issues where id=report.id;
   end if;
+  if operation='status' then select * into report from public.issues where id=report.id; end if;
   return to_jsonb(report);
 end;
 $$;
@@ -591,6 +592,88 @@ begin
 end;
 $$;
 
+
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  issue_id uuid not null references public.issues(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade,
+  guest_session_id uuid references public.guest_sessions(id) on delete cascade,
+  previous_status text not null check(previous_status in ('open','in_progress','validation','resolved')),
+  status text not null check(status in ('open','in_progress','validation','resolved')),
+  actor_name text not null,
+  created_at timestamptz not null default clock_timestamp(),
+  read_at timestamptz,
+  check(num_nonnulls(user_id,guest_session_id)=1)
+);
+create index if not exists notifications_user on public.notifications(user_id,created_at desc);
+create index if not exists notifications_guest on public.notifications(guest_session_id,created_at desc);
+alter table public.notifications enable row level security;
+revoke all on public.notifications from public,anon,authenticated;
+
+create or replace function public.notify_issue_status() returns trigger
+language plpgsql security definer set search_path='' as $$
+declare label text;
+begin
+  if new.status is not distinct from old.status then return new; end if;
+  select coalesce(g.display_name,u.email,'Utente') into label
+    from public.issues i left join auth.users u on u.id=new.updated_by
+    left join public.guest_sessions g on g.id=new.updated_guest_session_id where i.id=new.id;
+  insert into public.notifications(issue_id,user_id,previous_status,status,actor_name)
+    select new.id,u.id,old.status,new.status,label from auth.users u
+    where not coalesce((to_jsonb(u)->>'is_anonymous')::boolean,false);
+  insert into public.notifications(issue_id,guest_session_id,previous_status,status,actor_name)
+    select new.id,g.id,old.status,new.status,label from public.guest_sessions g
+    join public.guest_invites v on v.id=g.invite_id and v.revoked_at is null
+    where g.project_id=new.project_id;
+  return new;
+end;
+$$;
+revoke all on function public.notify_issue_status() from public,anon,authenticated;
+drop trigger if exists issue_status_notification on public.issues;
+create trigger issue_status_notification after update of status on public.issues
+for each row execute function public.notify_issue_status();
+
+create or replace function public.notification_operation(secret text, target uuid, operation text, payload jsonb default '{}'::jsonb) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare a jsonb; actor uuid; guest uuid; result jsonb;
+begin
+  if target is null then
+    if secret is not null or not public.can_read_project(null) then raise exception 'Not authorized' using errcode='42501'; end if;
+    actor:=auth.uid();
+  else
+    a:=public.report_actor(secret,target);
+    actor:=(a->>'userId')::uuid; guest:=(a->>'guestId')::uuid;
+  end if;
+  if operation not in ('notifications','notification_read','notifications_read') or operation is null then
+    raise exception 'Invalid operation' using errcode='22023';
+  end if;
+  if operation='notification_read' and not (payload ? 'id') then
+    raise exception 'Notification required' using errcode='22023';
+  end if;
+  if operation in ('notification_read','notifications_read') then
+    update public.notifications n set read_at=coalesce(n.read_at,clock_timestamp())
+    from public.issues i where i.id=n.issue_id
+      and ((actor is not null and n.user_id=actor) or (guest is not null and n.guest_session_id=guest))
+      and (target is null or i.environment_id=target)
+      and (not(payload ? 'pagePath') or i.page_path=payload->>'pagePath')
+      and (operation='notifications_read' or n.id=(payload->>'id')::uuid);
+    if operation='notification_read' and not found then raise exception 'Notification unavailable' using errcode='42501'; end if;
+  end if;
+  select coalesce(jsonb_agg(row_data order by row_data->>'created_at' desc,row_data->>'id'),'[]'::jsonb) into result from (
+    select jsonb_build_object('id',n.id,'issue_id',i.id,'project_id',i.project_id,'environment_id',i.environment_id,
+      'project_name',p.name,'environment_name',e.name,'page_path',i.page_path,'body',i.body,
+      'previous_status',n.previous_status,'status',n.status,'actor_name',n.actor_name,'created_at',n.created_at,'read_at',n.read_at) row_data
+    from public.notifications n join public.issues i on i.id=n.issue_id
+    join public.projects p on p.id=i.project_id join public.environments e on e.id=i.environment_id
+    where ((actor is not null and n.user_id=actor) or (guest is not null and n.guest_session_id=guest))
+      and (target is null or i.environment_id=target)
+      and (not(payload ? 'pagePath') or i.page_path=payload->>'pagePath')
+  ) rows;
+  return result;
+end;
+$$;
+revoke all on function public.notification_operation(text,uuid,text,jsonb) from public,anon,authenticated;
+grant execute on function public.notification_operation(text,uuid,text,jsonb) to anon,authenticated;
 
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
 values('screenshots','screenshots',false,2621440,array['image/jpeg'])

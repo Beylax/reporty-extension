@@ -184,3 +184,30 @@ test('shadow styles initialize Tailwind properties locally without overriding ut
   assert.match(css, /:host\{--reporty-primary:black\}/);
   assert.doesNotMatch(css, /(?:var\(|@property )--tw-/);
 });
+
+test('notification requests require the current page and preserve its session and scope', async () => {
+  const h = harness('member');
+  h.stored.sessionToken = 'a'.repeat(64);
+  h.stored.sites = { 'https://example.com': { environmentId: 'env', position: 'bottom_right' } };
+  const sender = { id: 'test', frameId: 0, tab: { id: 1 }, url: 'https://example.com/page' };
+  for (const operation of ['notifications', 'notification_read', 'notifications_read']) {
+    for (const pagePath of [undefined, '/other']) {
+      let response;
+      h.events.internal({ type: 'REPORTY_REPORT', operation, payload: { pagePath } }, sender, value => response = value);
+      await flush();
+      assert.equal(response.ok, false);
+      assert.match(response.error, /pagina è cambiata/);
+    }
+  }
+  assert.equal(h.requests.some(request => request.url.endsWith('/reports')), false);
+  let response;
+  h.events.internal({ type: 'REPORTY_REPORT', operation: 'notifications_read', payload: { pagePath: '/page' } }, sender, value => response = value);
+  await flush();
+  assert.equal(response.ok, true);
+  const request = h.requests.findLast(request => request.url.endsWith('/reports'));
+  assert.equal(request.options.headers.Authorization, 'Bearer ' + 'a'.repeat(64));
+  const input = JSON.parse(request.options.body);
+  assert.equal(input.environmentId, 'env');
+  assert.equal(input.payload.pagePath, '/page');
+  assert.equal(input.operation, 'notifications_read');
+});

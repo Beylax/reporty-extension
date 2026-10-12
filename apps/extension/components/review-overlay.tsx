@@ -13,12 +13,13 @@ import { ThemeSwitch } from '@/components/theme-switch';
 import { BrandLogo } from '@/components/brand-logo';
 import { useNotify } from '@/components/ui/toast';
 import { RepliesSkeleton, ReportRowsSkeleton, ScreenshotSkeleton } from '@/components/loading-skeletons';
+import { Skeleton } from '@/components/ui/skeleton';
 import { LoadingImage } from '@/components/loading-image';
 import { ScreenshotGallery } from '@/components/screenshot-gallery';
-import type { ReportSort } from '@reporty/shared';
+import type { ReportSort, ReportNotification } from '@reporty/shared';
 import { compareReportsBy } from '@reporty/shared';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Settings, Menu, X, Crosshair, Eye, MapPin, Pencil, Plus, Target } from 'lucide-react';
+import { ArrowLeft, Bell, Settings, Menu, X, Crosshair, Eye, MapPin, Pencil, Plus, Target } from 'lucide-react';
 import { compareReports, formatReportDateTime, getPageContext, priorityLabels, type ReportPriority, type Anchor, type Report, type ReportComment, type ReportContext } from '@reporty/shared';
 import type { Environment, Site } from '@/lib/session';
 import { captureHighlightedScreenshot } from '@/lib/screenshot';
@@ -71,6 +72,54 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
   const [showResolved, setShowResolved] = useState(false);
   const [pinsVisible, setPinsVisible] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<ReportNotification[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(true);
+  const notificationLock = useRef(false);
+  const notificationRevision = useRef(0);
+  const notificationScope = useRef('');
+  notificationScope.current = environment.id + ':' + page.pagePath;
+  const unreadNotifications = notifications.filter(item => !item.read_at && item.environment_id === environment.id && item.page_path === page.pagePath).length;
+  useEffect(() => {
+    let disposed = false, pending = false, failed = false;
+    setNotifications([]); setNotificationsLoading(true); setNotificationsOpen(false);
+    async function refreshNotifications() {
+      if (pending || notificationLock.current) return;
+      pending = true;
+      const version = notificationRevision.current;
+      try {
+        const result = await message({ type: 'REPORTY_REPORT', operation: 'notifications', payload: { pagePath: page.pagePath } });
+        if (!disposed && version === notificationRevision.current) { setNotifications(result.data); failed = false; }
+      } catch (error) {
+        if (!disposed && !failed) setStatus(error instanceof Error ? error.message : 'Notifiche non disponibili.');
+        failed = true;
+      } finally { pending = false; if (!disposed) setNotificationsLoading(false); }
+    }
+    void refreshNotifications();
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') void refreshNotifications(); }, 10000);
+    return () => { disposed = true; clearInterval(timer); };
+  }, [environment.id, page.pagePath]);
+  async function readNotifications(item?: ReportNotification) {
+    if (notificationLock.current) return;
+    notificationLock.current = true; notificationRevision.current++;
+    const scope = notificationScope.current;
+    await run(async () => {
+      try {
+        const result = await message({ type: 'REPORTY_REPORT', operation: item ? 'notification_read' : 'notifications_read', payload: { pagePath: page.pagePath, ...(item ? { id: item.id } : {}) } });
+        if (scope !== notificationScope.current) return;
+        setNotifications(result.data);
+        if (item) {
+          const [thread, listing] = await Promise.all([loadThread(item.issue_id), message({ type: 'REPORTY_REPORT', operation: 'list', payload: { pagePath: page.pagePath } })]);
+          if (scope !== notificationScope.current) return;
+          const report = (listing.data as Report[]).find(entry => entry.id === item.issue_id);
+          if (!report) throw new Error('Segnalazione non disponibile.');
+          if (report.environment_id !== environment.id || report.page_path !== page.pagePath) throw new Error('Segnalazione non disponibile in questa pagina.');
+          setReports(items => items.some(entry => entry.id === report.id) ? items.map(entry => entry.id === report.id ? { ...entry, ...report } : entry) : [...items, report]);
+          setSelected(report); setComments(thread.data.comments); setNotificationsOpen(false); setSettingsOpen(false); setReply(''); setEdit(null); setImageUrl('');
+        } else setStatus('Notifiche della pagina segnate come lette.', 'success');
+      } finally { notificationLock.current = false; }
+    });
+  }
   const [mode, setMode] = useState<'element' | 'pin' | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [selected, setSelected] = useState<Report | null>(null);
@@ -144,7 +193,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
     });
   }
   async function view(report: Report) {
-    setSettingsOpen(false); setSelected(report); setReply(''); setDraft(null); setEdit(null); setComments([]); setImageUrl(''); setOpen(false); setModalOpen(true);
+    setSettingsOpen(false); setNotificationsOpen(false); setSelected(report); setReply(''); setDraft(null); setEdit(null); setComments([]); setImageUrl(''); setOpen(false); setModalOpen(true);
     await run(async () => {
       const result = await loadThread(report.id);
       setComments(result.data.comments);
@@ -249,7 +298,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
   ];
   const top = site.position.startsWith('top'), left = site.position.endsWith('left');
   const panelPosition = { [top ? 'top' : 'bottom']: 88, [left ? 'left' : 'right']: 24 };
-  const floatingControls = <div className={`pointer-events-auto fixed flex items-center gap-1 rounded-full border bg-background p-1.5 shadow-xl ${left ? 'flex-row-reverse' : ''}`} style={{ [top ? 'top' : 'bottom']: 24, [left ? 'left' : 'right']: 24 }}><Button aria-label={modalOpen ? 'Chiudi segnalazioni' : 'Apri lista segnalazioni'} aria-expanded={modalOpen} variant="ghost" size="icon" className="size-9 rounded-lg text-foreground" onClick={() => { if (modalOpen) { setModalOpen(false); } else { setOpen(false); setSettingsOpen(false); setSelected(null); setModalOpen(true); void run(async () => { await refresh(); }); } }}>{modalOpen ? <X className="size-5" /> : <Menu className="size-5" />}</Button>    <Button aria-label={open ? 'Chiudi creazione segnalazione' : 'Crea segnalazione'} aria-expanded={open} size="icon" className="size-10 rounded-full" onClick={() => { setOpen(!open); setModalOpen(false); }}><span className="flex transition-transform motion-reduce:transition-none" style={{transform:open?'rotate(45deg)':'rotate(0deg)'}}><Plus className="size-5" /></span></Button></div>;
+  const floatingControls = <div className={`pointer-events-auto fixed flex items-center gap-1 rounded-full border bg-background p-1.5 shadow-xl ${left ? 'flex-row-reverse' : ''}`} style={{ [top ? 'top' : 'bottom']: 24, [left ? 'left' : 'right']: 24 }}><Button aria-label={modalOpen ? 'Chiudi segnalazioni' : `Apri lista segnalazioni${unreadNotifications ? `, ${unreadNotifications} notifiche non lette` : ''}`} aria-expanded={modalOpen} variant="ghost" size="icon" className="relative size-9 rounded-lg text-foreground" onClick={() => { if (modalOpen) { setModalOpen(false); } else { setOpen(false); setSettingsOpen(false); setNotificationsOpen(false); setSelected(null); setModalOpen(true); void run(async () => { await refresh(); }); } }}>{modalOpen ? <X className="size-5" /> : <Menu className="size-5" />}{unreadNotifications ? <span aria-hidden="true" className="absolute -top-1 -right-1 min-w-4 rounded-full bg-red-600 px-1 text-[10px] leading-4 text-white">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span> : null}</Button>    <Button aria-label={open ? 'Chiudi creazione segnalazione' : 'Crea segnalazione'} aria-expanded={open} size="icon" className="size-10 rounded-full" onClick={() => { setOpen(!open); setModalOpen(false); }}><span className="flex transition-transform motion-reduce:transition-none" style={{transform:open?'rotate(45deg)':'rotate(0deg)'}}><Plus className="size-5" /></span></Button></div>;
   return <>
     {hover && mode ? <div className="pointer-events-none fixed border-2 border-indigo-500 bg-indigo-500/10" style={{ left: hover.left, top: hover.top, width: hover.width, height: hover.height }} /> : null}
     {mode ? <div className="pointer-events-auto fixed left-1/2 top-4 -translate-x-1/2 rounded-lg border bg-card p-3 text-sm shadow-xl">{mode === 'element' ? 'Seleziona un elemento' : 'Posiziona un pin'} · Esc per annullare <Button size="sm" variant="outline" onClick={() => { setMode(null); setOpen(true); }}>Annulla</Button></div> : null}
@@ -296,9 +345,11 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
         const rect = modal.current.getBoundingClientRect();
         if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) setModalOpen(false);
       }} onCancel={event => { if (event.target === modal.current) setModalOpen(false); }} onClose={event => { if (event.target === modal.current) setModalOpen(false); }}>
-      <div className={selected || settingsOpen ? "max-h-[85dvh] space-y-5 overflow-y-auto p-6" : "flex h-[80dvh] max-h-[85dvh] flex-col gap-5 overflow-hidden p-6"}>
-        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3"><h2 id="reporty-modal-title" className="text-xl font-semibold">{settingsOpen ? 'Impostazioni' : selected ? 'Dettaglio segnalazione' : `${environment.projectName} · ${environment.name}`}</h2><div className="flex flex-wrap items-center gap-2">{settingsOpen ? <Button variant="outline" onClick={() => setSettingsOpen(false)}><ArrowLeft className="size-4" aria-hidden="true" />Torna alle segnalazioni</Button> : !selected ? <Button variant="outline" size="icon" aria-label="Apri impostazioni" title="Impostazioni" onClick={() => setSettingsOpen(true)}><Settings className="size-4" aria-hidden="true" /></Button> : null}{selected ? <Button variant="outline" onClick={() => { setSelected(null); setImageUrl(''); }}><ArrowLeft className="size-4" />Torna alle segnalazioni</Button> : null}<Button variant="outline" size="icon" aria-label="Chiudi modale" onClick={() => setModalOpen(false)}><X /></Button></div></header>
-        {settingsOpen ? <section className="space-y-4" aria-label="Impostazioni Reporty">
+      <div className={selected || settingsOpen || notificationsOpen ? "max-h-[85dvh] space-y-5 overflow-y-auto p-6" : "flex h-[80dvh] max-h-[85dvh] flex-col gap-5 overflow-hidden p-6"}>
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3"><h2 id="reporty-modal-title" className="text-xl font-semibold">{notificationsOpen ? 'Notifiche della pagina' : settingsOpen ? 'Impostazioni' : selected ? 'Dettaglio segnalazione' : `${environment.projectName} · ${environment.name}`}</h2><div className="flex flex-wrap items-center gap-2">{settingsOpen || notificationsOpen ? <Button variant="outline" onClick={() => { setSettingsOpen(false); setNotificationsOpen(false); }}><ArrowLeft className="size-4" aria-hidden="true" />Torna alle segnalazioni</Button> : !selected ? <><Button variant="outline" size="icon" aria-label={`Apri notifiche, ${unreadNotifications} non lette`} title="Notifiche" onClick={() => setNotificationsOpen(true)}><Bell className="size-4" aria-hidden="true" /></Button><Button variant="outline" size="icon" aria-label="Apri impostazioni" title="Impostazioni" onClick={() => setSettingsOpen(true)}><Settings className="size-4" aria-hidden="true" /></Button></> : null}{selected ? <Button variant="outline" onClick={() => { setSelected(null); setImageUrl(''); }}><ArrowLeft className="size-4" />Torna alle segnalazioni</Button> : null}<Button variant="outline" size="icon" aria-label="Chiudi modale" onClick={() => setModalOpen(false)}><X /></Button></div></header>
+        {notificationsOpen ? <section className="space-y-4" aria-label="Notifiche della pagina"><Button variant="outline" disabled={busy || notificationsLoading || !unreadNotifications} onClick={() => void readNotifications()}>Segna tutte come lette</Button>
+          {notificationsLoading ? <div role="status" aria-label="Caricamento notifiche" className="space-y-3">{[0,1,2].map(item => <div key={item} className="space-y-3 rounded-lg border p-4"><Skeleton className="h-4 w-5/6" /><Skeleton className="h-4 w-2/3" /><Skeleton className="h-3 w-1/2" /></div>)}</div> : notifications.length ? notifications.map(item => <button key={item.id} disabled={busy} onClick={() => void readNotifications(item)} className={`block w-full space-y-2 rounded-lg border p-4 text-left hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring ${item.read_at ? '' : 'border-primary/30 bg-primary/5'}`}><p className="flex items-center gap-2 text-sm font-medium">{!item.read_at ? <span className="size-2 shrink-0 rounded-full bg-red-600" aria-label="Non letta" /> : null}{item.actor_name}: {statusLabels[item.previous_status]} → {statusLabels[item.status]}</p><p className="line-clamp-2 break-words text-sm">{item.body}</p><time className="text-xs text-muted-foreground" dateTime={item.created_at}>{formatReportDateTime(item.created_at)}</time></button>) : <p className="text-sm text-muted-foreground">Nessuna notifica per questa pagina.</p>}
+        </section> : settingsOpen ? <section className="space-y-4" aria-label="Impostazioni Reporty">
           <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/50 p-4 dark:bg-card"><div className="space-y-1"><Label htmlFor="reporty-pins-visible">Mostra segnalazioni sulla pagina</Label><p id="reporty-pins-help" className="text-xs text-muted-foreground">Mostra o nasconde tutti i pin. Le segnalazioni restano disponibili nella lista.</p></div><Switch id="reporty-pins-visible" checked={pinsVisible} onCheckedChange={setPinsVisible} aria-describedby="reporty-pins-help" /></div>
           <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/50 p-4 dark:bg-card"><div className="space-y-1"><Label htmlFor="reporty-resolved">Mostra risolte</Label><p id="reporty-resolved-help" className="text-xs text-muted-foreground">Include i pin delle segnalazioni chiuse sulla pagina. Non modifica i filtri della lista.</p></div><Switch id="reporty-resolved" checked={showResolved} onCheckedChange={setShowResolved} disabled={!pinsVisible} aria-describedby="reporty-resolved-help" /></div>
           <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/50 p-4 dark:bg-card"><div className="space-y-1"><h3 className="text-sm font-medium">Tema</h3><p className="text-xs text-muted-foreground">Scegli la modalità chiara o scura per Reporty.</p></div><ThemeSwitch host={host} /></div>

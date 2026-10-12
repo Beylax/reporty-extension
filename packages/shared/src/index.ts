@@ -4,7 +4,7 @@ export { formatReportDateTime } from './date';
 export { getPageContext } from './page';
 export { normalizeOrigin, validateName, isUuid } from './project';
 export { matchesReportUsers, reportContextSchema, reportRequestSchema, reportPrioritySchema, priorityLabels } from './reports';
-export type { Report, ReportComment, ReportPriority, ProjectParticipant } from './reports';
+export type { ReportNotification, Report, ReportComment, ReportPriority, ProjectParticipant } from './reports';
 
 export const issueStatuses = ['open', 'in_progress', 'validation', 'resolved'] as const;
 export type IssueStatus = (typeof issueStatuses)[number];

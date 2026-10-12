@@ -15,7 +15,7 @@ export const reportContextSchema = z.object({
   scroll: z.object({ x: coordinate, y: coordinate }),
 });
 export const reportRequestSchema = z.object({
-  environmentId: z.string().uuid(), operation: z.enum(['list', 'thread', 'create', 'reply', 'status', 'priority', 'edit', 'delete']),
+  environmentId: z.string().uuid(), operation: z.enum(['list', 'thread', 'create', 'reply', 'status', 'priority', 'edit', 'delete', 'notifications', 'notification_read', 'notifications_read']),
   payload: z.object({ id: z.string().uuid().optional(), pagePath: z.string().max(8192).optional(), body: z.string().trim().min(1).max(10000).optional(), status: z.enum(['open','in_progress','validation','resolved']).optional(), priority: reportPrioritySchema.optional(), context: reportContextSchema.optional() }),
   screenshot: z.string().max(3500000).optional(),
 });
@@ -33,3 +33,10 @@ export type ProjectParticipant = { key: string; kind: 'developer' | 'guest'; nam
 export function matchesReportUsers(report: Pick<Report, 'authorKey' | 'updatedByKey'>, users: string[]) {
   return !users.length || users.includes(report.authorKey ?? '') || users.includes(report.updatedByKey ?? '');
 }
+
+export type ReportNotification = {
+  id: string; issue_id: string; project_id: string; environment_id: string;
+  project_name: string; environment_name: string; page_path: string; body: string;
+  previous_status: Report['status']; status: Report['status']; actor_name: string;
+  created_at: string; read_at: string | null;
+};
