@@ -2,7 +2,7 @@ import { AccordionSection } from '@/components/ui/accordion';
 import { EnvironmentWidget } from '../../environment-widget';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { isUuid } from '@reporty/shared';
+import { isUuid, type ProjectParticipant } from '@reporty/shared';
 import { requireUser } from '@/lib/auth';
 import { renameProject, saveEnvironment } from '../../actions';
 import { Feedback } from '../../feedback';
@@ -26,12 +26,13 @@ export default async function Project({ params, searchParams }: {
   const { supabase } = await requireUser();
   const { projectId } = await params;
   if (!isUuid(projectId)) notFound();
-  const [projectResult, environmentsResult, permissionResult, linksResult, widgetsResult, { message }] = await Promise.all([
+  const [projectResult, environmentsResult, permissionResult, linksResult, widgetsResult, participantsResult, { message }] = await Promise.all([
     supabase.from('projects').select('id, name').eq('id', projectId).maybeSingle(),
     supabase.from('environments').select('id, name, origin').eq('project_id', projectId).order('created_at'),
     supabase.rpc('can_manage_project', { target: projectId }),
     supabase.from('environment_review_links').select('environment_id,token,environments!inner(project_id)').eq('environments.project_id', projectId),
     supabase.from('environment_widgets').select('environment_id,public_key,enabled'),
+    supabase.rpc('list_project_participants', { target: projectId }),
     searchParams,
   ]);
   if (projectResult.error || environmentsResult.error || permissionResult.error) {
@@ -41,6 +42,7 @@ export default async function Project({ params, searchParams }: {
   if (!project) notFound();
   const canManage = permissionResult.data === true;
   const environments = environmentsResult.data ?? [];
+  const participants = (participantsResult.data ?? []) as ProjectParticipant[];
   return (
     <main className="mx-auto w-full max-w-7xl space-y-8 px-6 py-10 lg:px-10">
       <Link href="/dashboard" className={buttonVariants({ variant: 'outline' })}>← Tutti i progetti</Link>
@@ -49,7 +51,7 @@ export default async function Project({ params, searchParams }: {
         <Badge variant="secondary">Sviluppatore</Badge>
       </header>
       <Feedback message={message} />
-      <ProjectTabs reports={<ProjectReports environments={environments} />} environments={<>
+      <ProjectTabs reports={<ProjectReports environments={environments} participants={participants} />} environments={<>
       <section className="space-y-4" aria-labelledby="environments-title">
         <div><h2 id="environments-title" className="text-xl font-semibold">Ambienti</h2></div>
         {!environments.length ? <Card><CardContent className="py-6 text-muted-foreground">Nessun ambiente aggiunto.</CardContent></Card> : null}
@@ -86,6 +88,11 @@ export default async function Project({ params, searchParams }: {
           <div className="grid min-w-60 flex-1 gap-2"><Label htmlFor="project-name">Nome</Label><Input id="project-name" name="name" defaultValue={project.name} maxLength={120} required /></div>
           <SubmitButton>Salva nome</SubmitButton>
         </form></CardContent>
+      </Card><Card>
+        <CardHeader><CardTitle>Utenti</CardTitle><CardDescription>Sviluppatori e ospiti che hanno partecipato al progetto. Gli ospiti sono identificati dalla propria sessione.</CardDescription></CardHeader>
+        <CardContent className="space-y-3">
+          {participantsResult.error ? <FeedbackToast message="Impossibile caricare gli utenti. Verifica di aver applicato supabase/report_updates.sql." /> : participants.length ? participants.map(person => <div key={person.key} className="flex items-center justify-between gap-3 rounded-lg border bg-muted/50 p-3"><span className="min-w-0 break-words text-sm">{person.name}</span><Badge variant="secondary">{person.kind === 'developer' ? 'Sviluppatore' : 'Guest'}</Badge></div>) : <p className="text-sm text-muted-foreground">Nessun partecipante.</p>}
+        </CardContent>
       </Card><section aria-label="Zona pericolosa" className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4"><h3 className="text-sm font-semibold text-destructive">Zona pericolosa</h3><ResourceDelete fullWidth id={projectId} kind="project" name={project.name} /></section></> : null} />
     </main>
   );

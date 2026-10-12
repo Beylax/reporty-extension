@@ -25,7 +25,6 @@ test('destructive bootstrap, shared permissions, guest updates and environment l
       insert into auth.users values ('${owner}','owner@example.com',now()), ('${member}','member@example.com',now()), ('${outsider}','outsider@example.com',now()), ('${platform}','platform@example.com',now());`);
     const initialize = await readFile(new URL('../initialize.sql', import.meta.url),'utf8');
     await db.exec(initialize);
-    await db.exec(await readFile(new URL('../report_comment_counts.sql', import.meta.url),'utf8'));
     assert.equal((await db.query('select * from auth.users')).rows.length,0);
     await db.exec(initialize);
     await db.query('insert into auth.users(id,email,email_confirmed_at) values($1,$2,now()),($3,$4,now())',[owner,'owner@example.com',outsider,'developer@example.com']);
@@ -63,6 +62,20 @@ test('destructive bootstrap, shared permissions, guest updates and environment l
     const issue='88888888-8888-4888-8888-888888888888';
     const context={url:'https://one.example/',origin:'https://one.example',pagePath:'/',anchor:{kind:'pin',documentX:10,documentY:20},viewport:{width:1280,height:800,devicePixelRatio:1},scroll:{x:0,y:0}};
     await db.query('select public.report_operation($1,$2,$3,$4)',[extensionSecret,env,'create',{id:issue,body:'Fix',context,priority:'high'}]);
+    // Apply the incremental update to a populated pre-audit schema.
+    await db.exec('reset role');
+    await db.exec('alter table public.issues drop column updated_at, drop column updated_by, drop column updated_guest_session_id');
+    await db.exec(await readFile(new URL('../report_updates.sql', import.meta.url),'utf8'));
+    await as(outsider);
+    const historical=(await db.query('select * from public.issues where id=$1',[issue])).rows[0];
+    assert.equal(historical.body,'Fix');
+    assert.equal(historical.updated_at,null);
+    await db.query('select public.report_operation(null,$1,$2,$3)',[env,'priority',{id:issue,priority:'low'}]);
+    const audited=(await db.query('select * from public.issues where id=$1',[issue])).rows[0];
+    assert.equal(audited.updated_by,outsider);
+    assert.ok(audited.updated_at);
+    await db.query('select public.report_operation(null,$1,$2,$3)',[env,'priority',{id:issue,priority:'low'}]);
+    assert.equal((await db.query('select * from public.issues where id=$1',[issue])).rows[0].updated_at.toISOString(),audited.updated_at.toISOString());
     const widget=(await db.query('select * from public.environment_widgets where environment_id=$1',[env])).rows[0];
     assert.equal(widget.enabled,false);
     const widgetSecret='9'.repeat(64),widgetIssue='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -78,6 +91,16 @@ test('destructive bootstrap, shared permissions, guest updates and environment l
     const widgetReports=(await db.query('select public.report_operation($1,$2,$3,$4) as reports',[widgetSecret,env,'list',{}])).rows[0].reports;
     assert.equal(widgetReports.find(report=>report.id===widgetIssue).canEdit,true);
     await db.query('select public.report_operation($1,$2,$3,$4)',[widgetSecret,env,'edit',{id:widgetIssue,body:'Edited from script'}]);
+    const widgetEdited=(await db.query('select public.report_operation($1,$2,$3,$4) as data',[widgetSecret,env,'list',{}])).rows[0].data.find(item=>item.id===widgetIssue);
+    assert.equal(widgetEdited.updatedByName,'Reviewer');
+    assert.ok(widgetEdited.updated_guest_session_id);
+    assert.equal(widgetEdited.updated_by,null);
+    await db.query('select public.report_operation($1,$2,$3,$4)',[widgetSecret,env,'screenshot',{id:widgetIssue}]);
+    const captured=(await db.query('select public.report_operation($1,$2,$3,$4) as data',[widgetSecret,env,'thread',{id:widgetIssue}])).rows[0].data.issue;
+    assert.ok(captured.updated_at);
+    assert.equal(captured.guest_session_id,captured.updated_guest_session_id);
+    assert.equal(captured.created_at,widgetEdited.created_at);
+
     await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)',[widgetSecret,env2,'list',{}]),/unavailable/);
     await as(outsider);
     await db.query('update public.environment_widgets set enabled=false where environment_id=$1',[env]);
@@ -109,15 +132,28 @@ test('destructive bootstrap, shared permissions, guest updates and environment l
       await db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,operation,{id:issue,[field]:value}]);
       await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,operation,{id:issue,[field]:'invalid'}]),/Invalid/);
     }
+    await assert.rejects(db.query('select public.list_project_participants($1)',[project]),/permission denied/);
     const beforeReplies=(await db.query('select public.report_operation($1,$2,$3,$4) as reports',[guestExtension,env,'list',{}])).rows[0].reports;
     assert.equal(beforeReplies.find(item => item.id === issue).commentCount,0);
     for (const body of ['First reply','Second reply']) await db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,'reply',{id:issue,body}]);
     const reports=(await db.query('select public.report_operation($1,$2,$3,$4) as reports',[guestExtension,env,'list',{}])).rows[0].reports;
-    assert.equal(reports.find(item => item.id === issue).commentCount,2);
+    const beforeReply=beforeReplies.find(item => item.id === issue), afterReply=reports.find(item => item.id === issue);
+    assert.equal(afterReply.commentCount,2);
+    assert.equal(afterReply.updated_at,beforeReply.updated_at);
+    assert.equal(afterReply.updated_by,null);
+    assert.ok(afterReply.updated_guest_session_id);
+    assert.equal(afterReply.updatedByName,'Client');
+    assert.equal(afterReply.authorKey,'user:'+outsider);
+    assert.equal(afterReply.updatedByKey,'guest:'+afterReply.updated_guest_session_id);
     assert.equal(reports[0].canChangeStatus,true);
     assert.equal(reports[0].canEdit,false);
     await assert.rejects(db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,'delete',{id:issue}]),/Not authorized/);
     await as(outsider);
+    const participants=(await db.query('select public.list_project_participants($1) as data',[project])).rows[0].data;
+    assert.ok(participants.some(person=>person.key==='user:'+owner));
+    assert.ok(participants.some(person=>person.key===afterReply.updatedByKey));
+    const foreignParticipants=(await db.query('select public.list_project_participants($1) as data',[other])).rows[0].data;
+    assert.ok(!foreignParticipants.some(person=>person.key===afterReply.updatedByKey));
     await db.query('select public.regenerate_environment_review_link($1)',[env]);
     assert.equal((await db.query('select * from public.preview_guest_review($1)',[token])).rows.length,0);
     assert.equal((await db.query('select * from public.preview_guest_review($1)',[second])).rows.length,1);

@@ -18,7 +18,7 @@ declare item record;
 begin
   for item in select p.oid::regprocedure::text as signature from pg_proc p
     join pg_namespace n on n.oid=p.pronamespace
-    where n.nspname='public' and p.proname in ('widget_config','widget_authorize','start_widget_session','add_environment_widget','create_project_with_production','is_platform_admin','can_read_project','can_manage_project','add_project_owner','create_member_invite','accept_member_invite','create_guest_invite','revoke_project_invite','list_project_members','preview_guest_invite','start_guest_session','get_guest_session','create_member_handoff','create_guest_handoff','redeem_extension_handoff','extension_context','revoke_extension_session','report_actor','report_operation','manage_project_member','platform_delete_resource','create_environment_guest_invite','preview_guest_review','save_project_review_link','create_environment_review_link','regenerate_environment_review_link')
+    where n.nspname='public' and p.proname in ('list_project_participants','widget_config','widget_authorize','start_widget_session','add_environment_widget','create_project_with_production','is_platform_admin','can_read_project','can_manage_project','add_project_owner','create_member_invite','accept_member_invite','create_guest_invite','revoke_project_invite','list_project_members','preview_guest_invite','start_guest_session','get_guest_session','create_member_handoff','create_guest_handoff','redeem_extension_handoff','extension_context','revoke_extension_session','report_actor','report_operation','manage_project_member','platform_delete_resource','create_environment_guest_invite','preview_guest_review','save_project_review_link','create_environment_review_link','regenerate_environment_review_link')
   loop execute format('drop function if exists %s cascade',item.signature); end loop;
 end;
 $$;
@@ -85,6 +85,16 @@ create table public.issues (
   check (num_nonnulls(author_id, guest_session_id) = 1),
   unique (id, project_id)
 );
+alter table public.issues
+  add column updated_at timestamptz,
+  add column updated_by uuid references auth.users(id),
+  add column updated_guest_session_id uuid,
+  add constraint issues_updated_guest_project_fkey foreign key (updated_guest_session_id,project_id) references public.guest_sessions(id,project_id),
+  add constraint issues_update_actor_check check (
+    (updated_at is null and num_nonnulls(updated_by,updated_guest_session_id)=0) or
+    (updated_at is not null and num_nonnulls(updated_by,updated_guest_session_id)=1)
+  );
+
 create index issues_page on public.issues(environment_id, page_path, created_at);
 create table public.comments (
   id uuid primary key default gen_random_uuid(),
@@ -250,9 +260,13 @@ begin
   if operation='list' then
     select coalesce(jsonb_agg(row_data order by row_data->>'created_at' desc),'[]'::jsonb) into result from (
       select to_jsonb(i) || jsonb_build_object('authorName',coalesce(g.display_name,u.email,'Utente'),
+        'authorKey',case when i.author_id is not null then 'user:'||i.author_id::text else 'guest:'||i.guest_session_id::text end,
+        'updatedByName',coalesce(ug.display_name,uu.email),
+        'updatedByKey',case when i.updated_by is not null then 'user:'||i.updated_by::text when i.updated_guest_session_id is not null then 'guest:'||i.updated_guest_session_id::text end,
         'canEdit',manager or (actor is not null and i.author_id=actor), 'canChangeStatus',actor is not null or guest is not null,
         'commentCount',(select count(*) from public.comments c where c.issue_id=i.id)) row_data
       from public.issues i left join public.guest_sessions g on g.id=i.guest_session_id left join auth.users u on u.id=i.author_id
+      left join public.guest_sessions ug on ug.id=i.updated_guest_session_id left join auth.users uu on uu.id=i.updated_by
       where i.environment_id=target and (not(payload ? 'pagePath') or i.page_path=payload->>'pagePath')
     ) rows;
     return result;
@@ -331,9 +345,35 @@ begin
     if not coalesce(editable,false) then raise exception 'Not authorized' using errcode='42501'; end if;
     delete from public.issues where id=report.id;
   else raise exception 'Unknown operation' using errcode='22023'; end if;
+  if operation in ('status','priority','edit','screenshot') then
+    update public.issues set updated_at=clock_timestamp(),updated_by=actor,updated_guest_session_id=guest where id=report.id
+      and (operation='screenshot' or body is distinct from report.body or status is distinct from report.status or priority is distinct from report.priority);
+    select * into report from public.issues where id=report.id;
+  end if;
   return to_jsonb(report);
 end;
 $$;
+create or replace function public.list_project_participants(target uuid) returns jsonb
+language plpgsql stable security definer set search_path='' as $$
+declare result jsonb;
+begin
+  if not public.can_read_project(target) then raise exception 'Not authorized' using errcode='42501'; end if;
+  select coalesce(jsonb_agg(row_data order by row_data->>'name',row_data->>'key'),'[]'::jsonb) into result from (
+    select jsonb_build_object('key','user:'||u.id::text,'kind','developer','name',u.email) row_data
+    from auth.users u where u.id in (
+      select created_by from public.projects where id=target
+      union select author_id from public.issues where project_id=target
+      union select updated_by from public.issues where project_id=target
+      union select author_id from public.comments where project_id=target
+    )
+    union all
+    select jsonb_build_object('key','guest:'||g.id::text,'kind','guest','name',g.display_name) from public.guest_sessions g where g.project_id=target
+  ) participants;
+  return result;
+end;
+$$;
+revoke all on function public.list_project_participants(uuid) from public,anon,authenticated;
+grant execute on function public.list_project_participants(uuid) to authenticated;
 create or replace function public.platform_delete_resource(target uuid, kind text) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare project uuid; paths jsonb;

@@ -46,3 +46,11 @@ Con CSP del sito autorizzare il dominio Reporty per `script-src`, `connect-src` 
 Per aggiungere lo stato **Validazione** a un database già inizializzato, eseguire `supabase/report_validation.sql` (non distruttivo) prima di pubblicare la nuova UI. Lo script di inizializzazione include già questo stato.
 
 Per visualizzare il numero delle risposte sui pin di un database esistente, eseguire `report_comment_counts.sql` nel SQL Editor. È un aggiornamento non distruttivo; `initialize.sql` include già il conteggio.
+
+## Ultima modifica e partecipanti
+
+Per un database già inizializzato eseguire **`report_updates.sql`**, senza usare il reset. La query conserva i dati e aggiunge `updated_at`, `updated_by` (sviluppatore) e `updated_guest_session_id` (guest o widget). Le modifiche a descrizione, stato, priorità e screenshot vengono attribuite dal database alla sessione autorizzata; risposte e aggiornamenti senza variazione del valore non cambiano questi campi. Una nuova acquisizione screenshot aggiorna sempre la data. I dati storici di modifica restano null perché non sono ricostruibili.
+
+La dashboard mostra l’ultima modifica nel dettaglio e offre un filtro Utente: le identità selezionate corrispondono all’autore **oppure** all’ultimo modificatore. Impostazioni → Utenti elenca gli sviluppatori associati ai dati del progetto e le sessioni ospite, senza permessi di gestione. Sessioni guest diverse restano distinte anche se hanno lo stesso nome. Questa funzione registra l’ultima modifica, non una cronologia completa.
+
+Applicare la query prima del deploy della dashboard e aggiornare l’estensione ZIP.

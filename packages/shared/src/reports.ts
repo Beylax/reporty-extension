@@ -22,6 +22,14 @@ export const reportRequestSchema = z.object({
 export type Report = {
   id: string; environment_id: string; project_id: string; page_path: string; body: string;
   priority: ReportPriority; status: 'open' | 'in_progress' | 'validation' | 'resolved'; context: z.infer<typeof reportContextSchema>;
+  author_id?: string | null; guest_session_id?: string | null; authorKey?: string; updated_at?: string | null; updated_by?: string | null; updated_guest_session_id?: string | null; updatedByName?: string | null; updatedByKey?: string | null;
   screenshot_path: string | null; created_at: string; commentCount?: number; authorName: string; canEdit: boolean; canChangeStatus: boolean;
 };
 export type ReportComment = { id: string; body: string; authorName: string; created_at: string };
+
+export type ProjectParticipant = { key: string; kind: 'developer' | 'guest'; name: string };
+
+/** Selected identities match either the author or the last editor. */
+export function matchesReportUsers(report: Pick<Report, 'authorKey' | 'updatedByKey'>, users: string[]) {
+  return !users.length || users.includes(report.authorKey ?? '') || users.includes(report.updatedByKey ?? '');
+}
