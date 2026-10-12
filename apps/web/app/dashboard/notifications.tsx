@@ -4,7 +4,7 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Dialog as Primitive } from '@base-ui/react/dialog';
 import { Bell, X } from 'lucide-react';
-import { formatReportDateTime, type ReportNotification } from '@reporty/shared';
+import { createNotificationArrivalTracker, formatReportDateTime, type ReportNotification } from '@reporty/shared';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FilterPill } from '@/components/filter-pill';
@@ -24,7 +24,16 @@ export function Notifications() {
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const revision = useRef(0);
+  const collectArrivals = useRef(createNotificationArrivalTracker());
   const [projects, setProjects] = useState<string[]>([]), [environments, setEnvironments] = useState<string[]>([]), [statuses, setStatuses] = useState<string[]>([]), [reads, setReads] = useState<string[]>([]);
+  function acceptNotifications(next: ReportNotification[]) {
+    const arrivals = collectArrivals.current(next);
+    setItems(next);
+    const item = arrivals[0];
+    if (!item) return;
+    toast.add({ title: arrivals.length === 1 ? 'Nuova notifica' : `${arrivals.length} nuove notifiche`, description: arrivals.length === 1 ? `${item.actor_name}: ${item.previous_status === null ? 'Nuova segnalazione' : `${labels[item.previous_status]} → ${labels[item.status]}`} · ${item.project_name} · ${item.body.slice(0,120)}` : 'Apri il pannello notifiche per consultarle.', type: 'success' });
+  }
+  const receiveNotifications = useEffectEvent(acceptNotifications);
   const notifyError = useEffectEvent((description: string) => { toast.add({ title: 'Notifiche non disponibili', description, type: 'error' }); });
   useEffect(() => {
     const controller = new AbortController();
@@ -37,7 +46,7 @@ export function Notifications() {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error ?? 'Impossibile caricare le notifiche.');
         if (result.error) throw new Error(result.error);
-        if (!disposed && version === revision.current) { setItems(result.data ?? []); failed = false; }
+        if (!disposed && version === revision.current) { receiveNotifications(result.data ?? []); failed = false; }
       } catch (error) {
         if (!disposed && !failed) notifyError(error instanceof Error ? error.message : 'Riprova.');
         failed = true;
@@ -53,7 +62,7 @@ export function Notifications() {
     try {
       const result = await notificationAction(item ? 'notification_read' : 'notifications_read', item?.id);
       if (result.error) throw new Error(result.error);
-      setItems(result.data ?? []);
+      acceptNotifications(result.data ?? []);
       if (item) {
         setOpen(false);
         router.push(`/dashboard/projects/${item.project_id}?report=${item.issue_id}`);

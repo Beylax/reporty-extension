@@ -20,7 +20,7 @@ import type { ReportSort, ReportNotification } from '@reporty/shared';
 import { compareReportsBy } from '@reporty/shared';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Bell, Settings, Menu, X, Crosshair, Eye, MapPin, Pencil, Plus, Target } from 'lucide-react';
-import { compareReports, formatReportDateTime, getPageContext, priorityLabels, type ReportPriority, type Anchor, type Report, type ReportComment, type ReportContext } from '@reporty/shared';
+import { createNotificationArrivalTracker, compareReports, formatReportDateTime, getPageContext, priorityLabels, type ReportPriority, type Anchor, type Report, type ReportComment, type ReportContext } from '@reporty/shared';
 import type { Environment, Site } from '@/lib/session';
 import { captureHighlightedScreenshot } from '@/lib/screenshot';
 import { captureTab } from '@/lib/capture-tab';
@@ -80,6 +80,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
   const [notificationDetailLoading, setNotificationDetailLoading] = useState(false);
   const notificationLock = useRef(false);
   const notificationRevision = useRef(0);
+  const collectNotificationArrivals = useRef(createNotificationArrivalTracker());
   const notificationScope = useRef('');
   notificationScope.current = environment.id + ':' + page.pagePath;
   const pageNotifications = notifications.filter(item => item.environment_id === environment.id && item.page_path === page.pagePath);
@@ -90,7 +91,15 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
     ...notificationStatuses.map(value => ({ key: 'status-'+value, label: 'Stato: '+statusLabels[value as keyof typeof statusLabels], remove: () => setNotificationStatuses(items => items.filter(item => item !== value)) })),
     ...notificationReads.map(value => ({ key: 'read-'+value, label: 'Lettura: '+notificationReadLabels[value], remove: () => setNotificationReads(items => items.filter(item => item !== value)) })),
   ];
+  function acceptNotifications(next: ReportNotification[]) {
+    const arrivals = collectNotificationArrivals.current(next);
+    setNotifications(next);
+    const item = arrivals[0];
+    if (!item) return;
+    setStatus(arrivals.length === 1 ? `${item.actor_name}: ${item.previous_status === null ? 'Nuova segnalazione' : `${statusLabels[item.previous_status]} → ${statusLabels[item.status]}`} · ${item.body.slice(0,120)}` : `${arrivals.length} nuove notifiche per questa pagina.`, 'success');
+  }
   useEffect(() => {
+    collectNotificationArrivals.current = createNotificationArrivalTracker();
     let disposed = false, pending = false, failed = false;
     setNotifications([]); setNotificationsLoading(true); setNotificationsOpen(false); setNotificationDetailLoading(false);
     async function refreshNotifications() {
@@ -99,7 +108,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
       const version = notificationRevision.current;
       try {
         const result = await message({ type: 'REPORTY_REPORT', operation: 'notifications', payload: { pagePath: page.pagePath } });
-        if (!disposed && version === notificationRevision.current) { setNotifications(result.data); failed = false; }
+        if (!disposed && version === notificationRevision.current) { acceptNotifications(result.data); failed = false; }
       } catch (error) {
         if (!disposed && !failed) setStatus(error instanceof Error ? error.message : 'Notifiche non disponibili.');
         failed = true;
@@ -122,7 +131,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
       try {
         const result = await message({ type: 'REPORTY_REPORT', operation: item ? 'notification_read' : 'notifications_read', payload: { pagePath: page.pagePath, ...(item ? { id: item.id } : {}) } });
         if (scope !== notificationScope.current) return;
-        setNotifications(result.data);
+        acceptNotifications(result.data);
         if (item) {
           const [thread, listing] = await Promise.all([loadThread(item.issue_id), message({ type: 'REPORTY_REPORT', operation: 'list', payload: { pagePath: page.pagePath } })]);
           if (scope !== notificationScope.current) return;

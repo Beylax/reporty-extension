@@ -1,3 +1,4 @@
+export { createNotificationArrivalTracker } from './notifications';
 export type { ReportSort, ReportSortField } from './report-order';
 export { compareReports, compareReportsBy } from './report-order';
 export { formatReportDateTime } from './date';
