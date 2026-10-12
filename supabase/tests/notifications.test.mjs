@@ -7,7 +7,7 @@ const developer='11111111-1111-4111-8111-111111111111',second='22222222-2222-422
 const project='44444444-4444-4444-8444-444444444444',foreign='55555555-5555-4555-8555-555555555555';
 const env='66666666-6666-4666-8666-666666666666',env2='77777777-7777-4777-8777-777777777777',foreignEnv='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const issue='88888888-8888-4888-8888-888888888888';
-test('creation and status notifications, personal reading, page isolation, revoked guests and incremental update',async()=>{
+test('creation, status and reply notifications, personal reading, page isolation, revoked guests and incremental update',async()=>{
   const db=new PGlite();
   try {
     await db.exec(`create role anon; create role authenticated; create schema auth; create schema storage;
@@ -45,6 +45,7 @@ test('creation and status notifications, personal reading, page isolation, revok
     await as(developer);
     const op=async(secret,target,operation,payload={})=>(await db.query('select public.notification_operation($1,$2,$3,$4) as data',[secret,target,operation,payload])).rows[0].data;
     const created=await op(null,null,'notifications');
+    assert.equal(created[0].kind,'created');
     assert.equal(created.length,1); assert.equal(created[0].previous_status,null);
     assert.equal(created[0].status,'open'); assert.equal(created[0].actor_name,'dev@example.com');
     await db.query('select public.report_operation(null,$1,$2,$3)',[env,'create',{id:issue,body:'Fix',context}]);
@@ -52,6 +53,7 @@ test('creation and status notifications, personal reading, page isolation, revok
     await op(null,null,'notifications_read');
     await db.query('select public.report_operation(null,$1,$2,$3)',[env,'status',{id:issue,status:'validation'}]);
     const mine=await op(null,null,'notifications');
+    assert.equal(mine[0].kind,'status_changed');
     assert.equal(mine.length,2); assert.equal(mine[0].actor_name,'dev@example.com');
     assert.equal(mine[0].previous_status,'open'); assert.equal(mine[0].status,'validation'); assert.equal(mine[0].read_at,null);
     await db.query('select public.report_operation(null,$1,$2,$3)',[env,'status',{id:issue,status:'validation'}]);
@@ -78,6 +80,21 @@ test('creation and status notifications, personal reading, page isolation, revok
     assert.ok((await op(guestExtension,env,'notifications'))[0].read_at);
     await db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,'status',{id:issue,status:'resolved'}]);
     assert.equal((await op(guestExtension,env,'notifications'))[0].actor_name,'Reviewer');
+    await db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,'reply',{id:issue,body:'Guest reply preview'}]);
+    const guestReply=(await op(guestExtension,env,'notifications',{pagePath:'/#/route'}))[0];
+    assert.equal(guestReply.kind,'reply'); assert.equal(guestReply.reply_body,'Guest reply preview');
+    assert.equal(guestReply.actor_name,'Reviewer'); assert.equal(guestReply.previous_status,null);
+    assert.equal(guestReply.status,'resolved'); assert.ok(guestReply.comment_id);
+    assert.equal(guestReply.read_at,null);
+    assert.deepEqual(await op(guestExtension,env,'notifications',{pagePath:'/'}),[]);
+    assert.deepEqual(await op(guestExtension,env2,'notifications'),[]);
+    await op(guestExtension,env,'notification_read',{id:guestReply.id});
+    await as(second);
+    const secondReply=(await op(null,null,'notifications'))[0];
+    assert.equal(secondReply.kind,'reply'); assert.equal(secondReply.reply_body,'Guest reply preview');
+    assert.equal(secondReply.read_at,null);
+    await assert.rejects(op(null,null,'notification_read',{id:guestReply.id}),/unavailable/);
+    await as(null,'anon');
     const guestIssue='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
     const guestContext={...context,url:'https://one.example/guest-page',pagePath:'/guest-page'};
     await db.query('select public.report_operation($1,$2,$3,$4)',[guestExtension,env,'create',{id:guestIssue,body:'Guest report',context:guestContext}]);
@@ -88,7 +105,7 @@ test('creation and status notifications, personal reading, page isolation, revok
     await as(developer);
     assert.equal((await op(null,env,'notifications',{pagePath:'/guest-page'})).length,1);
     await db.query('select public.report_operation(null,$1,$2,$3)',[env,'delete',{id:guestIssue}]);
-    const afterGuest=await op(null,null,'notifications'); assert.equal(afterGuest.length,3); assert.equal(afterGuest[0].actor_name,'Reviewer');
+    const afterGuest=await op(null,null,'notifications'); assert.equal(afterGuest.length,4); assert.equal(afterGuest[0].actor_name,'Reviewer');
     const handoff='d'.repeat(64),extension='e'.repeat(64);
     await db.query("select public.create_member_handoff(encode(sha256(convert_to($1,'UTF8')),'hex'))",[handoff]);
     await db.query('select public.redeem_extension_handoff($1,$2)',[handoff,extension]);
@@ -106,6 +123,10 @@ test('creation and status notifications, personal reading, page isolation, revok
     assert.deepEqual(await op(widgetSecret,env,'notifications'),[]);
     await db.query('select public.report_operation($1,$2,$3,$4)',[widgetSecret,env,'status',{id:issue,status:'in_progress'}]);
     assert.equal((await op(widgetSecret,env,'notifications')).length,1);
+    await db.query('select public.report_operation($1,$2,$3,$4)',[widgetSecret,env,'reply',{id:issue,body:'Widget reply preview'}]);
+    const widgetReply=(await op(widgetSecret,env,'notifications'))[0];
+    assert.equal(widgetReply.kind,'reply'); assert.equal(widgetReply.actor_name,'Widget reviewer');
+    assert.equal(widgetReply.reply_body,'Widget reply preview');
     const widgetIssue='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
     await db.query('select public.report_operation($1,$2,$3,$4)',[widgetSecret,env,'create',{id:widgetIssue,body:'Widget report',context}]);
     const widgetCreation=(await op(widgetSecret,env,'notifications')).find(item=>item.issue_id===widgetIssue);
@@ -147,5 +168,27 @@ test('creation and status notifications, personal reading, page isolation, revok
     const recipients=(await db.query('select user_id,guest_session_id from public.notifications where issue_id=$1',[guestIssue])).rows;
     assert.equal(recipients.length,2); // Both developers; anonymous account and revoked guests excluded.
     assert.ok(recipients.every(item=>[developer,second].includes(item.user_id)));
+    await as(developer);
+    const historyBeforeReplyMigration=await op(null,null,'notifications');
+    await db.exec('reset role');
+    // Simulate the installation before explicit event types and reply notifications.
+    await db.exec(`drop trigger issue_reply_notification on public.comments;
+      alter table public.notifications drop column kind;
+      alter table public.notifications drop column comment_id;`);
+    await db.query('insert into public.comments(project_id,issue_id,body,author_id) values($1,$2,$3,$4)',[project,issue,'Historical reply',developer]);
+    const replyMigration=await readFile(new URL('../notifications_reply.sql',import.meta.url),'utf8');
+    await db.exec(replyMigration); await db.exec(replyMigration);
+    await as(developer);
+    assert.deepEqual(await op(null,null,'notifications'),historyBeforeReplyMigration);
+    await db.query('select public.report_operation(null,$1,$2,$3)',[env,'reply',{id:issue,body:'Developer reply preview'}]);
+    const afterReplyUpgrade=await op(null,null,'notifications');
+    assert.equal(afterReplyUpgrade.length,historyBeforeReplyMigration.length+1);
+    assert.equal(afterReplyUpgrade[0].kind,'reply'); assert.equal(afterReplyUpgrade[0].reply_body,'Developer reply preview');
+    assert.equal(afterReplyUpgrade[0].actor_name,'dev@example.com');
+    await db.exec('reset role');
+    const replyRecipients=(await db.query('select user_id,guest_session_id from public.notifications where comment_id=$1',[afterReplyUpgrade[0].comment_id])).rows;
+    assert.equal(replyRecipients.length,2);
+    assert.ok(replyRecipients.every(item=>[developer,second].includes(item.user_id)));
+
   } finally { await db.close(); }
 });

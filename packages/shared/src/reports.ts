@@ -37,7 +37,9 @@ export function matchesReportUsers(report: Pick<Report, 'authorKey' | 'updatedBy
 export type ReportNotification = {
   id: string; issue_id: string; project_id: string; environment_id: string;
   project_name: string; environment_name: string; page_path: string; body: string;
-  /** Null identifies a report creation notification. */
+  kind?: 'created' | 'status_changed' | 'reply';
+  comment_id?: string | null; reply_body?: string | null;
+  /** Null for creation and replies; kind distinguishes the event. */
   previous_status: Report['status'] | null; status: Report['status']; actor_name: string;
   created_at: string; read_at: string | null;
 };

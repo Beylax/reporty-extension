@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createNotificationArrivalTracker } from './notifications.ts';
+import { createNotificationArrivalTracker, notificationKind, notificationSummary } from './notifications.ts';
 
 const unread = (id: string) => ({ id, read_at: null });
 test('history is silent and new unread notifications produce exactly one arrival', () => {
@@ -29,4 +29,14 @@ test('temporarily missing notifications are not announced again when they reappe
   collect([]);
   assert.deepEqual(collect([unread('historical')]), []);
   assert.deepEqual(createNotificationArrivalTracker()([unread('other-page-history')]), []);
+});
+
+test('notification types distinguish replies from creation and preserve legacy status events', () => {
+  const base = { actor_name: 'Reviewer', previous_status: null, status: 'open' as const };
+  assert.equal(notificationKind(base),'created');
+  assert.equal(notificationKind({ ...base, previous_status: 'validation' }),'status_changed');
+  assert.equal(notificationKind({ ...base, kind: 'reply' }),'reply');
+  assert.match(notificationSummary(base),/Nuova segnalazione/);
+  assert.match(notificationSummary({ ...base, kind: 'reply' }),/Nuova risposta/);
+  assert.match(notificationSummary({ ...base, previous_status: 'validation' }),/Validazione → Aperta/);
 });

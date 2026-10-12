@@ -115,7 +115,7 @@ export function ReportList({ reports, environments, participants, initialReportI
     const result = await mutateReport(current.environment_id, operation, { id: current.id, ...payload });
     if (result.error) throw new Error(result.error);
     toast.add({ title: operation === 'delete' ? 'Segnalazione eliminata' : operation === 'reply' ? 'Risposta aggiunta' : 'Modifiche salvate', type: 'success' });
-    if (operation === 'status') window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
+    if (operation === 'status' || operation === 'reply') window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
     router.refresh();
   }
   function openReport(report: Report) {
