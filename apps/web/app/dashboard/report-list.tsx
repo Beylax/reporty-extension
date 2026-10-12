@@ -1,6 +1,7 @@
 'use client';
 import { ReportPagination, useReportPagination, REPORT_PAGE_SIZE } from '@/components/report-pagination';
 import { FilterPill } from '@/components/filter-pill';
+import { ReportOrder } from '@/components/report-order';
 import { ReportIcon } from '@/components/report-icon';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioButtons } from '@/components/ui/radio-buttons';
@@ -12,7 +13,7 @@ import { ScreenshotGallery } from '@/components/screenshot-gallery';
 import { useRef, useState, useOptimistic, useTransition } from 'react';
 import { ReportKanban } from './report-kanban';
 import { useRouter } from 'next/navigation';
-import { matchesReportUsers, compareReports, formatReportDateTime, priorityLabels, type ProjectParticipant, type Report, type ReportComment } from '@reporty/shared';
+import { matchesReportUsers, compareReportsBy, type ReportSort, formatReportDateTime, priorityLabels, type ProjectParticipant, type Report, type ReportComment } from '@reporty/shared';
 import { getReportThread, mutateReport } from './report-actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +28,8 @@ const priorityColors = { low: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dar
 const labels = { open: 'Aperta', in_progress: 'In lavorazione', validation: 'Validazione', resolved: 'Chiusa' };
 export function ReportList({ reports, environments, participants }: { participants: ProjectParticipant[]; reports: Report[]; environments: { id: string; name: string; origin: string }[] }) {
   const router = useRouter();
+  const [listOrder, setListOrder] = useState<ReportSort>({ field: 'status', direction: 'asc' });
+  const [kanbanOrder, setKanbanOrder] = useState<ReportSort>({ field: 'priority', direction: 'asc' });
   const [view, setView] = useState<'list' | 'kanban'>('kanban');
   const [moving, startMove] = useTransition();
   const moveLock = useRef(false);
@@ -45,8 +48,9 @@ export function ReportList({ reports, environments, participants }: { participan
   const [imageLoading, setImageLoading] = useState(false);
   const [threadLoading, setThreadLoading] = useState(false);
   const current = displayReports.find(report => report.id === selected?.id) ?? null;
-  const filtered = displayReports.filter(report => matchesReportUsers(report, users) && (!page.length || page.includes(report.page_path)) && (!priority.length || priority.includes(report.priority ?? 'medium')) && (view === 'kanban' || !filter.length || filter.includes(report.status)) && (!environment.length || environment.includes(report.environment_id)) && `${report.body} ${report.page_path}`.toLocaleLowerCase('it').includes(search.toLocaleLowerCase('it'))).sort(compareReports);
-  const pagination = useReportPagination(filtered.length, JSON.stringify([search, filter, priority, environment, page, users]));
+  const order = view === 'kanban' ? kanbanOrder : listOrder;
+  const filtered = displayReports.filter(report => matchesReportUsers(report, users) && (!page.length || page.includes(report.page_path)) && (!priority.length || priority.includes(report.priority ?? 'medium')) && (view === 'kanban' || !filter.length || filter.includes(report.status)) && (!environment.length || environment.includes(report.environment_id)) && `${report.body} ${report.page_path}`.toLocaleLowerCase('it').includes(search.toLocaleLowerCase('it'))).sort((a, b) => compareReportsBy(a, b, order));
+  const pagination = useReportPagination(filtered.length, JSON.stringify([search, filter, priority, environment, page, users, order]));
   const paginated = filtered.slice(pagination.start, pagination.start + REPORT_PAGE_SIZE);
   const listRef = useRef<HTMLDivElement | null>(null);
   const activeFilters = [
@@ -94,10 +98,10 @@ export function ReportList({ reports, environments, participants }: { participan
   return <section className="space-y-5" aria-labelledby="reports-title">
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="reports-title" className="text-xl font-semibold">Segnalazioni ({reports.length})</h2><div role="group" aria-label="Modalità di visualizzazione" className="inline-flex gap-1 rounded-lg border bg-background p-1"><Button variant={view === 'list' ? 'default' : 'ghost'} aria-pressed={view === 'list'} onClick={() => setView('list')}><List className="size-4" />Lista</Button><Button variant={view === 'kanban' ? 'default' : 'ghost'} aria-pressed={view === 'kanban'} onClick={() => setView('kanban')}><Columns3 className="size-4" />Kanban</Button></div></div>
     <div><Input aria-label="Cerca segnalazioni" className="w-full" placeholder="Cerca commento o pagina…" value={search} onChange={event => setSearch(event.target.value)} /></div>
-    <div className="flex flex-nowrap gap-2 overflow-x-auto pb-1">{view === 'list' ? <ReportFilter label="Stato" options={Object.entries(labels).map(([value, label]) => ({ value, label }))} selected={filter} onChange={setFilter} /> : null}<ReportFilter label="Priorità" options={Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))} selected={priority} onChange={setPriority} /><ReportFilter label="Ambienti" options={environments.map(item => ({ value: item.id, label: item.name }))} selected={environment} onChange={values => { setEnvironment(values); setPage([]); }} /><ReportFilter label="Pagine" options={pages.map(path => ({ value: path, label: path }))} selected={page} onChange={setPage} /><ReportFilter label="Utente" options={participants.map(person => ({ value: person.key, label: `${person.name} · ${person.kind === 'guest' ? 'Guest' : 'Sviluppatore'}` }))} selected={users} onChange={setUsers} /></div>
+    <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">{view === 'list' ? <ReportFilter label="Stato" options={Object.entries(labels).map(([value, label]) => ({ value, label }))} selected={filter} onChange={setFilter} /> : null}<ReportFilter label="Priorità" options={Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))} selected={priority} onChange={setPriority} /><ReportFilter label="Ambienti" options={environments.map(item => ({ value: item.id, label: item.name }))} selected={environment} onChange={values => { setEnvironment(values); setPage([]); }} /><ReportFilter label="Pagine" options={pages.map(path => ({ value: path, label: path }))} selected={page} onChange={setPage} /><ReportFilter label="Utente" options={participants.map(person => ({ value: person.key, label: `${person.name} · ${person.kind === 'guest' ? 'Guest' : 'Sviluppatore'}` }))} selected={users} onChange={setUsers} /><ReportOrder value={order} onChange={view === 'kanban' ? setKanbanOrder : setListOrder} kanban={view === 'kanban'} /></div>
     {activeFilters.length ? <div className="flex flex-wrap gap-2" aria-label="Filtri attivi">{activeFilters.map(item => <FilterPill key={item.key} label={item.label} onRemove={item.remove}><ReportIcon value={item.key.replace(/^(status|priority)-/, "")} /></FilterPill>)}</div> : null}
 
-    <div className="space-y-5">{view === 'kanban' ? <ReportKanban key={JSON.stringify([search, priority, environment, page, users])} reports={filtered} environments={environments} busy={busy || moving} movingId={movingId} onOpen={openReport} onMove={moveReport} onPriorityChange={(report, priority) => moveReport(report, report.status, priority)} /> : <><div ref={listRef} className="space-y-3">
+    <div className="space-y-5">{view === 'kanban' ? <ReportKanban key={JSON.stringify([search, priority, environment, page, users, order])} reports={filtered} environments={environments} busy={busy || moving} movingId={movingId} onOpen={openReport} onMove={moveReport} onPriorityChange={(report, priority) => moveReport(report, report.status, priority)} /> : <><div ref={listRef} className="space-y-3">
       {!filtered.length ? <p className="py-8 text-sm text-muted-foreground">Nessuna segnalazione trovata.</p> : null}
       {paginated.map(report => <button key={report.id} className="block w-full space-y-3 rounded-xl border bg-card p-4 text-left transition-colors duration-150 hover:border-primary/30 hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none" disabled={busy} onClick={() => openReport(report)}><div className="flex flex-wrap items-start justify-between gap-3"><p className="min-w-0 flex-1 line-clamp-3 break-words font-medium">{report.body}</p><div className="flex shrink-0 flex-wrap gap-2"><Badge className={`border-[color-mix(in_oklab,currentColor_25%,transparent)] ${statusColors[report.status]}`}><ReportIcon value={report.status} />{labels[report.status]}</Badge><Badge className={`border-[color-mix(in_oklab,currentColor_25%,transparent)] ${priorityColors[report.priority ?? 'medium']}`} ><ReportIcon value={report.priority ?? 'medium'} />Priorità {priorityLabels[report.priority ?? 'medium'].toLowerCase()}</Badge></div></div><div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground"><div className="flex flex-wrap gap-2"><span>{report.authorName}</span><span className="break-all">· {environments.find(item => item.id === report.environment_id)?.name} · {report.page_path}</span></div><time dateTime={report.created_at} className="ml-auto shrink-0 text-right">{formatReportDateTime(report.created_at)}</time></div></button>)}
     </div>

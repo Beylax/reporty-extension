@@ -1,4 +1,5 @@
-export { compareReports } from './report-order';
+export type { ReportSort, ReportSortField } from './report-order';
+export { compareReports, compareReportsBy } from './report-order';
 export { formatReportDateTime } from './date';
 export { getPageContext } from './page';
 export { normalizeOrigin, validateName, isUuid } from './project';

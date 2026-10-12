@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { GripVertical } from 'lucide-react';
-import { compareReports, formatReportDateTime, priorityLabels, type Report } from '@reporty/shared';
+import { formatReportDateTime, priorityLabels, type Report } from '@reporty/shared';
 import { ReportIcon } from '@/components/report-icon';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -72,7 +72,7 @@ export function ReportKanban({ reports, environments, busy, movingId, onOpen, on
     <p className="text-xs text-muted-foreground">Trascina una card in un’altra colonna per cambiarne lo stato. Usa il menu nella card per cambiare la priorità.</p>
     <div className="grid grid-cols-4 items-start gap-4 overflow-x-auto pb-3" style={{ gridTemplateColumns: 'repeat(4, minmax(300px, 1fr))' }}>
       {columns.map(column => {
-        const items = reports.filter(report => report.status === column.value).sort(compareReports);
+        const items = reports.filter(report => report.status === column.value);
         return <section key={column.value} aria-label={`${column.label}: ${items.length} segnalazioni`} className={`min-w-0 rounded-xl border bg-muted/40 transition-colors ${target === column.value ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border'}`}
           onDragOver={event => { if (!dragging.current || busy) return; event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setTarget(column.value); }}
           onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setTarget(null); }}

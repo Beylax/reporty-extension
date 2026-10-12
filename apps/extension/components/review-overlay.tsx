@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioButtons } from '@/components/ui/radio-buttons';
 import { DeleteConfirm } from '@/components/delete-confirm';
+import { ReportOrder } from '@/components/report-order';
 import { ReportFilter } from '@/components/report-filter';
 import { ThemeSwitch } from '@/components/theme-switch';
 
@@ -14,6 +15,8 @@ import { useNotify } from '@/components/ui/toast';
 import { RepliesSkeleton, ReportRowsSkeleton, ScreenshotSkeleton } from '@/components/loading-skeletons';
 import { LoadingImage } from '@/components/loading-image';
 import { ScreenshotGallery } from '@/components/screenshot-gallery';
+import type { ReportSort } from '@reporty/shared';
+import { compareReportsBy } from '@reporty/shared';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Settings, Menu, X, Crosshair, Eye, MapPin, Pencil, Plus, Target } from 'lucide-react';
 import { compareReports, formatReportDateTime, getPageContext, priorityLabels, type ReportPriority, type Anchor, type Report, type ReportComment, type ReportContext } from '@reporty/shared';
@@ -61,6 +64,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
   const [open, setOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const modal = useRef<HTMLDialogElement>(null);
+  const [order, setOrder] = useState<ReportSort>({ field: 'status', direction: 'asc' });
   const [search, setSearch] = useState('');
   const [statuses, setStatuses] = useState<string[]>([]);
   const [priorities, setPriorities] = useState<string[]>([]);
@@ -235,8 +239,8 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
   }, [modalOpen]);
   useEffect(() => () => { modal.current?.close(); }, []);
   const pageReports = reports.filter(report => report.page_path === page.pagePath);
-  const filtered = pageReports.filter(report => (!statuses.length || statuses.includes(report.status)) && (!priorities.length || priorities.includes(report.priority ?? 'medium')) && `${report.body} ${report.page_path} ${report.authorName}`.toLocaleLowerCase('it').includes(search.toLocaleLowerCase('it'))).sort(compareReports);
-  const pagination = useReportPagination(filtered.length, JSON.stringify([search, statuses, priorities, page.pagePath, environment.id]));
+  const filtered = pageReports.filter(report => (!statuses.length || statuses.includes(report.status)) && (!priorities.length || priorities.includes(report.priority ?? 'medium')) && `${report.body} ${report.page_path} ${report.authorName}`.toLocaleLowerCase('it').includes(search.toLocaleLowerCase('it'))).sort((a,b) => compareReportsBy(a,b,order));
+  const pagination = useReportPagination(filtered.length, JSON.stringify([search, statuses, priorities, page.pagePath, environment.id, order]));
   const paginated = filtered.slice(pagination.start, pagination.start + REPORT_PAGE_SIZE);
   const listRef = useRef<HTMLElement | null>(null);
   const filters = [
@@ -322,10 +326,10 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
         </section><footer className="rounded-xl border bg-muted/50 dark:bg-card p-4 text-xs text-muted-foreground"><p>Segnalata da {selected.authorName}</p><p>{selected.updated_at ? <>Ultima modifica: {selected.updatedByName ?? 'Utente'} · {formatReportDateTime(selected.updated_at)}</> : 'Nessuna modifica registrata'}</p><p>Viewport originale: {selected.context.viewport.width} × {selected.context.viewport.height} · scroll {Math.round(selected.context.scroll.y)} px</p></footer>{selected.canEdit ? <section aria-label="Zona pericolosa" className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4"><h3 className="text-sm font-semibold text-destructive">Zona pericolosa</h3><div className="flex justify-end"><DeleteConfirm fullWidth disabled={busy} description="Eliminare questa segnalazione e tutte le sue risposte? Questa operazione è definitiva." onConfirm={() => run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'delete', payload: { id: selected.id } }); setStatus('Segnalazione eliminata.', 'success'); setSelected(null); await refresh(); })} /></div></section> : null}
       </div> : <div className="flex min-h-0 flex-1 flex-col gap-5">
   <Input aria-label="Cerca segnalazioni" placeholder="Cerca commento o pagina…" className="h-10 w-full rounded-lg border bg-background px-3" value={search} onChange={event => setSearch(event.target.value)} />
-  <div className="flex flex-wrap items-center justify-between gap-2"><div className="flex flex-wrap gap-2">
+  <div className="flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-2">
     <ReportFilter label="Stato" options={Object.entries(statusLabels).map(([value,label]) => ({value,label}))} selected={statuses} onChange={setStatuses} />
     <ReportFilter label="Priorità" options={Object.entries(priorityLabels).map(([value,label]) => ({value,label}))} selected={priorities} onChange={setPriorities} />
-    </div>
+    </div><ReportOrder value={order} onChange={setOrder} />
   </div>
   {filters.length ? <div className="flex flex-wrap gap-2" aria-label="Filtri attivi">{filters.map(filter => <FilterPill key={filter.key} label={filter.label} onRemove={filter.remove}><ReportIcon value={filter.key.replace(/^(status|priority)-/, "")} /></FilterPill>)}</div> : null}
 
