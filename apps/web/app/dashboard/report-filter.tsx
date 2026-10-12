@@ -19,7 +19,7 @@ export function ReportFilter({ label, options, selected, onChange }: {
     <Popover.Trigger ref={trigger} render={<Button variant="outline" className="max-w-full" />} aria-label={`Filtra ${label.toLowerCase()}: ${summary}`}>
       <span className="max-w-52 truncate">{label}</span><ChevronDown aria-hidden="true" className="size-4" />
     </Popover.Trigger>
-    <Popover.Portal container={container}><Popover.Positioner sideOffset={8} className="pointer-events-auto z-30"><Popover.Popup className="w-72 max-w-[calc(100vw-2rem)] rounded-xl border bg-popover p-3 text-popover-foreground shadow-lg outline-none">
+    <Popover.Portal container={container}><Popover.Positioner sideOffset={8} className="pointer-events-auto z-[100]"><Popover.Popup className="w-72 max-w-[calc(100vw-2rem)] rounded-xl border bg-popover p-3 text-popover-foreground shadow-lg outline-none">
       <fieldset aria-label={label}>
         <div className="max-h-64 space-y-1 overflow-y-auto">{options.map(option => <label key={option.value} className="flex cursor-pointer items-center gap-3 rounded-lg p-2 text-sm transition-colors hover:bg-primary/10 hover:text-primary">
           <Checkbox checked={selected.includes(option.value)} onCheckedChange={checked => onChange(checked ? [...selected, option.value] : selected.filter(value => value !== option.value))} />
