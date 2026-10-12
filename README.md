@@ -99,7 +99,7 @@ Se il sistema di notifiche era già installato, applicare **`supabase/notificati
 
 ### Azioni in blocco nella dashboard
 
-Solo in modalità Lista, le checkbox permettono di selezionare singole segnalazioni o tutti i risultati filtrati, comprese le altre pagine. La selezione resta passando tra pagine e cambiando ordinamento; viene azzerata cambiando ricerca, filtri o modalità di visualizzazione. La barra mostra il numero selezionato e permette di applicare stato, priorità o eliminazione, con conferma prima di eliminare segnalazioni e risposte.
+Solo in modalità Lista, le checkbox permettono di selezionare singole segnalazioni o tutti i risultati filtrati, comprese le altre pagine. La selezione resta passando tra pagine e cambiando ordinamento; viene azzerata cambiando ricerca, filtri o modalità di visualizzazione. La checkbox “Seleziona tutte” diventa “Deseleziona tutte” quando tutti i risultati sono selezionati. Con almeno una selezione compare la sezione azioni per stato, priorità ed eliminazione tramite icona cestino; i controlli hanno la stessa altezza. La conferma di eliminazione indica il numero di segnalazioni e include le risposte.
 
 Le operazioni mostrano avanzamento e toast, sono protette dai doppi clic e mantengono i controlli di autenticazione e RPC per ogni segnalazione. Le modifiche confermate vengono tolte dalla selezione; quelle fallite restano selezionate per riprovare. Gli screenshot vengono rimossi tramite API Storage solo dopo una cancellazione confermata; gli errori di pulizia sono segnalati separatamente. I cambi di stato generano le notifiche esistenti. Non serve una migrazione del database: dopo il deploy web le azioni sono disponibili nella Lista.
 
