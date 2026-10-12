@@ -34,6 +34,23 @@ const statusLabels = { open: 'Aperta', in_progress: 'In lavorazione', validation
 const statusColors = { open: 'bg-red-100 text-red-800', in_progress: 'bg-orange-100 text-orange-800', validation: 'bg-blue-50 text-blue-900 dark:bg-blue-100 dark:text-blue-950', resolved: 'bg-emerald-100 text-emerald-800' };
 const pinColors = { open: 'bg-red-600', in_progress: 'bg-orange-500', validation: 'bg-blue-600', resolved: 'bg-emerald-600' };
 const priorityColors = { low: 'bg-slate-100 text-slate-700', medium: 'bg-amber-100 text-amber-800', high: 'bg-red-100 text-red-800' };
+/** Animate the measured content height, rather than a max-height ceiling. */
+function ExpandingPin({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  const button = useRef<HTMLButtonElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [height, setHeight] = useState(44);
+  useEffect(() => {
+    const content = button.current?.querySelector<HTMLElement>('[data-pin-preview]');
+    if (!content) return;
+    const measure = () => setHeight(Math.max(44, content.getBoundingClientRect().height + 4));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, []);
+  return <button {...props} ref={button} style={{ height: expanded ? height : 44 }} onMouseEnter={() => setExpanded(true)} onMouseLeave={() => setExpanded(false)}>{children}</button>;
+}
+
 type Draft = { id: string; context: ReportContext; screenshot?: string; body: string; priority: ReportPriority };
 
 export function ReviewOverlay({ site, environment, host, transport, logoUrl }: { site: Site; environment: Environment; host: HTMLElement; transport?: (body: Record<string, unknown>) => Promise<unknown>; logoUrl?: string }) {
@@ -236,16 +253,16 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl }: {
       const position = anchorPosition(report.context.anchor);
       if (!position) return null;
       return <div key={report.id} className={`group pointer-events-auto fixed -translate-y-full ${highlighted === report.id ? 'z-20' : ''}`} style={{left:position.x,top:position.y}}>
-        <button aria-label={`${statusLabels[report.status]}, priorità ${priorityLabels[report.priority ?? 'medium']}: ${report.body.slice(0,60)}`} className={`relative block ${highlighted === report.id ? 'reporty-pin-highlight' : ''} min-h-[44px] w-[44px] overflow-hidden rounded-tl-[22px] rounded-tr-[22px] rounded-br-[22px] border-2 border-primary/70 bg-card text-card-foreground shadow-md transition-[width,translate] duration-300 ease-out group-hover:w-[min(320px,calc(100vw-16px))] focus-visible:outline-2 focus-visible:outline-ring motion-reduce:transition-none ${position.x + 320 > innerWidth - 8 ? 'group-hover:-translate-x-[calc(100%-44px)]' : ''}`} onClick={() => void view(report)}>
+        <ExpandingPin aria-label={`${statusLabels[report.status]}, priorità ${priorityLabels[report.priority ?? 'medium']}: ${report.body.slice(0,60)}`} className={`relative block ${highlighted === report.id ? 'reporty-pin-highlight' : ''} min-h-[44px] w-[44px] overflow-hidden rounded-tl-[22px] rounded-tr-[22px] rounded-br-[22px] border-2 border-primary/70 bg-card text-card-foreground shadow-md transition-[width,height,translate] duration-300 ease-out group-hover:w-[min(320px,calc(100vw-16px))] focus-visible:outline-2 focus-visible:outline-ring motion-reduce:transition-none ${position.x + 320 > innerWidth - 8 ? 'group-hover:-translate-x-[calc(100%-44px)]' : ''}`} onClick={() => void view(report)}>
           <span className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex size-7 items-center justify-center rounded-full ${pinColors[report.status]} text-xs font-semibold text-white transition-opacity duration-150 group-hover:opacity-0 motion-reduce:transition-none`}>{(report.authorName?.trim() || 'Utente').slice(0, 1).toLocaleUpperCase('it-IT')}</span>
-          <span className="invisible block max-h-0 opacity-0 transition-[max-height,opacity,visibility] duration-[300ms,150ms,0ms] delay-[0ms,0ms,150ms] ease-out group-hover:visible group-hover:max-h-64 group-hover:opacity-100 group-hover:delay-[0ms,250ms,0ms] motion-reduce:transition-none">
+          <span data-pin-preview className="invisible block opacity-0 transition-[opacity,visibility] duration-[150ms,0ms] delay-[0ms,150ms] ease-out group-hover:visible group-hover:opacity-100 group-hover:delay-[250ms,0ms] motion-reduce:transition-none">
             <span className="block w-[min(316px,calc(100vw-20px))] p-3 text-left">
               <span className="mb-3 flex flex-wrap gap-2 text-xs"><span className={`inline-flex items-center gap-1 rounded-full border border-[color-mix(in_oklab,currentColor_25%,transparent)] px-2 py-1 ${statusColors[report.status]}`}><ReportIcon value={report.status} />{statusLabels[report.status]}</span><span className={`inline-flex items-center gap-1 rounded-full border border-[color-mix(in_oklab,currentColor_25%,transparent)] px-2 py-1 ${priorityColors[report.priority ?? 'medium']}`}><ReportIcon value={report.priority ?? 'medium'} />Priorità {priorityLabels[report.priority ?? 'medium'].toLowerCase()}</span></span>
               <span className="block max-h-40 overflow-hidden whitespace-pre-wrap break-words text-sm">{report.body}</span>
               <span className="mt-3 block truncate text-xs text-muted-foreground" title={report.authorName}>Segnalata da {report.authorName || 'Utente'}</span>
             </span>
           </span>
-        </button>
+        </ExpandingPin>
       </div>;
     }) : null}
 

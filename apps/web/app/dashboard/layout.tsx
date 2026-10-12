@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react';
+import { Plus, Activity } from 'lucide-react';
 import { ThemeSwitch } from '@/components/theme-switch';
 
 import { BrandLogo } from '@/components/brand-logo';
@@ -17,7 +17,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div className="min-h-screen md:grid md:grid-cols-[248px_minmax(0,1fr)]">
       <aside className="border-b bg-sidebar text-sidebar-foreground md:sticky md:top-0 md:h-screen md:border-r md:border-b-0">
         <div className="flex h-full min-h-0 flex-col gap-3 p-5">
-          <div className="flex items-center justify-between gap-2"><Link href="/dashboard" className="min-w-0"><BrandLogo /></Link><ThemeSwitch /></div>
+          <div className="flex items-center justify-between gap-2"><Link href="/dashboard" className="min-w-0"><BrandLogo /></Link><div className="flex shrink-0 items-center gap-1"><Link href="/dashboard/audit" prefetch={false} aria-label="Apri audit Supabase" title="Audit Supabase" className={buttonVariants({ variant: 'outline', size: 'icon' })}><Activity className="size-4" aria-hidden="true" /></Link><ThemeSwitch /></div></div>
           <DashboardNav projects={projects.data ?? []} />
           <Link href="/dashboard/new" className={buttonVariants({ className: 'w-full justify-start gap-2' })}><Plus className="size-4" aria-hidden="true" />Nuovo progetto</Link>
           <div className="mt-auto flex min-w-0 items-center gap-2 border-t pt-4">
