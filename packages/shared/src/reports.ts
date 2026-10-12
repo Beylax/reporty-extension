@@ -41,3 +41,11 @@ export type ReportNotification = {
   previous_status: Report['status'] | null; status: Report['status']; actor_name: string;
   created_at: string; read_at: string | null;
 };
+
+export const bulkReportRequestSchema = z.discriminatedUnion('operation', [
+  z.object({ operation: z.literal('status'), value: z.enum(['open','in_progress','validation','resolved']), targets: z.array(z.object({ id: z.string().uuid(), environmentId: z.string().uuid() })).min(1).max(50) }),
+  z.object({ operation: z.literal('priority'), value: reportPrioritySchema, targets: z.array(z.object({ id: z.string().uuid(), environmentId: z.string().uuid() })).min(1).max(50) }),
+  z.object({ operation: z.literal('delete'), targets: z.array(z.object({ id: z.string().uuid(), environmentId: z.string().uuid() })).min(1).max(50) }),
+]);
+export type BulkReportRequest = z.infer<typeof bulkReportRequestSchema>;
+export type BulkReportResult = { succeeded: string[]; failed: string[]; storageWarnings: string[] };

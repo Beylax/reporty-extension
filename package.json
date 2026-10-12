@@ -17,7 +17,7 @@
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspace=@reporty/web",
-    "test": "npm run test --workspace=@reporty/shared && npm run test:db && node --experimental-strip-types --test scripts/notification-polling.test.mjs && npm run test:widget",
+    "test": "npm run test --workspace=@reporty/shared && npm run test:db && node --experimental-strip-types --test scripts/notification-polling.test.mjs scripts/bulk-reports.test.mjs && npm run test:widget",
     "test:db": "node --test supabase/tests/*.test.mjs",
     "test:extension": "npm run build --workspace=@reporty/extension && node --test scripts/extension-lifecycle.test.mjs",
     "build:widget": "node scripts/build-widget.mjs",
