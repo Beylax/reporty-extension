@@ -14,6 +14,7 @@ import { useEffect, useEffectEvent, useRef, useState, useOptimistic, useTransiti
 import { ReportKanban } from './report-kanban';
 import { useRouter } from 'next/navigation';
 import { matchesReportUsers, compareReportsBy, type ReportSort, formatReportDateTime, priorityLabels, type ProjectParticipant, type Report, type ReportComment } from '@reporty/shared';
+import { NOTIFICATIONS_CHANGED } from '@/lib/notification-polling';
 import { getReportThread, mutateReport } from './report-actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -71,6 +72,7 @@ export function ReportList({ reports, environments, participants, initialReportI
     const result = await mutateReport(current.environment_id, operation, { id: current.id, ...payload });
     if (result.error) throw new Error(result.error);
     toast.add({ title: operation === 'delete' ? 'Segnalazione eliminata' : operation === 'reply' ? 'Risposta aggiunta' : 'Modifiche salvate', type: 'success' });
+    if (operation === 'status') window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
     router.refresh();
   }
   function openReport(report: Report) {
@@ -96,6 +98,7 @@ export function ReportList({ reports, environments, participants, initialReportI
         const result = await mutateReport(report.environment_id, priority ? 'priority' : 'status', { id: report.id, ...(priority ? { priority } : { status }) });
         if (result.error) throw new Error(result.error);
         toast.add({ title: priority ? `Priorità aggiornata: ${priorityLabels[priority]}` : `Segnalazione spostata in ${labels[status]}`, type: 'success' });
+        if (!priority) window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
         router.refresh();
       } catch (error) { toast.add({ title: priority ? 'Aggiornamento priorità non riuscito' : 'Spostamento non riuscito', description: error instanceof Error ? error.message : 'Riprova.', type: 'error' }); }
       finally { moveLock.current = false; setMovingId(null); }

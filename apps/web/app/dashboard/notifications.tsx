@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Dialog as Primitive } from '@base-ui/react/dialog';
 import { Bell, X } from 'lucide-react';
@@ -11,6 +11,7 @@ import { FilterPill } from '@/components/filter-pill';
 import { ReportPagination, useReportPagination, REPORT_PAGE_SIZE } from '@/components/report-pagination';
 import { useToastManager } from '@/components/ui/toast';
 import { ReportFilter } from './report-filter';
+import { NOTIFICATIONS_CHANGED, startNotificationPolling } from '@/lib/notification-polling';
 import { notificationAction } from './notification-actions';
 
 const labels = { open: 'Aperta', in_progress: 'In lavorazione', validation: 'Validazione', resolved: 'Chiusa' };
@@ -24,25 +25,28 @@ export function Notifications() {
   const lock = useRef(false);
   const revision = useRef(0);
   const [projects, setProjects] = useState<string[]>([]), [environments, setEnvironments] = useState<string[]>([]), [statuses, setStatuses] = useState<string[]>([]), [reads, setReads] = useState<string[]>([]);
+  const notifyError = useEffectEvent((description: string) => { toast.add({ title: 'Notifiche non disponibili', description, type: 'error' }); });
   useEffect(() => {
-    let disposed = false, failed = false, pending = false;
+    const controller = new AbortController();
+    let disposed = false, failed = false;
     async function refresh() {
-      if (pending || lock.current) return;
-      pending = true;
+      if (lock.current) return;
       const version = revision.current;
       try {
-        const result = await notificationAction('notifications');
+        const response = await fetch('/api/notifications', { cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error ?? 'Impossibile caricare le notifiche.');
         if (result.error) throw new Error(result.error);
         if (!disposed && version === revision.current) { setItems(result.data ?? []); failed = false; }
       } catch (error) {
-        if (!disposed && !failed) toast.add({ title: 'Notifiche non disponibili', description: error instanceof Error ? error.message : 'Riprova.', type: 'error' });
+        if (!disposed && !failed) notifyError(error instanceof Error ? error.message : 'Riprova.');
         failed = true;
-      } finally { pending = false; if (!disposed) setLoading(false); }
+      } finally { if (!disposed) setLoading(false); }
     }
-    void refresh();
-    const timer = setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 10000);
-    return () => { disposed = true; clearInterval(timer); };
-  }, [toast]);
+    const stop = startNotificationPolling(refresh);
+    return () => { disposed = true; stop(); controller.abort(); };
+  }, []);
+  useEffect(() => { if (open) window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED)); }, [open]);
   async function read(item?: ReportNotification) {
     if (lock.current) return;
     lock.current = true; revision.current++; setBusy(true);
@@ -71,7 +75,7 @@ export function Notifications() {
   ];
   return <>
     <Button variant="outline" size="icon" className="relative" aria-label={`Apri notifiche${unread ? `, ${unread} non lette` : ''}`} title="Notifiche" onClick={() => setOpen(true)}><Bell className="size-4" />{unread ? <span aria-hidden="true" className="absolute -top-2 -right-2 min-w-4 rounded-full bg-red-600 px-1 text-[10px] leading-4 text-white">{unread > 99 ? '99+' : unread}</span> : null}</Button>
-    <Primitive.Root open={open} onOpenChange={setOpen}><Primitive.Portal><Primitive.Backdrop className="fixed inset-0 z-40 bg-black/45" /><Primitive.Popup className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col gap-5 border-l bg-background p-6 text-foreground shadow-xl outline-none">
+    <Primitive.Root open={open} onOpenChange={setOpen}><Primitive.Portal><Primitive.Backdrop className="fixed inset-0 z-40 bg-black/45 transition-opacity duration-300 data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 motion-reduce:transition-none" /><Primitive.Popup className="fixed inset-y-3 right-3 z-50 flex w-[calc(100%_-_1.5rem)] max-w-xl flex-col gap-5 rounded-2xl border bg-background p-6 text-foreground shadow-2xl outline-none transition-[opacity,transform] duration-300 ease-out data-[starting-style]:translate-x-8 data-[starting-style]:opacity-0 data-[ending-style]:translate-x-8 data-[ending-style]:opacity-0 motion-reduce:transition-none sm:inset-y-4 sm:right-4 sm:w-[calc(100%_-_2rem)]">
       <header className="flex items-center justify-between gap-3"><Primitive.Title className="text-xl font-semibold">Notifiche</Primitive.Title><Primitive.Close render={<Button variant="outline" size="icon" aria-label="Chiudi notifiche" />}><X className="size-4" /></Primitive.Close></header>
       <Primitive.Description className="text-sm text-muted-foreground">Cambi di stato delle segnalazioni di tutti i progetti.</Primitive.Description>
       <Button variant="outline" disabled={busy || loading || !unread} onClick={() => void read()}>Segna tutte come lette</Button>

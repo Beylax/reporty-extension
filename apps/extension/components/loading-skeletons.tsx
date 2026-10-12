@@ -15,3 +15,13 @@ export function ScreenshotSkeleton({ aspectRatio = '16 / 9' }: { aspectRatio?: s
 export function ReviewStartSkeleton() {
   return <div role="status" aria-label="Caricamento ambiente" className="space-y-4"><Skeleton className="mx-auto h-5 w-56" /><Skeleton className="mx-auto h-4 w-64" /><Skeleton className="mx-auto h-8 w-48" /></div>;
 }
+
+export function ReportDetailSkeleton() {
+  return <div role="status" aria-label="Caricamento dettaglio segnalazione" className="space-y-4">
+    <div className="flex flex-wrap justify-between gap-3"><div className="flex gap-2"><Skeleton className="h-6 w-24 rounded-full" /><Skeleton className="h-6 w-28 rounded-full" /></div><Skeleton className="h-8 w-40" /></div>
+    <div className="space-y-3 rounded-xl border bg-muted/50 p-4"><Skeleton className="h-4 w-24" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-5/6" /><Skeleton className="h-4 w-2/3" /></div>
+    <div className="space-y-4 rounded-xl border bg-muted/50 p-4">{[0,1].map(item => <div key={item} className="space-y-2"><Skeleton className="h-4 w-20" /><div className="flex flex-wrap gap-2"><Skeleton className="h-8 w-24" /><Skeleton className="h-8 w-28" /><Skeleton className="h-8 w-24" /></div></div>)}</div>
+    <div className="space-y-3"><Skeleton className="h-4 w-24" /><RepliesSkeleton /><Skeleton className="h-20 w-full" /><Skeleton className="h-8 w-28" /></div>
+    <div className="flex justify-between gap-3 border-t pt-4"><Skeleton className="h-3 w-32" /><Skeleton className="h-3 w-24" /></div>
+  </div>;
+}
