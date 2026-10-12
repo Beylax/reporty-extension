@@ -16,6 +16,8 @@ import { useRouter } from 'next/navigation';
 import { matchesReportUsers, compareReportsBy, type ReportSort, formatReportDateTime, priorityLabels, type BulkReportRequest, type ProjectParticipant, type Report, type ReportComment } from '@reporty/shared';
 import { NOTIFICATIONS_CHANGED } from '@/lib/notification-polling';
 import { getReportThread, mutateReport, mutateReportsBulk } from './report-actions';
+import { compareReportTableRows, type ReportTableSort } from '@/lib/report-table-order';
+import { ReportTableHeading } from './report-table-heading';
 import { ReportBulkToolbar } from './report-bulk-toolbar';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
@@ -34,7 +36,7 @@ export function ReportList({ reports, environments, participants, initialReportI
   const [bulkSelection, setBulkSelection] = useState<{ scope: string; ids: string[] }>({ scope: '', ids: [] });
   const [bulkProgress, setBulkProgress] = useState<{ completed: number; total: number; operation: BulkReportRequest['operation'] } | null>(null);
   const bulkLock = useRef(false);
-  const [listOrder, setListOrder] = useState<ReportSort>({ field: 'status', direction: 'asc' });
+  const [listOrder, setListOrder] = useState<ReportTableSort>({ field: 'status', direction: 'asc' });
   const [kanbanOrder, setKanbanOrder] = useState<ReportSort>({ field: 'priority', direction: 'asc' });
   const [view, setView] = useState<'list' | 'kanban'>('kanban');
   const [moving, startMove] = useTransition();
@@ -55,12 +57,14 @@ export function ReportList({ reports, environments, participants, initialReportI
   const [threadLoading, setThreadLoading] = useState(false);
   const current = displayReports.find(report => report.id === selected?.id) ?? null;
   const order = view === 'kanban' ? kanbanOrder : listOrder;
-  const filtered = displayReports.filter(report => matchesReportUsers(report, users) && (!page.length || page.includes(report.page_path)) && (!priority.length || priority.includes(report.priority ?? 'medium')) && (view === 'kanban' || !filter.length || filter.includes(report.status)) && (!environment.length || environment.includes(report.environment_id)) && `${report.body} ${report.page_path}`.toLocaleLowerCase('it').includes(search.toLocaleLowerCase('it'))).sort((a, b) => compareReportsBy(a, b, order));
+  const environmentNames = new Map(environments.map(item => [item.id,item.name]));
+  const filtered = displayReports.filter(report => matchesReportUsers(report, users) && (!page.length || page.includes(report.page_path)) && (!priority.length || priority.includes(report.priority ?? 'medium')) && (view === 'kanban' || !filter.length || filter.includes(report.status)) && (!environment.length || environment.includes(report.environment_id)) && `${report.body} ${report.page_path}`.toLocaleLowerCase('it').includes(search.toLocaleLowerCase('it'))).sort((a, b) => view === 'list' ? compareReportTableRows(a,b,listOrder,environmentNames) : compareReportsBy(a,b,kanbanOrder));
   const pagination = useReportPagination(filtered.length, JSON.stringify([search, filter, priority, environment, page, users, order]));
   const bulkScope = JSON.stringify([view,search,filter,priority,environment,page,users]);
   if (bulkSelection.scope !== bulkScope) setBulkSelection({ scope: bulkScope, ids: [] });
   const selectedIds = new Set(bulkSelection.scope === bulkScope ? bulkSelection.ids : []);
   const selectedReports = filtered.filter(report => selectedIds.has(report.id));
+  const allFilteredSelected = filtered.length > 0 && selectedReports.length === filtered.length;
   const bulkDisabled = busy || moving || Boolean(bulkProgress);
   function selectReport(id: string, checked: boolean) {
     setBulkSelection(previous => ({ scope: bulkScope, ids: checked ? [...new Set([...previous.ids,id])] : previous.ids.filter(item => item !== id) }));
@@ -153,25 +157,26 @@ export function ReportList({ reports, environments, participants, initialReportI
   return <section className="space-y-5" aria-labelledby="reports-title">
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="reports-title" className="text-xl font-semibold">Segnalazioni ({reports.length})</h2><div role="group" aria-label="Modalità di visualizzazione" className="inline-flex gap-1 rounded-lg border bg-background p-1"><Button variant={view === 'list' ? 'default' : 'ghost'} aria-pressed={view === 'list'} disabled={bulkDisabled} onClick={() => setView('list')}><List className="size-4" />Lista</Button><Button variant={view === 'kanban' ? 'default' : 'ghost'} aria-pressed={view === 'kanban'} disabled={bulkDisabled} onClick={() => setView('kanban')}><Columns3 className="size-4" />Kanban</Button></div></div>
     <div><Input disabled={Boolean(bulkProgress)} aria-label="Cerca segnalazioni" className="w-full" placeholder="Cerca commento o pagina…" value={search} onChange={event => setSearch(event.target.value)} /></div>
-    <fieldset disabled={Boolean(bulkProgress)} className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">{view === 'list' ? <ReportFilter label="Stato" options={Object.entries(labels).map(([value, label]) => ({ value, label }))} selected={filter} onChange={setFilter} /> : null}<ReportFilter label="Priorità" options={Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))} selected={priority} onChange={setPriority} /><ReportFilter label="Ambienti" options={environments.map(item => ({ value: item.id, label: item.name }))} selected={environment} onChange={values => { setEnvironment(values); setPage([]); }} /><ReportFilter label="Pagine" options={pages.map(path => ({ value: path, label: path }))} selected={page} onChange={setPage} /><ReportFilter label="Utente" options={participants.map(person => ({ value: person.key, label: `${person.name} · ${person.kind === 'guest' ? 'Guest' : 'Sviluppatore'}` }))} selected={users} onChange={setUsers} /><ReportOrder value={order} onChange={view === 'kanban' ? setKanbanOrder : setListOrder} kanban={view === 'kanban'} /></fieldset>
+    <fieldset disabled={Boolean(bulkProgress)} className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">{view === 'list' ? <ReportFilter label="Stato" options={Object.entries(labels).map(([value, label]) => ({ value, label }))} selected={filter} onChange={setFilter} /> : null}<ReportFilter label="Priorità" options={Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))} selected={priority} onChange={setPriority} /><ReportFilter label="Ambienti" options={environments.map(item => ({ value: item.id, label: item.name }))} selected={environment} onChange={values => { setEnvironment(values); setPage([]); }} /><ReportFilter label="Pagine" options={pages.map(path => ({ value: path, label: path }))} selected={page} onChange={setPage} /><ReportFilter label="Utente" options={participants.map(person => ({ value: person.key, label: `${person.name} · ${person.kind === 'guest' ? 'Guest' : 'Sviluppatore'}` }))} selected={users} onChange={setUsers} />{view === 'kanban' ? <ReportOrder value={kanbanOrder} onChange={setKanbanOrder} kanban /> : null}</fieldset>
     {activeFilters.length ? <div className="flex flex-wrap gap-2" aria-label="Filtri attivi">{activeFilters.map(item => <FilterPill key={item.key} label={item.label} onRemove={() => { if (!bulkProgress) item.remove(); }}><ReportIcon value={item.key.replace(/^(status|priority)-/, "")} /></FilterPill>)}</div> : null}
 
-    <div className="space-y-5">{view === 'kanban' ? <ReportKanban key={JSON.stringify([search, priority, environment, page, users, order])} reports={filtered} environments={environments} busy={busy || moving} movingId={movingId} onOpen={openReport} onMove={moveReport} onPriorityChange={(report, priority) => moveReport(report, report.status, priority)} /> : <><ReportBulkToolbar count={bulkProgress?.total ?? selectedReports.length} total={filtered.length} allSelected={filtered.length > 0 && selectedReports.length === filtered.length} disabled={bulkDisabled} pending={bulkProgress} canUpdate={selectedReports.every(report => report.canChangeStatus)} canDelete={selectedReports.every(report => report.canEdit)} onSelectAll={checked => setBulkSelection({ scope: bulkScope, ids: checked ? filtered.map(report => report.id) : [] })} onApply={applyBulk} /><div ref={listRef} role="region" aria-label="Tabella segnalazioni, scorrimento orizzontale" tabIndex={0} className="overflow-x-auto rounded-xl border bg-card outline-none focus-visible:ring-2 focus-visible:ring-ring">
-      <table className="w-full min-w-[1040px] text-sm">
+    <div className="space-y-5">{view === 'kanban' ? <ReportKanban key={JSON.stringify([search, priority, environment, page, users, order])} reports={filtered} environments={environments} busy={busy || moving} movingId={movingId} onOpen={openReport} onMove={moveReport} onPriorityChange={(report, priority) => moveReport(report, report.status, priority)} /> : <><ReportBulkToolbar count={bulkProgress?.total ?? selectedReports.length} disabled={bulkDisabled} pending={bulkProgress} canUpdate={selectedReports.every(report => report.canChangeStatus)} canDelete={selectedReports.every(report => report.canEdit)} onApply={applyBulk} /><div ref={listRef} role="region" aria-label="Tabella segnalazioni, scorrimento orizzontale" tabIndex={0} className="overflow-x-auto rounded-xl border bg-card outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <table className="w-full min-w-[1180px] text-sm">
         <caption className="sr-only">Segnalazioni del progetto. Apri una segnalazione dalla descrizione oppure selezionala per le azioni in blocco.</caption>
         <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
           <tr>
-            <th scope="col" className="w-12 px-4 py-3"><span className="sr-only">Selezione</span></th>
-            <th scope="col" className="px-4 py-3 font-medium">Segnalazione</th>
-            <th scope="col" className="px-4 py-3 font-medium">Stato</th>
-            <th scope="col" className="px-4 py-3 font-medium">Priorità</th>
-            <th scope="col" className="px-4 py-3 font-medium">Ambiente / Pagina</th>
-            <th scope="col" className="px-4 py-3 font-medium">Autore</th>
-            <th scope="col" className="px-4 py-3 font-medium">Creata il</th>
+            <th scope="col" className="w-12 px-4 py-3"><Checkbox aria-label={allFilteredSelected ? "Deseleziona tutte le segnalazioni filtrate" : "Seleziona tutte le segnalazioni filtrate"} checked={allFilteredSelected} indeterminate={selectedReports.length > 0 && !allFilteredSelected} disabled={bulkDisabled || !filtered.length} onCheckedChange={checked => setBulkSelection({ scope: bulkScope, ids: checked ? filtered.map(report => report.id) : [] })} /></th>
+            <ReportTableHeading field="body" label="Segnalazione" order={listOrder} disabled={bulkDisabled} onChange={setListOrder} />
+            <ReportTableHeading field="status" label="Stato" order={listOrder} disabled={bulkDisabled} onChange={setListOrder} />
+            <ReportTableHeading field="priority" label="Priorità" order={listOrder} disabled={bulkDisabled} onChange={setListOrder} />
+            <ReportTableHeading field="environment" label="Ambiente / Pagina" order={listOrder} disabled={bulkDisabled} onChange={setListOrder} />
+            <ReportTableHeading field="authorName" label="Autore" order={listOrder} disabled={bulkDisabled} onChange={setListOrder} />
+            <ReportTableHeading field="created_at" label="Creata il" order={listOrder} disabled={bulkDisabled} onChange={setListOrder} />
+            <ReportTableHeading field="updated_at" label="Aggiornata il" order={listOrder} disabled={bulkDisabled} onChange={setListOrder} />
           </tr>
         </thead>
         <tbody className="divide-y">
-          {!filtered.length ? <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">Nessuna segnalazione trovata.</td></tr> : null}
+          {!filtered.length ? <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">Nessuna segnalazione trovata.</td></tr> : null}
           {paginated.map(report => <tr key={report.id} className={`align-top transition-colors hover:bg-primary/5 motion-reduce:transition-none ${selectedIds.has(report.id) ? 'bg-primary/5' : ''}`}>
             <td className="px-4 py-4"><Checkbox aria-label={`Seleziona segnalazione: ${report.body.slice(0,100)}`} checked={selectedIds.has(report.id)} disabled={bulkDisabled} onCheckedChange={checked => selectReport(report.id,Boolean(checked))} /></td>
             <td className="min-w-64 max-w-md px-4 py-4"><button type="button" disabled={bulkDisabled} onClick={() => openReport(report)} className="block w-full rounded-sm text-left font-medium hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"><span className="line-clamp-3 break-words">{report.body}</span></button></td>
@@ -180,6 +185,7 @@ export function ReportList({ reports, environments, participants, initialReportI
             <td className="max-w-60 px-4 py-4"><p className="font-medium">{environments.find(item => item.id === report.environment_id)?.name}</p><p className="mt-1 line-clamp-2 break-all text-xs text-muted-foreground" title={report.page_path}>{report.page_path}</p></td>
             <td className="max-w-48 px-4 py-4"><span className="block truncate text-muted-foreground" title={report.authorName}>{report.authorName}</span></td>
             <td className="whitespace-nowrap px-4 py-4 text-xs text-muted-foreground"><time dateTime={report.created_at}>{formatReportDateTime(report.created_at)}</time></td>
+            <td className="whitespace-nowrap px-4 py-4 text-xs text-muted-foreground">{report.updated_at ? <time dateTime={report.updated_at}>{formatReportDateTime(report.updated_at)}</time> : <span title="Nessuna modifica registrata">—</span>}</td>
           </tr>)}
         </tbody>
       </table>
