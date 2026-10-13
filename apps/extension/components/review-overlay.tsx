@@ -44,7 +44,7 @@ const statusColors = { open: 'bg-red-100 text-red-800', in_progress: 'bg-orange-
 const pinColors = { open: 'bg-red-600', in_progress: 'bg-orange-500', validation: 'bg-blue-600', resolved: 'bg-emerald-600' };
 const priorityColors = { low: 'bg-slate-100 text-slate-700', medium: 'bg-amber-100 text-amber-800', high: 'bg-red-100 text-red-800' };
 /** Animate the measured content height, rather than a max-height ceiling. */
-function ExpandingPin({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+function ExpandingPin({ children, anchorX, anchorY, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { anchorX: number; anchorY: number }) {
   const button = useRef<HTMLButtonElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [height, setHeight] = useState(44);
@@ -57,7 +57,16 @@ function ExpandingPin({ children, ...props }: React.ButtonHTMLAttributes<HTMLBut
     observer.observe(content);
     return () => observer.disconnect();
   }, []);
-  return <button {...props} ref={button} style={{ height: expanded ? height : 44 }} onMouseEnter={() => setExpanded(true)} onMouseLeave={() => setExpanded(false)}>{children}</button>;
+  const visibleHeight = expanded ? Math.min(height, Math.max(44, innerHeight - 16)) : 44;
+  const visibleWidth = expanded ? Math.min(320, innerWidth - 16) : 44;
+  // Keep visible anchors reachable at the top, without bringing offscreen pins into view.
+  const shiftY = anchorY >= 0 && anchorY <= innerHeight
+    ? Math.max(8, Math.min(anchorY - visibleHeight, innerHeight - visibleHeight - 8)) - (anchorY - visibleHeight)
+    : 0;
+  const shiftX = anchorX >= 0 && anchorX <= innerWidth
+    ? Math.max(8, Math.min(anchorX, innerWidth - visibleWidth - 8)) - anchorX
+    : 0;
+  return <button {...props} ref={button} style={{ height: visibleHeight, translate: `${shiftX}px ${shiftY}px`, overflowY: expanded ? 'auto' : 'hidden' }} onMouseEnter={() => setExpanded(true)} onMouseLeave={() => setExpanded(false)}>{children}</button>;
 }
 
 type Draft = { id: string; context: ReportContext; screenshot?: string; body: string; priority: ReportPriority };
@@ -353,7 +362,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
       const position = anchorPosition(report.context.anchor);
       if (!position) return null;
       return <div key={report.id} className={`group pointer-events-auto fixed -translate-y-full ${highlighted === report.id ? 'z-20' : ''}`} style={{left:position.x,top:position.y}}>
-        <ExpandingPin aria-label={`${statusLabels[report.status]}, priorità ${priorityLabels[report.priority ?? 'medium']}: ${report.body.slice(0,60)}`} className={`relative block ${highlighted === report.id ? 'reporty-pin-highlight' : ''} min-h-[44px] w-[44px] overflow-hidden rounded-tl-[22px] rounded-tr-[22px] rounded-br-[22px] border-2 border-primary/70 bg-card text-card-foreground shadow-md transition-[width,height,translate] duration-300 ease-out group-hover:w-[min(320px,calc(100vw-16px))] focus-visible:outline-2 focus-visible:outline-ring motion-reduce:transition-none ${position.x + 320 > innerWidth - 8 ? 'group-hover:-translate-x-[calc(100%-44px)]' : ''}`} onClick={() => void view(report)}>
+        <ExpandingPin anchorX={position.x} anchorY={position.y} aria-label={`${statusLabels[report.status]}, priorità ${priorityLabels[report.priority ?? 'medium']}: ${report.body.slice(0,60)}`} className={`relative block ${highlighted === report.id ? 'reporty-pin-highlight' : ''} min-h-[44px] w-[44px] overflow-hidden rounded-tl-[22px] rounded-tr-[22px] rounded-br-[22px] border-2 border-primary/70 bg-card text-card-foreground shadow-md transition-[width,height,translate] duration-300 ease-out group-hover:w-[min(320px,calc(100vw-16px))] focus-visible:outline-2 focus-visible:outline-ring motion-reduce:transition-none`} onClick={() => void view(report)}>
           <span className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex size-7 items-center justify-center rounded-full ${pinColors[report.status]} text-xs font-semibold text-white transition-opacity duration-150 group-hover:opacity-0 motion-reduce:transition-none`}>{(report.authorName?.trim() || 'Utente').slice(0, 1).toLocaleUpperCase('it-IT')}</span>
           <span data-pin-preview className="invisible block opacity-0 transition-[opacity,visibility] duration-[150ms,0ms] delay-[0ms,150ms] ease-out group-hover:visible group-hover:opacity-100 group-hover:delay-[250ms,0ms] motion-reduce:transition-none">
             <span className="block w-[min(316px,calc(100vw-20px))] p-3 text-left">
