@@ -27,3 +27,5 @@ export interface ReportContext extends PageContext {
   viewport: { width: number; height: number; devicePixelRatio: number };
   scroll: { x: number; y: number };
 }
+export { MAX_ATTACHMENT_BYTES, MAX_REPLY_ATTACHMENTS, attachmentRequestSchema, attachmentMime, isPreviewImage } from './attachments';
+export type { AttachmentRequest, ReplyAttachment } from './attachments';

@@ -60,7 +60,7 @@ function Widget() {
     return()=>{disposed=true;clearInterval(timer);};
   },[]);
   async function transport(message:Record<string,unknown>) {
-    const response=await fetch(`${api}/api/widget`,{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({...message,action:message.type==='REPORTY_SCREENSHOT'?'screenshot':'reports'})});
+    const response=await fetch(`${api}/api/widget`,{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({...message,action:message.type==='REPORTY_SCREENSHOT'?'screenshot':message.type==='REPORTY_ATTACHMENT'?'attachment':'reports'})});
     const result=await response.json();
     if(!response.ok){
       if(response.status===401 || result.code==='WIDGET_SESSION_INVALID'){setToken('');saveToken('');}

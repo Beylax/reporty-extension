@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ReplyAttachment } from './attachments';
 
 export const reportPrioritySchema = z.enum(['low', 'medium', 'high']);
 export type ReportPriority = z.infer<typeof reportPrioritySchema>;
@@ -16,7 +17,7 @@ export const reportContextSchema = z.object({
 });
 export const reportRequestSchema = z.object({
   environmentId: z.string().uuid(), operation: z.enum(['list', 'thread', 'create', 'reply', 'status', 'priority', 'edit', 'delete', 'notifications', 'notification_read', 'notifications_read']),
-  payload: z.object({ id: z.string().uuid().optional(), pagePath: z.string().max(8192).optional(), body: z.string().trim().min(1).max(10000).optional(), status: z.enum(['open','in_progress','validation','resolved']).optional(), priority: reportPrioritySchema.optional(), context: reportContextSchema.optional() }),
+  payload: z.object({ id: z.string().uuid().optional(), pagePath: z.string().max(8192).optional(), body: z.string().trim().min(1).max(10000).optional(), status: z.enum(['open','in_progress','validation','resolved']).optional(), priority: reportPrioritySchema.optional(), context: reportContextSchema.optional(), replyId: z.string().uuid().optional(), attachments: z.array(z.string().uuid()).max(5).optional() }),
   screenshot: z.string().max(3500000).optional(),
 });
 export type Report = {
@@ -25,7 +26,7 @@ export type Report = {
   author_id?: string | null; guest_session_id?: string | null; authorKey?: string; updated_at?: string | null; updated_by?: string | null; updated_guest_session_id?: string | null; updatedByName?: string | null; updatedByKey?: string | null;
   screenshot_path: string | null; created_at: string; commentCount?: number; authorName: string; canEdit: boolean; canChangeStatus: boolean;
 };
-export type ReportComment = { id: string; body: string; authorName: string; created_at: string };
+export type ReportComment = { id: string; attachments?: ReplyAttachment[]; body: string; authorName: string; created_at: string };
 
 export type ProjectParticipant = { key: string; kind: 'developer' | 'guest'; name: string };
 

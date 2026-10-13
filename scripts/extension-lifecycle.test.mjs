@@ -271,3 +271,23 @@ test('opener position rejects invalid values, stale environments, foreign pages 
   assert.equal(response.ok, false);
   assert.equal(h.stored.sites['https://example.com'].position, 'bottom_right');
 });
+
+test('attachment transport binds the environment and trusted tab, keeping the session token in the background',async()=>{
+  const h=harness();
+  h.stored.sessionToken='a'.repeat(64);
+  h.stored.sites={'https://example.com':{environmentId:'env',position:'bottom_right'}};
+  const content={id:'test',frameId:0,tab:{id:1},url:'https://example.com/page'};
+  let response;
+  h.events.internal({type:'REPORTY_ATTACHMENT',payload:{environmentId:'forged',issueId:'issue',id:'attachment',operation:'read'}},content,value=>response=value);
+  await flush();
+  assert.equal(response?.ok,true);
+  const request=h.requests.find(item=>item.url.endsWith('/attachments'));
+  assert.ok(request);
+  assert.equal(JSON.parse(request.options.body).environmentId,'env');
+  assert.equal(JSON.parse(request.options.body).issueId,'issue');
+  assert.equal(request.options.headers.Authorization,'Bearer '+'a'.repeat(64));
+  assert.equal(JSON.stringify(response).includes('a'.repeat(64)),false);
+  h.events.internal({type:'REPORTY_ATTACHMENT',payload:{operation:'read'}},{...content,frameId:1},value=>response=value);
+  await flush();
+  assert.equal(response?.ok,false);
+});

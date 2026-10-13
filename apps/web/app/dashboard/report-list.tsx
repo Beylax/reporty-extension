@@ -1,4 +1,6 @@
 'use client';
+import { ReplyComposer, ReplyAttachmentList } from '@reporty/shared/ui/reply-attachments';
+import type { AttachmentRequest } from '@reporty/shared';
 import { ReportPagination, useReportPagination, REPORT_PAGE_SIZE } from '@/components/report-pagination';
 import { FilterPill } from '@/components/filter-pill';
 import { ReportOrder } from '@/components/report-order';
@@ -24,7 +26,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogTitle, DialogDescription, DialogClose } from '@/components/ui/dialog';
-import { Eye, Pencil, ExternalLink, X, List, Columns3, Send, Trash2 } from 'lucide-react';
+import { Eye, Pencil, ExternalLink, X, List, Columns3, Trash2 } from 'lucide-react';
 import { ReportFilter } from './report-filter';
 import { ReportFilterPanel, type ReportFilterGroup } from './report-filter-panel';
 import { ReportListOrder } from './report-list-order';
@@ -53,7 +55,7 @@ export function ReportList({ reports, environments, participants, initialReportI
   const [users, setUsers] = useState<string[]>([]);
   const pages = [...new Set(reports.filter(report => !environment.length || environment.includes(report.environment_id)).map(report => report.page_path))].sort();
   const [selected, setSelected] = useState<Report | null>(null), [comments, setComments] = useState<ReportComment[]>([]);
-  const [reply, setReply] = useState(''), [edited, setEdited] = useState(''), [image, setImage] = useState('');
+  const [edited, setEdited] = useState(''), [image, setImage] = useState('');
   const toast = useToastManager();
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -97,7 +99,7 @@ export function ReportList({ reports, environments, participants, initialReportI
       toast.add({ title: 'Azione in blocco interrotta', description: `${succeeded.size} operazioni confermate su ${targets.length}. ${error instanceof Error ? error.message : 'Riprova.'} Verifica la lista prima di riprovare le altre.`, type: 'error' });
     } finally {
       setBulkSelection(previous => ({ ...previous, ids: previous.ids.filter(id => !succeeded.has(id)) }));
-      if (storageWarnings) toast.add({ title: 'Pulizia screenshot incompleta', description: `${storageWarnings} segnalazioni eliminate, ma alcuni screenshot non sono stati rimossi.`, type: 'error' });
+      if (storageWarnings) toast.add({ title: 'Pulizia file incompleta', description: `${storageWarnings} segnalazioni eliminate, ma alcuni file non sono stati rimossi.`, type: 'error' });
       if (operation === 'status' || operation === 'delete') window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
       router.refresh();
       bulkLock.current = false;
@@ -131,12 +133,21 @@ export function ReportList({ reports, environments, participants, initialReportI
     const result = await mutateReport(current.environment_id, operation, { id: current.id, ...payload });
     if (result.error) throw new Error(result.error);
     toast.add({ title: operation === 'delete' ? 'Segnalazione eliminata' : operation === 'reply' ? 'Risposta aggiunta' : 'Modifiche salvate', type: 'success' });
+    if (result.warning) toast.add({ title: result.warning, type: 'error' });
     if (operation === 'status' || operation === 'reply') window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
     router.refresh();
   }
+  async function requestAttachment(input: AttachmentRequest) {
+    if (!current) throw new Error('Segnalazione non disponibile.');
+    const response = await fetch('/api/attachments',{ method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ ...input,environmentId:current.environment_id,issueId:current.id }) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error ?? 'Allegato non disponibile.');
+    return result;
+  }
+  function attachmentError(message: string) { toast.add({ title:'Operazione non riuscita',description:message,type:'error' }); }
   function openReport(report: Report) {
     if (busy || moving || bulkLock.current) return;
-    void run(async () => { const version = ++selectionVersion.current; setSelected(report); setEditing(false); setGalleryOpen(false); setEdited(report.body); setImage(''); setReply(''); setComments([]); const result = await loadThread(report.environment_id, report.id); if (result.error) throw new Error(result.error); if (version === selectionVersion.current) setComments(result.data.comments); });
+    void run(async () => { const version = ++selectionVersion.current; setSelected(report); setEditing(false); setGalleryOpen(false); setEdited(report.body); setImage(''); setComments([]); const result = await loadThread(report.environment_id, report.id); if (result.error) throw new Error(result.error); if (version === selectionVersion.current) setComments(result.data.comments); });
   }
   const openedLink = useRef<string | undefined>(undefined);
   const openLinkedReport = useEffectEvent(() => {
@@ -217,15 +228,23 @@ export function ReportList({ reports, environments, participants, initialReportI
     </div>}
     </div>
     <ReportPagination total={filtered.length} page={pagination.page} pages={pagination.pages} onChange={next => { pagination.setPage(next); listRef.current?.scrollIntoView({ block: 'start' }); }} /></>}
-    <Dialog showClose={false} open={Boolean(current)} onOpenChange={open => { if (!open) { selectionVersion.current++; setSelected(null); setImage(''); if (initialReportId) { const url = new URL(window.location.href); url.searchParams.delete('report'); router.replace(url.pathname + url.search, { scroll: false }); } } }}>{current ? <div className="space-y-5"><header className="flex flex-wrap items-center justify-between gap-3"><DialogTitle className="text-xl font-semibold">Dettaglio segnalazione</DialogTitle><div className="ml-auto flex items-center gap-2"><DialogClose render={<Button variant="outline" size="icon" aria-label="Chiudi dettaglio" />}><X className="size-4" aria-hidden="true" /></DialogClose></div></header><DialogDescription className="sr-only">Dati e gestione della segnalazione</DialogDescription>
+    <Dialog showClose={false} open={Boolean(current)} onOpenChange={open => { if (!open && !busy) { selectionVersion.current++; setSelected(null); setImage(''); if (initialReportId) { const url = new URL(window.location.href); url.searchParams.delete('report'); router.replace(url.pathname + url.search, { scroll: false }); } } }}>{current ? <div className="space-y-5"><header className="flex flex-wrap items-center justify-between gap-3"><DialogTitle className="text-xl font-semibold">Dettaglio segnalazione</DialogTitle><div className="ml-auto flex items-center gap-2"><DialogClose render={<Button variant="outline" size="icon" aria-label="Chiudi dettaglio" disabled={busy} />}><X className="size-4" aria-hidden="true" /></DialogClose></div></header><DialogDescription className="sr-only">Dati e gestione della segnalazione</DialogDescription>
       <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex flex-wrap gap-2"><Badge className={`border-[color-mix(in_oklab,currentColor_25%,transparent)] ${statusColors[current.status]}`}><ReportIcon value={current.status} />{labels[current.status]}</Badge><Badge className={`border-[color-mix(in_oklab,currentColor_25%,transparent)] ${priorityColors[current.priority ?? 'medium']}`} ><ReportIcon value={current.priority ?? 'medium'} />Priorità {priorityLabels[current.priority ?? 'medium'].toLowerCase()}</Badge></div><div className="flex flex-wrap gap-2">{current.screenshot_path ? <Button variant="outline" disabled={busy || imageLoading} onClick={() => { setImage(''); setGalleryOpen(true); setImageLoading(true); void run(async () => { try { const version = selectionVersion.current; const response = await fetch(`/api/reports/${current.id}/screenshot`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Screenshot non disponibile.'); if (version === selectionVersion.current) setImage(data.url); } catch (error) { setGalleryOpen(false); throw error; } }).finally(() => setImageLoading(false)); }}><Eye className="size-4" />Mostra screenshot</Button> : null}<Button variant="outline" nativeButton={false} render={<a href={pageUrl(current)} target="_blank" rel="noopener noreferrer" />}><ExternalLink className="size-4" aria-hidden="true" />Apri pagina originale</Button></div></div>
       <section aria-labelledby="report-description-title" className="space-y-3 rounded-xl border bg-muted/50 dark:bg-card p-4"><h3 id="report-description-title" className="text-sm font-semibold">Descrizione</h3>{editing ? <form className="grid gap-3" onSubmit={event => { event.preventDefault(); if (busy || !edited.trim() || edited.trim() === current.body.trim()) return; void run(async () => { await mutate('edit', {body:edited}); setEditing(false); }); }}><Textarea aria-label="Modifica descrizione" className="min-h-28 rounded-lg border bg-background p-3" value={edited} onChange={event => setEdited(event.target.value)} required maxLength={10000} /><div className="flex justify-end gap-2"><Button variant="outline" type="button" disabled={busy} onClick={() => setEditing(false)}>Annulla</Button><Button disabled={busy || !edited.trim() || edited.trim() === current.body.trim()} type="submit">Salva testo</Button></div></form> : <><p className="whitespace-pre-wrap break-words leading-relaxed">{current.body}</p>{current.canEdit ? <div className="flex justify-end"><Button size="icon" variant="outline" aria-label="Modifica testo" onClick={() => { setEdited(current.body); setEditing(true); }}><Pencil className="size-4" /></Button></div> : null}</>}</section>
       {galleryOpen ? <ScreenshotGallery autoOpen loading={imageLoading || !image} onClose={() => { setGalleryOpen(false); setImage(''); }} src={image} aspectRatio={`${current.context.viewport.width} / ${current.context.viewport.height}`} /> : null}
       <section className="space-y-4 rounded-xl border bg-muted/50 dark:bg-card p-4"><div className="grid gap-2"><Label htmlFor="dashboard-status">Stato</Label><RadioButtons label="Stato" id="dashboard-status" disabled={busy || moving || !current.canChangeStatus} value={current.status} onValueChange={value => moveReport(current, value as Report['status'])} options={Object.entries(labels).map(([value, label]) => ({ value, label }))} /></div>
       <div className="grid gap-2"><Label htmlFor="dashboard-priority">Priorità</Label><RadioButtons label="Priorità" id="dashboard-priority" disabled={busy || moving || !current.canChangeStatus} value={current.priority ?? 'medium'} onValueChange={value => moveReport(current, current.status, value as Report['priority'])} options={Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))} /></div>
       </section><section className="space-y-4 rounded-xl border bg-muted/50 dark:bg-card p-4">
-      <h3 className="font-medium">Risposte</h3>{threadLoading ? <RepliesSkeleton /> : null}{!threadLoading && comments.map(comment => <div key={comment.id} className="rounded-lg border bg-background p-3 dark:bg-muted"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-medium">{comment.authorName}</p><time dateTime={comment.created_at} className="text-xs text-muted-foreground">{formatReportDateTime(comment.created_at)}</time></div><p className="whitespace-pre-wrap break-words text-sm">{comment.body}</p></div>)}
-      <form className="grid gap-3" onSubmit={event => { event.preventDefault(); void run(async () => { const version = selectionVersion.current; await mutate('reply', { body: reply }); if (version === selectionVersion.current) setReply(''); const result = await loadThread(current.environment_id, current.id); if (result.error) throw new Error(result.error); if (version === selectionVersion.current) setComments(result.data.comments); }); }}><Label htmlFor="dashboard-reply">Rispondi</Label><Textarea id="dashboard-reply" className="rounded-lg border p-3" maxLength={10000} required value={reply} onChange={event => setReply(event.target.value)} /><Button type="submit" disabled={busy || !reply.trim()}><Send className="size-4" aria-hidden="true" />Aggiungi risposta</Button></form>
+      <h3 className="font-medium">Risposte</h3>{threadLoading ? <RepliesSkeleton /> : null}{!threadLoading && comments.map(comment => <div key={comment.id} className="rounded-lg border bg-background p-3 dark:bg-muted"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-medium">{comment.authorName}</p><time dateTime={comment.created_at} className="text-xs text-muted-foreground">{formatReportDateTime(comment.created_at)}</time></div><p className="whitespace-pre-wrap break-words text-sm">{comment.body}</p><ReplyAttachmentList attachments={comment.attachments} requestFile={requestAttachment} onError={attachmentError} /></div>)}
+      <ReplyComposer key={current.id} disabled={busy} onBusyChange={setBusy} requestFile={requestAttachment} onError={attachmentError} submit={async (body,attachments,replyId) => {
+        const result = await mutateReport(current.environment_id,'reply',{ id:current.id,body,attachments,replyId });
+        if (result.error) throw new Error(result.error);
+        toast.add({ title:'Risposta aggiunta',type:'success' });
+        window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED)); router.refresh();
+        const thread = await loadThread(current.environment_id,current.id);
+        if (thread.error) attachmentError(thread.error);
+        else setComments(thread.data.comments);
+      }} />
       </section><footer className="space-y-1 rounded-xl border bg-muted/50 dark:bg-card p-4 text-xs text-muted-foreground"><p>Segnalata da {current.authorName} · {formatReportDateTime(current.created_at)}</p><p>{current.updated_at ? <>Ultima modifica: {current.updatedByName ?? 'Utente'} · {formatReportDateTime(current.updated_at)}</> : 'Nessuna modifica registrata'}</p><p>Viewport originale: {current.context.viewport.width} × {current.context.viewport.height} · scroll {Math.round(current.context.scroll.y)} px</p></footer>{current.canEdit ? <section aria-label="Zona pericolosa" className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4"><h3 className="text-sm font-semibold text-destructive">Zona pericolosa</h3><div className="flex justify-end"><DeleteConfirm fullWidth disabled={busy} description="Eliminare questa segnalazione e tutte le sue risposte? Questa operazione è definitiva." onConfirm={() => run(async () => { await mutate('delete', {}); setSelected(null); })}><Trash2 className="size-4" aria-hidden="true" />Elimina</DeleteConfirm></div></section> : null}</div> : null}</Dialog>
     </div>
   </section>;

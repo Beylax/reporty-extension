@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { isUuid, validateName } from '@reporty/shared';
 import { newToken, validToken } from '@/lib/invitation-token';
 import { POST as reports } from '../extension/reports/route';
+import { POST as attachment } from '../extension/attachments/route';
 import { POST as screenshot } from '../extension/screenshot/route';
 
 function cors(response: Response, origin: string) {
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
   if (!validToken(secret)) return cors(Response.json({error:'Inserisci nuovamente il nome.'},{status:401}),origin);
   const {data:environmentId,error}=await supabase.rpc('widget_authorize',{secret,request_origin:origin});
   if(error || !environmentId) return cors(Response.json({error:'Segnalazioni disabilitate o sessione scaduta.',code:'WIDGET_SESSION_INVALID'},{status:403}),origin);
-  const body={...input,environmentId};
+  const body=input.action==='attachment' ? {...input.payload,environmentId} : {...input,environmentId};
   const forwarded=new Request(request.url,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${secret}`},body:JSON.stringify(body)});
-  return cors(await (input.action==='screenshot' ? screenshot(forwarded) : reports(forwarded)),origin);
+  return cors(await (input.action==='screenshot' ? screenshot(forwarded) : input.action==='attachment' ? attachment(forwarded) : reports(forwarded)),origin);
 }

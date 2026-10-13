@@ -21,7 +21,7 @@ test('destructive bootstrap, shared permissions, guest updates and environment l
       grant usage on schema auth, public to anon, authenticated;
       grant execute on function auth.uid(), auth.jwt() to anon, authenticated;
       create table storage.buckets(id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
-      create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text);
+      create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text,metadata jsonb);
       insert into auth.users values ('${owner}','owner@example.com',now()), ('${member}','member@example.com',now()), ('${outsider}','outsider@example.com',now()), ('${platform}','platform@example.com',now());`);
     const initialize = await readFile(new URL('../initialize.sql', import.meta.url),'utf8');
     await db.exec(initialize);

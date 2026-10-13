@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { storageClient } from '@/lib/supabase/storage';
+import { storageClient, removeStoredFiles } from '@/lib/supabase/storage';
 import { validToken } from '@/lib/invitation-token';
 import { getPageContext, reportRequestSchema } from '@reporty/shared';
 
@@ -37,8 +37,8 @@ export async function POST(request: Request) {
       if (attachError) { await bucket.remove([path]); warning = 'Segnalazione salvata, screenshot non allegato.'; }
     } else warning = 'Segnalazione salvata, caricamento screenshot non riuscito.';
   }
-  if (operation === 'delete' && data.screenshot_path) {
-    try { await storageClient().remove([data.screenshot_path]); } catch { /* Deletion of the report succeeds without storage configuration. */ }
+  if (operation === 'delete') {
+    try { await removeStoredFiles([...(data.screenshot_path ? [data.screenshot_path] : []),...(data.attachment_paths ?? [])]); } catch { warning = 'Segnalazione eliminata; pulizia dei file incompleta.'; }
   }
   return Response.json({ data, warning }, { headers: { 'Cache-Control': 'no-store' } });
 }

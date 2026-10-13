@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { isUuid } from '@reporty/shared';
 import { requireUser } from '@/lib/auth';
-import { storageClient } from '@/lib/supabase/storage';
+import { removeStoredFiles } from '@/lib/supabase/storage';
 
 export async function deletePlatformResource(id: string, kind: 'project' | 'environment') {
   if (!isUuid(id) || !['project', 'environment'].includes(kind)) return { error: 'Dati non validi.' };
@@ -14,12 +14,8 @@ export async function deletePlatformResource(id: string, kind: 'project' | 'envi
   const paths = data as string[];
   if (paths.length) {
     try {
-      const bucket = storageClient();
-      for (let index = 0; index < paths.length; index += 100) {
-        const result = await bucket.remove(paths.slice(index, index + 100));
-        if (result.error) throw result.error;
-      }
-    } catch { warning = 'Dati eliminati; alcuni screenshot potrebbero essere rimasti nel bucket privato.'; }
+      await removeStoredFiles(paths);
+    } catch { warning = 'Dati eliminati; alcuni file potrebbero essere rimasti nei bucket privati.'; }
   }
   revalidatePath('/dashboard', 'layout');
   return { warning };

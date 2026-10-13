@@ -40,3 +40,11 @@ test('bulk requests bound concurrency, deduplicate IDs and process all chunks',a
   assert.equal(peak,5);assert.equal(calls,26);assert.equal(result.succeeded.length,26);
   assert.deepEqual(result.failed,[]);
 });
+test('bulk deletion cleans attachments and continues after a screenshot cleanup error',async()=>{
+  const removed=[];
+  const result=await executeBulkReports({operation:'delete',targets:[target('one'),target('denied')]},async item=>item.id==='denied'?{error:{code:'42501'}}:{data:{screenshot_path:'one.jpg',attachment_paths:['attachments/one/file1','attachments/one/file2']}},async path=>{
+    removed.push(path);if(path==='one.jpg')throw new Error('Storage failed');
+  });
+  assert.deepEqual(removed,['one.jpg','attachments/one/file1','attachments/one/file2']);
+  assert.deepEqual(result.storageWarnings,['one']);assert.deepEqual(result.failed,['denied']);
+});

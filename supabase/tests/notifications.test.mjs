@@ -17,7 +17,7 @@ test('creation, status and reply notifications, personal reading, page isolation
       grant usage on schema auth,public to anon,authenticated;
       grant execute on function auth.uid(),auth.jwt() to anon,authenticated;
       create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
-      create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text);`);
+      create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text,metadata jsonb);`);
     await db.exec(await readFile(new URL('../initialize.sql',import.meta.url),'utf8'));
     await db.query('insert into auth.users(id,email,is_anonymous) values($1,$2,false),($3,$4,false),($5,$6,true)',[developer,'dev@example.com',second,'second@example.com',anonymous,'anonymous@example.com']);
     const as=async(id,role='authenticated')=>{

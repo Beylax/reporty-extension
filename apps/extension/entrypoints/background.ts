@@ -135,7 +135,7 @@ export default defineBackground(() => {
         await browser.storage.local.set({ [`pendingConnection:${sender.tab.id}`]: { nonce, tabId: sender.tab.id, expiresAt: Date.now() + 120000 } });
         return sendResponse({ ok: true, data: { nonce, extensionId: browser.runtime.id } });
       }
-      if (['REPORTY_REPORT', 'REPORTY_SCREENSHOT', 'REPORTY_POSITION'].includes(message?.type)) {
+      if (['REPORTY_REPORT', 'REPORTY_SCREENSHOT', 'REPORTY_ATTACHMENT', 'REPORTY_POSITION'].includes(message?.type)) {
         if (sender.frameId !== 0 || !sender.tab?.id || !sender.url) throw new Error('Pagina non valida.');
         const tab = await browser.tabs.get(sender.tab.id);
         if (!tab.url || new URL(tab.url).origin !== new URL(sender.url).origin) throw new Error('Pagina cambiata.');
@@ -156,8 +156,8 @@ export default defineBackground(() => {
         }
         if (message.type === 'REPORTY_REPORT' && message.operation === 'create' && message.payload?.context?.url !== tab.url) throw new Error('La pagina è cambiata: crea una nuova segnalazione.');
         if (message.type === 'REPORTY_REPORT' && String(message.operation).startsWith('notification') && message.payload?.pagePath !== getPageContext(tab.url).pagePath) throw new Error('La pagina è cambiata: riapri le notifiche.');
-        const endpoint = message.type === 'REPORTY_SCREENSHOT' ? 'screenshot' : 'reports';
-        const body = message.type === 'REPORTY_SCREENSHOT' ? { environmentId: site.environmentId, id: message.id } : { environmentId: site.environmentId, operation: message.operation, payload: message.payload, screenshot: message.screenshot };
+        const endpoint = message.type === 'REPORTY_SCREENSHOT' ? 'screenshot' : message.type === 'REPORTY_ATTACHMENT' ? 'attachments' : 'reports';
+        const body = message.type === 'REPORTY_ATTACHMENT' ? { ...message.payload, environmentId: site.environmentId } : message.type === 'REPORTY_SCREENSHOT' ? { environmentId: site.environmentId, id: message.id } : { environmentId: site.environmentId, operation: message.operation, payload: message.payload, screenshot: message.screenshot };
         const response = await fetch(`${apiOrigin}/api/extension/${endpoint}`, { method: 'POST', credentials: 'omit', headers: { Authorization: `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(30000) });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error ?? 'Operazione non riuscita.');

@@ -4,18 +4,19 @@ import { revalidatePath } from 'next/cache';
 import { bulkReportRequestSchema, isUuid } from '@reporty/shared';
 import { requireUser } from '@/lib/auth';
 import { executeBulkReports } from '@/lib/bulk-reports';
-import { storageClient } from '@/lib/supabase/storage';
+import { removeStoredFiles } from '@/lib/supabase/storage';
 
-export async function mutateReport(environmentId: string, operation: string, payload: { id: string; body?: string; status?: string; priority?: string }) {
+export async function mutateReport(environmentId: string, operation: string, payload: { id: string; body?: string; status?: string; priority?: string; replyId?: string; attachments?: string[] }) {
   const { supabase } = await requireUser();
   if (!isUuid(environmentId) || !isUuid(payload.id) || !['reply', 'edit', 'status', 'priority', 'delete'].includes(operation)) return { error: 'Dati non validi.' };
   const { data, error } = await supabase.rpc('report_operation', { secret: null, target: environmentId, operation, payload });
   if (error) return { error: 'Operazione non riuscita. Verifica i permessi e riprova.' };
-  if (operation === 'delete' && data?.screenshot_path) {
-    try { await storageClient().remove([data.screenshot_path]); } catch { /* The report remains deleted. */ }
+  let warning: string | undefined;
+  if (operation === 'delete') {
+    try { await removeStoredFiles([...(data?.screenshot_path ? [data.screenshot_path] : []),...(data?.attachment_paths ?? [])]); } catch { warning = 'Segnalazione eliminata; pulizia dei file incompleta.'; }
   }
   revalidatePath('/dashboard');
-  return { success: true };
+  return { success: true, warning };
 }
 
 export async function getReportThread(environmentId: string, id: string) {
@@ -36,8 +37,7 @@ export async function mutateReportsBulk(input: unknown) {
     if (!response.error && response.data?.project_id) projects.add(response.data.project_id);
     return response;
   }, async path => {
-    const { error } = await storageClient().remove([path]);
-    if (error) throw error;
+    await removeStoredFiles([path]);
   });
   if (result.succeeded.length) {
     revalidatePath('/dashboard');
