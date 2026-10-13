@@ -75,7 +75,7 @@ Dopo aver applicato `supabase/widget.sql`, copiare lo snippet dalla card dell’
 
 ### Tema e componenti UI
 
-Dashboard, estensione e widget usano il tema Violet Bloom di tweakcn, con modalità chiara/scura e font Plus Jakarta Sans incluso localmente (licenza OFL). Il marchio è testuale: Reporty. Select, checkbox, switch, input, textarea e accordion usano i componenti UI condivisi nello stile shadcn/Base UI; i popup dell’estensione restano nello shadow root o nella modale corrente.
+Dashboard, estensione e widget usano il tema Violet Bloom di tweakcn, con modalità chiara/scura e font Plus Jakarta Sans incluso localmente (licenza OFL). Il tema segue quello del dispositivo finché l’utente non sceglie chiaro o scuro: la scelta viene salvata nel browser e prevale alle aperture successive e sui cambi del tema di sistema. Widget e pannello estensione applicano il tema prima di mostrare la UI, senza cambiamenti all’apertura delle impostazioni. L’estensione condivide la preferenza tra popup e pannello; dashboard e widget la conservano per origine. Per rendere disponibile la correzione, distribuire la build web aggiornata e ricostruire e ricaricare l’estensione. Il marchio è testuale: Reporty. Select, checkbox, switch, input, textarea e accordion usano i componenti UI condivisi nello stile shadcn/Base UI; i popup dell’estensione restano nello shadow root o nella modale corrente.
 
 La dashboard occupa tutta la larghezza disponibile, mantenendo i margini interni. La sidebar è fissa su desktop; sotto i 768 px si apre dal menu hamburger come pannello laterale, con chiusura tramite pulsante, Escape, clic esterno o selezione di un link.
 

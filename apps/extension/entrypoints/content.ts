@@ -1,3 +1,4 @@
+import { initializeTheme } from '@/lib/theme';
 import { shadowStyles } from '@/lib/shadow-styles';
 import { ToastProvider } from '@/components/ui/toast';
 import React from 'react';
@@ -31,6 +32,8 @@ export default defineContentScript({
       }) }) : null);
     }
     async function refresh() {
+      await themeReady;
+      if (disposed) return;
       const version = ++refreshVersion;
       try {
         const response = await browser.runtime.sendMessage({ type: 'REPORTY_PAGE' });
@@ -39,6 +42,7 @@ export default defineContentScript({
         renderReview(data);
       } catch { if (!disposed && version === refreshVersion) root.render(null); }
     }
+    const themeReady = initializeTheme(host);
     void refresh();
     const timer = setInterval(() => void refresh(), 30000);
     const listener = (message: { type?: string }, _sender: unknown, sendResponse: (response: { ok: boolean }) => void) => {
@@ -47,6 +51,6 @@ export default defineContentScript({
       return true;
     };
     browser.runtime.onMessage.addListener(listener);
-    ctx.onInvalidated(() => { disposed = true; clearInterval(timer); browser.runtime.onMessage.removeListener(listener); root.unmount(); host.remove(); });
+    ctx.onInvalidated(() => { disposed = true; clearInterval(timer); browser.runtime.onMessage.removeListener(listener); root.unmount(); void themeReady.then(cleanup => cleanup()); host.remove(); });
   },
 });

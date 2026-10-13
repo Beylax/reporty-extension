@@ -1,3 +1,4 @@
+import { initializeTheme } from '@/lib/theme';
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ReviewOverlay } from '@/components/review-overlay';
@@ -94,5 +95,7 @@ if(key && !document.getElementById('reporty-overlay') && !document.getElementByI
   document.documentElement.append(host);
   const shadow=host.attachShadow({mode:'closed'}),style=document.createElement('style'),mount=document.createElement('div');
   style.textContent=shadowStyles(css);shadow.append(style,mount);
-  createRoot(mount).render(<ToastProvider><Widget /></ToastProvider>);
+  void initializeTheme(host, 'widget').then(() => {
+    createRoot(mount).render(<ToastProvider><Widget /></ToastProvider>);
+  });
 }

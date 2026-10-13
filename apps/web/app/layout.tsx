@@ -1,3 +1,4 @@
+import { themeBootstrap } from '@/lib/theme-bootstrap';
 import { ToastProvider } from '@/components/ui/toast';
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -25,7 +26,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="it"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col"><script dangerouslySetInnerHTML={{ __html: `try{const t=localStorage.getItem("reporty-theme");const d=t?t==="dark":matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.classList.toggle("dark",d);document.documentElement.style.colorScheme=d?"dark":"light"}catch{}` }} /><ToastProvider>{children}</ToastProvider></body>
+      <body className="min-h-full flex flex-col"><script dangerouslySetInnerHTML={{ __html: themeBootstrap }} /><ToastProvider>{children}</ToastProvider></body>
     </html>
   );
 }
