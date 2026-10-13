@@ -55,13 +55,11 @@ export default async function Project({ params, searchParams }: {
       <section className="space-y-4" aria-labelledby="environments-title">
         <div><h2 id="environments-title" className="text-xl font-semibold">Ambienti</h2></div>
         {!environments.length ? <Card><CardContent className="py-6 text-muted-foreground">Nessun ambiente aggiunto.</CardContent></Card> : null}
-        {environments.map(environment => <Card key={environment.id}>
-          <CardHeader><div className="flex items-center justify-between gap-3"><CardTitle>{environment.name}</CardTitle><a href={environment.origin} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: 'outline', size: 'sm' })}>Apri sito ↗</a></div><CardDescription className="break-all">{environment.origin}</CardDescription></CardHeader>
-          <CardContent className="space-y-5">
+        {environments.map(environment => <AccordionSection key={environment.id} variant="card" title={<span className="min-w-0 space-y-1"><span className="block break-words text-base font-semibold">{environment.name}</span><span className="block break-all text-sm font-normal text-muted-foreground">{environment.origin}</span></span>} action={<a href={environment.origin} target="_blank" rel="noopener noreferrer" aria-label={`Apri sito ${environment.name}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>Apri sito ↗</a>}>
             {canManage ? <form action={saveEnvironment} className="flex flex-wrap items-end gap-3">
               <input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="environmentId" value={environment.id} />
               <div className="grid flex-1 gap-2"><Label htmlFor={`name-${environment.id}`}>Nome ambiente</Label><Input id={`name-${environment.id}`} name="name" defaultValue={environment.name} maxLength={80} required /></div>
-              <div className="grid min-w-60 flex-1 gap-2"><Label htmlFor={`origin-${environment.id}`}>Origine del sito</Label><Input id={`origin-${environment.id}`} name="origin" type="url" defaultValue={environment.origin} required /></div>
+              <div className="grid min-w-0 basis-60 flex-1 gap-2"><Label htmlFor={`origin-${environment.id}`}>Origine del sito</Label><Input id={`origin-${environment.id}`} name="origin" type="url" defaultValue={environment.origin} required /></div>
               <SubmitButton>Salva ambiente</SubmitButton>
             </form> : null}
             <AccordionSection title="Link ospite e script di revisione">
@@ -69,8 +67,7 @@ export default async function Project({ params, searchParams }: {
             {widgetsResult.data?.find(widget => widget.environment_id === environment.id) ? <EnvironmentWidget environmentId={environment.id} enabled={widgetsResult.data.find(widget => widget.environment_id === environment.id)!.enabled} publicKey={widgetsResult.data.find(widget => widget.environment_id === environment.id)!.public_key} origin={appOrigin()} /> : <FeedbackToast message="Applica supabase/widget.sql per attivare gli script per ambiente." />}
             </AccordionSection>
             {canManage ? <ResourceDelete id={environment.id} kind="environment" name={environment.name} /> : null}
-          </CardContent>
-        </Card>)}
+        </AccordionSection>)}
       </section>
       {canManage ? <Card className="bg-primary/5 ring-primary/15">
         <CardHeader><CardTitle>Aggiungi un ambiente</CardTitle><CardDescription>Inserisci protocollo e dominio, senza percorsi. Per localhost includi la porta.</CardDescription></CardHeader>
