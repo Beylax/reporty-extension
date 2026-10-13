@@ -1,11 +1,9 @@
-import { Input } from '@/components/ui/input';
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ReviewOverlay } from '@/components/review-overlay';
 import { ToastProvider, useNotify } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Plus } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { shadowStyles } from '@/lib/shadow-styles';
 import { isOpenerPosition } from '@/lib/opener-position';
@@ -45,7 +43,8 @@ function Widget() {
     catch { throw new Error('Impossibile salvare la posizione: lo storage del browser non è disponibile.'); }
     setPosition(value);
   }
-  const [name,setName]=useState(''),[open,setOpen]=useState(false),[busy,setBusy]=useState(false);
+  const [sessionStarting,setSessionStarting]=useState(false);
+  const [sessionAttempt,setSessionAttempt]=useState(0);
   const notify=useNotify();
   useEffect(()=>{
     let disposed=false;
@@ -59,8 +58,25 @@ function Widget() {
     void refresh();const timer=setInterval(()=>void refresh(),10000);
     return()=>{disposed=true;clearInterval(timer);};
   },[]);
+  useEffect(() => {
+    if (!config?.enabled || token) return;
+    let disposed = false;
+    const controller = new AbortController();
+    setSessionStarting(true);
+    void (async () => {
+      try {
+        const response = await fetch(`${api}/api/widget`, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'start', key }), signal: controller.signal });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error ?? 'Consultazione non disponibile.');
+        if (!disposed) { saveToken(result.token); setToken(result.token); }
+      } catch (error) {
+        if (!disposed) notify(error instanceof Error ? error.message : 'Consultazione non disponibile.');
+      } finally { if (!disposed) setSessionStarting(false); }
+    })();
+    return () => { disposed = true; controller.abort(); };
+  }, [config?.enabled, token, sessionAttempt]);
   async function transport(message:Record<string,unknown>) {
-    const response=await fetch(`${api}/api/widget`,{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({...message,action:message.type==='REPORTY_SCREENSHOT'?'screenshot':message.type==='REPORTY_ATTACHMENT'?'attachment':'reports'})});
+    const response=await fetch(`${api}/api/widget`,{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({...message,action:message.type==='REPORTY_IDENTITY'?'identity':message.type==='REPORTY_SCREENSHOT'?'screenshot':message.type==='REPORTY_ATTACHMENT'?'attachment':'reports'})});
     const result=await response.json();
     if(!response.ok){
       if(response.status===401 || result.code==='WIDGET_SESSION_INVALID'){setToken('');saveToken('');}
@@ -71,9 +87,7 @@ function Widget() {
   if(!config?.enabled)return null;
   if(token)return <ReviewOverlay host={host} site={{environmentId:config.environment.id,position}} onPositionChange={changePosition} environment={config.environment} transport={transport} logoUrl={`${api}/brand/reporty-symbol.png`} />;
   const top = position.startsWith('top'), left = position.endsWith('left');
-  return <><div style={{ [top ? 'top' : 'bottom']: 24, [left ? 'left' : 'right']: 24 }} className="pointer-events-auto fixed flex items-center rounded-full border bg-background p-1.5 shadow-xl"><Button aria-label={open ? 'Chiudi inserimento nome' : 'Inizia ad aggiungere segnalazioni'} aria-expanded={open} size="icon" className="size-10 rounded-full" onClick={()=>setOpen(value=>!value)}><span className="flex transition-transform duration-200 motion-reduce:transition-none" style={{transform:open?'rotate(45deg)':'rotate(0deg)'}}><Plus className="size-5" aria-hidden="true" /></span></Button></div>{open?<section style={{ [top ? 'top' : 'bottom']: 88, [left ? 'left' : 'right']: 24 }} className="pointer-events-auto fixed w-[min(380px,calc(100vw-48px))] space-y-4 rounded-xl border bg-card p-4 shadow-xl"><div className="flex justify-between"><h2 className="font-semibold">Inizia ad aggiungere segnalazioni</h2></div><p className="text-sm text-muted-foreground">{config.environment.projectName} · {config.environment.name}</p><form className="grid gap-3" onSubmit={event=>{event.preventDefault();if(busy)return;setBusy(true);void(async()=>{try{
-    const response=await fetch(`${api}/api/widget`,{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'start',key,name})});const result=await response.json();if(!response.ok)throw new Error(result.error);saveToken(result.token);setToken(result.token);notify('Ora puoi aggiungere segnalazioni.','success');
-  }catch(error){notify(error instanceof Error?error.message:'Avvio non riuscito.');}finally{setBusy(false);}})();}}><Label htmlFor="reporty-widget-name">Il tuo nome</Label><Input id="reporty-widget-name" className="h-9 rounded-lg border bg-background px-3" required maxLength={80} value={name} onChange={event=>setName(event.target.value)} /><Button type="submit" disabled={busy}>{busy?<Skeleton className="h-4 w-32 bg-current opacity-30" />:'Inizia ad aggiungere segnalazioni'}</Button></form></section>:null}</>;
+  return <div role={sessionStarting ? 'status' : undefined} aria-label={sessionStarting ? 'Caricamento pannello segnalazioni' : undefined} style={{ [top ? 'top' : 'bottom']: 24, [left ? 'left' : 'right']: 24 }} className="pointer-events-auto fixed flex items-center gap-1 rounded-full border bg-background p-1.5 shadow-xl">{sessionStarting ? <><Skeleton className="size-9 rounded-lg" /><Skeleton className="size-10 rounded-full" /></> : <Button size="icon" variant="ghost" aria-label="Riprova ad aprire le segnalazioni" onClick={() => setSessionAttempt(value => value + 1)}><Menu className="size-5" /></Button>}</div>;
 }
 if(key && !document.getElementById('reporty-overlay') && !document.getElementById('reporty-widget')) {
   host.style.cssText='all:initial!important;display:block!important;position:fixed!important;inset:0!important;z-index:2147483647!important;pointer-events:none!important;font:14px/1.5 system-ui,sans-serif!important';

@@ -107,6 +107,32 @@ test('guest bridge browser bundle does not depend on the Node process global', a
   assert.doesNotMatch(bridge, /\bprocess\s*(?:\.|\[)/);
 });
 
+test('unnamed guest identity uses the trusted site session and cannot choose another environment', async () => {
+  const h = harness();
+  const secret = 'a'.repeat(64);
+  h.stored['guestSession:https://example.com'] = secret;
+  h.stored.sites = { 'https://example.com': { environmentId: 'env', position: 'bottom_right' } };
+  h.contexts[`Bearer ${secret}`] = { kind: 'guest', displayName: null, environments: [{ id: 'env', origin: 'https://example.com' }] };
+  const content = { id: 'test', frameId: 0, tab: { id: 1 }, url: 'https://example.com/page' };
+  for (const input of [{}, { name: 'Reviewer', environmentId: 'forged' }]) {
+    let response;
+    h.events.internal({ type: 'REPORTY_IDENTITY', ...input }, content, value => response = value);
+    await flush();
+    assert.equal(response.ok, true);
+    const request = h.requests.findLast(request => request.options?.method === 'POST' && request.url.endsWith('/context'));
+    assert.equal(request.options.headers.Authorization, `Bearer ${secret}`);
+    assert.deepEqual(JSON.parse(request.options.body), { environmentId: 'env', ...(input.name ? { name: input.name } : {}) });
+  }
+  for (const source of [{ ...content, frameId: 1 }, { ...content, url: 'https://other.example/page' }, popup]) {
+    const before = h.requests.length;
+    let response;
+    h.events.internal({ type: 'REPORTY_IDENTITY', name: 'Intruder' }, source, value => response = value);
+    await flush();
+    assert.equal(response.ok, false);
+    assert.equal(h.requests.length, before);
+  }
+});
+
 
 test('a second guest invite preserves the first site session and uses the right report credential', async () => {
   const h = harness();

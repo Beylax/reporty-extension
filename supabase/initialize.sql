@@ -18,7 +18,7 @@ declare item record;
 begin
   for item in select p.oid::regprocedure::text as signature from pg_proc p
     join pg_namespace n on n.oid=p.pronamespace
-    where n.nspname='public' and p.proname in ('attachment_operation','notify_issue_reply','notification_operation','notify_issue_status','list_project_participants','widget_config','widget_authorize','start_widget_session','add_environment_widget','create_project_with_production','is_platform_admin','can_read_project','can_manage_project','add_project_owner','create_member_invite','accept_member_invite','create_guest_invite','revoke_project_invite','list_project_members','preview_guest_invite','start_guest_session','get_guest_session','create_member_handoff','create_guest_handoff','redeem_extension_handoff','extension_context','revoke_extension_session','report_actor','report_operation','manage_project_member','platform_delete_resource','create_environment_guest_invite','preview_guest_review','save_project_review_link','create_environment_review_link','regenerate_environment_review_link')
+    where n.nspname='public' and p.proname in ('require_reviewer_name','reviewer_identity','attachment_operation','notify_issue_reply','notification_operation','notify_issue_status','list_project_participants','widget_config','widget_authorize','start_widget_session','add_environment_widget','create_project_with_production','is_platform_admin','can_read_project','can_manage_project','add_project_owner','create_member_invite','accept_member_invite','create_guest_invite','revoke_project_invite','list_project_members','preview_guest_invite','start_guest_session','get_guest_session','create_member_handoff','create_guest_handoff','redeem_extension_handoff','extension_context','revoke_extension_session','report_actor','report_operation','manage_project_member','platform_delete_resource','create_environment_guest_invite','preview_guest_review','save_project_review_link','create_environment_review_link','regenerate_environment_review_link')
   loop execute format('drop function if exists %s cascade',item.signature); end loop;
 end;
 $$;
@@ -62,7 +62,7 @@ create table public.guest_sessions (
   project_id uuid not null references public.projects(id) on delete cascade,
   invite_id uuid not null,
   token_hash text not null unique,
-  display_name text not null check (char_length(display_name) between 1 and 80),
+  display_name text check (char_length(display_name) between 1 and 80),
   created_at timestamptz not null default now(),
   foreign key (invite_id, project_id) references public.guest_invites(id, project_id) on delete cascade,
   unique (id, project_id)
@@ -167,7 +167,7 @@ create function public.start_guest_session(secret text, guest_name text, session
 returns uuid language plpgsql security definer set search_path = '' as $$
 declare invitation public.guest_invites; result uuid;
 begin
-  if guest_name is null or length(trim(guest_name)) not between 1 and 80 or
+  if (guest_name is not null and length(trim(guest_name)) not between 1 and 80) or
      session_secret is null or session_secret !~ '^[0-9a-f]{64}$' then raise exception 'Invalid guest details'; end if;
   select * into invitation from public.guest_invites
   where token_hash = encode(sha256(convert_to(secret, 'UTF8')), 'hex') and revoked_at is null for share;
@@ -273,11 +273,45 @@ begin
   return jsonb_build_object('projectId',e.project_id,'userId',actor,'guestId',guest,'manager',coalesce(manager,false),'origin',e.origin);
 end;
 $$;
+create or replace function public.require_reviewer_name(secret text, target uuid) returns void
+language plpgsql security definer set search_path='' as $$
+declare a jsonb;
+begin
+  a := public.report_actor(secret,target);
+  if a->>'guestId' is not null and not exists (
+    select 1 from public.guest_sessions g where g.id=(a->>'guestId')::uuid and g.display_name is not null
+  ) then raise exception 'REVIEWER_NAME_REQUIRED' using errcode='42501'; end if;
+end;
+$$;
+revoke all on function public.require_reviewer_name(text,uuid) from public,anon,authenticated;
+
+create or replace function public.reviewer_identity(secret text, target uuid, guest_name text default null) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare a jsonb; label text; guest uuid;
+begin
+  a := public.report_actor(secret,target); guest := (a->>'guestId')::uuid;
+  if guest is null then
+    select u.email into label from auth.users u where u.id=(a->>'userId')::uuid;
+    return jsonb_build_object('displayName',label,'needsName',false);
+  end if;
+  if guest_name is not null then
+    if char_length(trim(guest_name)) not between 1 and 80 then raise exception 'Invalid name' using errcode='22023'; end if;
+    -- The first name is retained, including when concurrent requests identify the session.
+    update public.guest_sessions set display_name=trim(guest_name) where id=guest and display_name is null;
+  end if;
+  select g.display_name into label from public.guest_sessions g where g.id=guest;
+  return jsonb_build_object('displayName',label,'needsName',label is null);
+end;
+$$;
+revoke all on function public.reviewer_identity(text,uuid,text) from public,anon,authenticated;
+grant execute on function public.reviewer_identity(text,uuid,text) to anon,authenticated;
+
 create or replace function public.attachment_operation(secret text, target uuid, operation text, payload jsonb) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare a jsonb; report public.issues; item public.comment_attachments; actor uuid; guest uuid;
 begin
   a := public.report_actor(secret,target); actor := (a->>'userId')::uuid; guest := (a->>'guestId')::uuid;
+  if operation is distinct from 'read' then perform public.require_reviewer_name(secret,target); end if;
   select * into report from public.issues where id=(payload->>'issueId')::uuid and environment_id=target for update;
   if report.id is null then raise exception 'Report unavailable' using errcode='42501'; end if;
   select * into item from public.comment_attachments where id=(payload->>'id')::uuid and issue_id=report.id;
@@ -325,6 +359,7 @@ language plpgsql security definer set search_path = '' as $$
 declare field_name text; anchor jsonb; dimensions jsonb; scroll_position jsonb; a jsonb; report public.issues; result jsonb; actor uuid; guest uuid; manager boolean; editable boolean; report_id uuid; text_body text; comment_uuid uuid; attachment_ids uuid[]; paths jsonb;
 begin
   a := public.report_actor(secret,target); actor := (a->>'userId')::uuid; guest := (a->>'guestId')::uuid; manager := (a->>'manager')::boolean;
+  if operation is null or operation not in ('list','thread') then perform public.require_reviewer_name(secret,target); end if;
   if operation='list' then
     select coalesce(jsonb_agg(row_data order by row_data->>'created_at' desc),'[]'::jsonb) into result from (
       select to_jsonb(i) || jsonb_build_object('authorName',coalesce(g.display_name,u.email,'Utente'),
@@ -458,7 +493,7 @@ begin
       union select author_id from public.comments where project_id=target
     )
     union all
-    select jsonb_build_object('key','guest:'||g.id::text,'kind','guest','name',g.display_name) from public.guest_sessions g where g.project_id=target
+    select jsonb_build_object('key','guest:'||g.id::text,'kind','guest','name',g.display_name) from public.guest_sessions g where g.project_id=target and g.display_name is not null
   ) participants;
   return result;
 end;
@@ -646,7 +681,7 @@ declare target public.environments; guest uuid; invitation uuid;
 begin
  select e.* into target from public.environment_widgets w join public.environments e on e.id=w.environment_id where w.public_key=key and w.enabled and e.origin=request_origin for share of w;
  if target.id is null then raise exception 'Widget unavailable' using errcode='42501'; end if;
- if guest_name is null or char_length(trim(guest_name)) not between 1 and 80 or session_secret is null or session_secret !~ '^[0-9a-f]{64}$' then raise exception 'Invalid details' using errcode='22023'; end if;
+ if (guest_name is not null and char_length(trim(guest_name)) not between 1 and 80) or session_secret is null or session_secret !~ '^[0-9a-f]{64}$' then raise exception 'Invalid details' using errcode='22023'; end if;
  select invite_id into invitation from public.environment_review_links where environment_id=target.id;
  insert into public.guest_sessions(project_id,invite_id,token_hash,display_name) values(target.project_id,invitation,encode(sha256(convert_to(session_secret,'UTF8')),'hex'),trim(guest_name)) returning id into guest;
  insert into public.widget_sessions(token_hash,environment_id,guest_session_id,origin) values(encode(sha256(convert_to(session_secret,'UTF8')),'hex'),target.id,guest,target.origin);

@@ -14,7 +14,7 @@ Dopo il reset:
 2. Creare progetti e ambienti. Ogni ambiente riceve automaticamente un link ospite in sola lettura nella sua card, copiabile e rigenerabile.
 3. Collegare nuovamente l’estensione: le vecchie sessioni non sono più valide.
 
-Tutti gli sviluppatori registrati possono leggere, modificare ed eliminare tutti i progetti, ambienti e segnalazioni. Gli ospiti entrano con il link e il nome, senza dashboard; possono creare, leggere, rispondere e cambiare stato/priorità nel progetto autorizzato. Non possono modificare il testo o eliminare segnalazioni. Rigenerare un link revoca solo quel link e le sessioni associate.
+Tutti gli sviluppatori registrati possono leggere, modificare ed eliminare tutti i progetti, ambienti e segnalazioni. Gli ospiti entrano con il link, senza dashboard e senza nome per consultare lista, pin, dettagli, screenshot e risposte. Il nome viene richiesto alla prima creazione, risposta o modifica di stato/priorità e conservato nella sessione. Non possono modificare il testo o eliminare segnalazioni. Rigenerare un link revoca solo quel link e le sessioni associate.
 
 ## Autenticazione
 
@@ -37,7 +37,15 @@ La creazione del progetto richiede l’origine del sito e crea atomicamente l’
 
 Su un database esistente eseguire **`widget.sql`**, aggiornamento non distruttivo. Il reset `initialize.sql` include già lo schema widget. Dopo il deploy web, ogni card ambiente mostra lo script da copiare nel sito e il toggle Abilita/Disabilita, inizialmente disabilitato.
 
-Chiunque visiti l’origine configurata, quando lo script è attivo, inserisce il nome e può creare, leggere, rispondere, cambiare stato/priorità, modificare ed eliminare le segnalazioni di quell’ambiente. La chiave nello snippet è pubblica, non un segreto amministrativo. Il backend e il database verificano ambiente, origine e stato del toggle a ogni operazione. La sessione dura un giorno; il pannello controlla il toggle ogni 10 secondi. Disabilitando il widget le nuove operazioni vengono bloccate subito e il pannello scompare al controllo successivo.
+Chiunque visiti l’origine configurata, quando lo script è attivo, può consultare senza nome le segnalazioni di quell’ambiente. Il nome viene richiesto alla prima scrittura, conservato nella sessione e permette di creare, rispondere, cambiare stato/priorità, modificare ed eliminare secondo i permessi del widget. La chiave nello snippet è pubblica, non un segreto amministrativo. Il backend e il database verificano ambiente, origine e stato del toggle a ogni operazione. La sessione dura un giorno; il pannello controlla il toggle ogni 10 secondi. Disabilitando il widget le nuove operazioni vengono bloccate subito e il pannello scompare al controllo successivo.
+
+## Consultazione senza nome
+
+Su un database esistente applicare **`reviewer_read_only.sql`** dopo gli aggiornamenti widget, ultima modifica e allegati. È incrementale e rieseguibile: conserva account, segnalazioni, link, allegati e nomi delle sessioni esistenti. Non eseguire `initialize.sql` per questo aggiornamento: resta distruttivo.
+
+Le nuove sessioni possono avere `display_name` nullo. Le RPC autorizzano la lettura con il link ospite o con il widget abilitato; creazione, modifiche, risposte, associazione screenshot e scritture sugli allegati richiedono un nome. Il nome viene assegnato alla sessione esistente senza sostituirne il token e senza cambiare i permessi. Il primo nome salvato non viene sovrascritto da richieste concorrenti. Le sessioni senza nome non compaiono tra i partecipanti della dashboard.
+
+Applicare la migrazione prima del deploy web/API e aggiornare e ricaricare l’estensione. Nessuna query remota è stata eseguita. `npm run test:db` verifica schema nuovo e migrazione su dati esistenti, accessi in lettura, scritture negate senza nome, attribuzione dopo inserimento del nome, RLS, isolamento e revoche.
 
 Screenshot opzionali in HTTPS (o localhost) con `getDisplayMedia`: scegliere la scheda corrente e consentire ogni acquisizione. Vengono evidenziati punto o elemento e fermate tutte le tracce della condivisione dopo la cattura. Annullando il consenso si può comunque inviare la segnalazione senza screenshot. La funzione può non essere disponibile su browser mobile.
 

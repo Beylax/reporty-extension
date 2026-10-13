@@ -4,8 +4,6 @@ import { useToastManager } from '@/components/ui/toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { startGuestReview } from './actions';
 
 type Prepared = { extensionId: string; nonce: string };
@@ -32,12 +30,11 @@ export function ReviewForm({ token }: { token: string }) {
   return <form className="grid gap-4" onSubmit={event => {
     event.preventDefault();
     if (locked.current) return;
-    const form = new FormData(event.currentTarget);
     locked.current = true; setBusy(true);
     void (async () => {
       try {
         const prepared = await prepareExtension();
-        const result = await startGuestReview(token, String(form.get('name') ?? ''));
+        const result = await startGuestReview(token);
         if (!result.code || !result.environmentId) throw new Error(result.error ?? 'Invito non disponibile.');
         const chrome = (window as unknown as { chrome?: { runtime?: { lastError?: unknown; sendMessage: (id: string, message: unknown, callback: (response?: { ok?: boolean }) => void) => void } } }).chrome;
         const runtime = chrome?.runtime;
@@ -50,5 +47,5 @@ export function ReviewForm({ token }: { token: string }) {
       } catch (error) { locked.current = false; toast.add({ title: 'Avvio non riuscito', description: error instanceof Error ? error.message : 'Riprova.', type: 'error' }); }
       finally { setBusy(false); }
     })();
-  }}><div className="grid gap-2"><Label htmlFor="guest-name">Il tuo nome</Label><Input id="guest-name" name="name" autoComplete="name" maxLength={80} required placeholder="Come ti chiami?" disabled={busy || done} /></div><Button type="submit" disabled={busy || done}>{done ? 'Revisione avviata' : busy ? <Skeleton className="h-4 w-32 bg-current opacity-30" /> : 'Inizia revisione'}</Button></form>;
+  }}><p className="text-sm text-muted-foreground">Puoi consultare le segnalazioni senza inserire il nome. Ti verrà chiesto quando vorrai creare una segnalazione, rispondere o modificarne stato e priorità.</p><Button type="submit" disabled={busy || done}>{done ? 'Revisione avviata' : busy ? <Skeleton className="h-4 w-32 bg-current opacity-30" /> : 'Inizia revisione'}</Button></form>;
 }

@@ -70,7 +70,7 @@ export default function App() {
         {enabled ? <Button disabled={loading} variant="outline" className="w-full" onClick={() => void save(false).catch(error => setStatus(error instanceof Error ? error.message : 'Operazione non riuscita.'))}>Disabilita su questo sito</Button> : null}
       </> : <p className="text-sm text-muted-foreground">Questo sito non è tra gli ambienti accessibili. Chiedi all’amministratore di aggiungerlo al progetto.</p>}
     </CardContent></Card> : null}
-    {!loading ? <Card><CardHeader><CardTitle>{context ? context.kind === 'guest' ? 'Revisore ospite' : 'Account del team' : 'Collega il tuo account'}</CardTitle><CardDescription>{context?.displayName ?? 'Accedi al team o apri un invito cliente nel browser, poi collega l’estensione.'}</CardDescription></CardHeader><CardContent className="space-y-3">
+    {!loading ? <Card><CardHeader><CardTitle>{context ? context.kind === 'guest' ? 'Revisore ospite' : 'Account del team' : 'Collega il tuo account'}</CardTitle><CardDescription>{context ? context.displayName ?? 'Consultazione senza nome. Il nome verrà richiesto alla prima azione.' : 'Accedi al team o apri un invito cliente nel browser, poi collega l’estensione.'}</CardDescription></CardHeader><CardContent className="space-y-3">
       <Button disabled={loading} className="w-full" onClick={() => void run(async () => { await command({ type: 'REPORTY_START_CONNECTION' }); window.close(); })}>{context ? 'Cambia collegamento' : 'Collega'}</Button>
       {context ? <Button disabled={loading} variant="outline" className="w-full" onClick={() => void run(async () => { await command({ type: 'REPORTY_DISCONNECT' }); await load(); setStatus('Sito scollegato.', 'success'); })}>Scollega</Button> : null}
     </CardContent></Card> : null}

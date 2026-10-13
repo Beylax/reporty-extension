@@ -8,7 +8,7 @@ import { Download, Eye, Paperclip, Send, X } from 'lucide-react';
 import { MAX_ATTACHMENT_BYTES, MAX_REPLY_ATTACHMENTS, isPreviewImage, type AttachmentRequest, type ReplyAttachment } from '../src/attachments';
 
 type RequestFile = (input: AttachmentRequest) => Promise<{ url?: string; id?: string }>;
-const pill = 'inline-flex max-w-full items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50';
+const pill = 'inline-flex min-w-0 max-w-[min(20rem,100%)] items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50';
 const button = 'gap-2';
 const errorText = (error: unknown) => error instanceof Error ? error.message : 'Operazione non riuscita.';
 const fileLabel = (size: number) => `${(size / 1000000).toLocaleString('it',{maximumFractionDigits:2})} MB`;
@@ -42,7 +42,7 @@ export function ReplyComposer({ requestFile, submit, onError, onBusyChange, disa
     for (const id of pending.current) void requestRef.current({ operation:'remove',id }).catch(() => errorRef.current('Pulizia degli allegati temporanei incompleta.'));
   },[]);
   const busy = disabled || progress !== null;
-  return <form className="grid gap-3" aria-busy={progress !== null} onSubmit={event => {
+  return <form className="grid min-w-0 grid-cols-1 gap-3" aria-busy={progress !== null} onSubmit={event => {
     event.preventDefault();
     if (lock.current || busy || !body.trim()) return;
     lock.current = true;

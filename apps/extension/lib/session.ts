@@ -1,7 +1,7 @@
 export const apiOrigin = new URL(import.meta.env.WXT_API_URL ?? 'http://localhost:3000').origin;
 
 export type Environment = { id: string; projectId: string; projectName: string; name: string; origin: string };
-export type Context = { kind: 'member' | 'guest'; displayName: string; environments: Environment[] };
+export type Context = { kind: 'member' | 'guest'; displayName: string | null; environments: Environment[] };
 export type Site = { environmentId: string; position: 'bottom_right' | 'bottom_left' | 'top_right' | 'top_left' };
 export type Sites = Record<string, Site>;
 

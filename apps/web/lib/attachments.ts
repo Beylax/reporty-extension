@@ -22,7 +22,7 @@ export async function handleAttachment(request: Request, secret: string | null) 
     secret, target: input.environmentId, operation: input.operation === 'upload' ? 'reserve' : input.operation,
     payload: { id: input.id, issueId: input.issueId, ...(bytes ? { name: input.name!.replace(/[\x00-\x1f\x7f/\\]/g,'_'), mime: attachmentMime(bytes), size: bytes.length } : {}) },
   });
-  if (error) return Response.json({ error: error.code === '42501' ? 'Allegato non disponibile o accesso revocato.' : 'Impossibile allegare il file. Massimo 5 allegati per risposta.' }, { status: error.code === '42501' ? 403 : 400 });
+  if (error) return Response.json({ error: error.message === 'REVIEWER_NAME_REQUIRED' ? 'Inserisci il tuo nome per aggiungere allegati.' : error.code === '42501' ? 'Allegato non disponibile o accesso revocato.' : 'Impossibile allegare il file. Massimo 5 allegati per risposta.' }, { status: error.code === '42501' ? 403 : 400 });
   try {
     const bucket = storageClient('attachments');
     if (bytes) {

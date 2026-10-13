@@ -33,7 +33,7 @@ Il monorepo usa un solo `package-lock.json` nella root.
 - Ogni progetto comprende più ambienti con origini esplicite (produzione, staging, localhost). Le segnalazioni sono separate per ambiente.
 - I membri assegnati possono vedere, commentare e cambiare stato delle segnalazioni. Autore e amministratore possono modificarle o eliminarle.
 - Stati: aperta, in lavorazione, risolta.
-- Il team usa sia dashboard sia estensione. I revisori ospiti (Designer e clienti) installano l'estensione e accedono tramite link riutilizzabili fino a revoca, inserendo solo il nome, senza registrazione. Vedono tutte le segnalazioni del progetto e rispondono dall'estensione, senza dashboard o cambio di stato.
+- Il team usa sia dashboard sia estensione. I revisori ospiti (Designer e clienti) installano l’estensione e accedono tramite link riutilizzabili fino a revoca, senza registrazione e senza nome per la consultazione. Il nome viene chiesto alla prima creazione, risposta o modifica di stato/priorità e ricordato nella sessione. Vedono le segnalazioni del progetto senza accedere alla dashboard; non modificano il testo né eliminano segnalazioni.
 - Abilitazione esplicita dell'estensione per sito; pulsante flottante con posizione personalizzabile.
 - Creazione tramite selezione elemento o pin libero; screenshot automatico dell'area visibile con anteprima e rimozione prima dell'invio.
 - Le anteprime dei pin in estensione e widget restano entro la viewport, anche vicino ai bordi superiore, destro e sinistro e su pagine senza scorrimento; nelle viewport basse il contenuto dell’anteprima scorre internamente.
@@ -71,7 +71,7 @@ Per inizializzare o ricostruire il database usare **`supabase/initialize.sql`**.
 
 ### Script per i siti in gestione
 
-Dopo aver applicato `supabase/widget.sql`, copiare lo snippet dalla card dell’ambiente e incollarlo nel sito. Abilitare la revisione dalla dashboard: i visitatori inseriscono il nome e hanno comandi completi sulle segnalazioni dell’ambiente. Disabilitando lo script le operazioni sono bloccate e il pannello scompare entro 10 secondi. Screenshot opzionali con condivisione della scheda e consenso del browser. Il loader scarica il pannello solo quando abilitato.
+Dopo aver applicato `supabase/widget.sql`, copiare lo snippet dalla card dell’ambiente e incollarlo nel sito. Abilitare la revisione dalla dashboard: i visitatori consultano lista e pin senza nome; il nome viene richiesto alla prima scrittura, con i comandi completi sulle segnalazioni dell’ambiente. Disabilitando lo script le operazioni sono bloccate e il pannello scompare entro 10 secondi. Screenshot opzionali con condivisione della scheda e consenso del browser. Il loader scarica il pannello solo quando abilitato.
 
 ### Tema e componenti UI
 
@@ -138,3 +138,7 @@ Gli upload passano uno alla volta dal backend, senza esporre chiavi Storage all�
 Per il database esistente applicare **`supabase/reply_attachments.sql`** una volta nel SQL Editor **prima** del deploy del backend. La migrazione conserva account, segnalazioni e risposte e aggiunge il bucket privato; `initialize.sql` include lo stesso schema ma resta distruttivo e richiede prima lo svuotamento di entrambi i bucket tramite API Storage. Poi distribuire dashboard/API e ricostruire e ricaricare l’estensione; il widget viene generato durante la build web. Nessuno script remoto, deploy o push viene eseguito da questa modifica.
 
 Il limite di 2,5 MB per file riduce il consumo, ma non impone un tetto globale: la quota Free di 1 GB di Storage include anche gli screenshot e gli altri bucket. Monitorare l’utilizzo nella pagina Audit/Usage. Le verifiche locali coprono conservazione dei dati durante la migrazione, limiti, accesso negato, isolamento, proprietà degli allegati temporanei, revoche, invii ripetuti e percorsi di pulizia.
+
+## Consultazione senza nome in estensione e widget
+
+Applicare `supabase/reviewer_read_only.sql` su un database esistente prima del deploy web/API e aggiornare e ricaricare l’estensione. La migrazione è incrementale, rieseguibile e conserva tutti i dati e i nomi già salvati; non usare il reset. Lista, pin, dettagli, screenshot, risposte e allegati delle risposte sono consultabili senza nome attraverso una sessione autorizzata. Alla prima azione di scrittura il pannello chiede il nome, lo salva nella stessa sessione e riprende l’azione. Annullando la richiesta non viene eseguita alcuna scrittura. API e RPC applicano lo stesso vincolo anche alle richieste dirette. I permessi restano quelli del link ospite o del widget; gli utenti Google già identificati non ricevono la richiesta del nome. Nessuna migrazione remota è stata eseguita.

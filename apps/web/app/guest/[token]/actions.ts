@@ -9,8 +9,8 @@ import { validToken, newToken, hashToken } from '@/lib/invitation-token';
 export async function joinAsGuest(form: FormData) {
   const token = String(form.get('token') ?? '');
   if (!validToken(token)) redirect('/login');
-  let name: string;
-  try { name = validateName(String(form.get('name') ?? ''), 80); }
+  let name: string | null = null;
+  try { if (form.has('name')) name = validateName(String(form.get('name') ?? ''), 80); }
   catch { redirect(`/guest/${token}?message=invalid-name`); }
   const supabase = await createClient();
   const sessionToken = newToken();
@@ -25,10 +25,10 @@ export async function joinAsGuest(form: FormData) {
   redirect(`/guest/workspace/${session.project_id}`);
 }
 
-export async function startGuestReview(token: string, guestName: string): Promise<{ code?: string; environmentId?: string; error?: string }> {
+export async function startGuestReview(token: string, guestName: string | null = null): Promise<{ code?: string; environmentId?: string; error?: string }> {
   if (!validToken(token)) return { error: 'Invito non valido.' };
-  let name: string;
-  try { name = validateName(guestName, 80); } catch { return { error: 'Inserisci un nome da 1 a 80 caratteri.' }; }
+  let name: string | null = null;
+  try { if (guestName !== null) name = validateName(guestName, 80); } catch { return { error: 'Inserisci un nome da 1 a 80 caratteri.' }; }
   const supabase = await createClient();
   const { data: preview, error: previewError } = await supabase.rpc('preview_guest_review', { secret: token });
   const review = preview?.[0];

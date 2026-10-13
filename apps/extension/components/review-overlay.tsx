@@ -34,6 +34,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { anchorPosition as locate } from '@/lib/anchor';
 import { pinPreviewLayout } from '@/lib/pin-preview';
+import { useReviewerIdentity } from '@/components/reviewer-identity';
 
 async function extensionMessage(body: object) {
   const response = await browser.runtime.sendMessage(body);
@@ -77,7 +78,13 @@ function ExpandingPin({ children, anchorX, anchorY, ...props }: React.ButtonHTML
 type Draft = { id: string; context: ReportContext; screenshot?: string; body: string; priority: ReportPriority };
 
 export function ReviewOverlay({ site, environment, host, transport, logoUrl, onPositionChange }: { site: Site; environment: Environment; host: HTMLElement; onPositionChange: (position: Site['position']) => Promise<void>; transport?: (body: Record<string, unknown>) => Promise<unknown>; logoUrl?: string }) {
-  const message = async (body: Record<string, unknown>) => (transport ? await transport(body) : await extensionMessage(body)) as Awaited<ReturnType<typeof extensionMessage>>;
+  const rawMessage = async (body: Record<string, unknown>) => (transport ? await transport(body) : await extensionMessage(body)) as Awaited<ReturnType<typeof extensionMessage>>;
+  const { ensureIdentity, nameDialog } = useReviewerIdentity(rawMessage, environment.id);
+  const message = async (body: Record<string, unknown>) => {
+    if ((body.type === 'REPORTY_REPORT' && ['create', 'edit', 'delete', 'status', 'priority', 'reply', 'screenshot'].includes(String(body.operation)))
+      || (body.type === 'REPORTY_ATTACHMENT' && (body.payload as AttachmentRequest)?.operation !== 'read')) await ensureIdentity();
+    return rawMessage(body);
+  };
   const deepLink = useRef(new URL(location.href).searchParams.get('__reporty_issue'));
   const [page, setPage] = useState(getPageContext(location.href));
   const [reports, setReports] = useState<Report[]>([]);
@@ -361,6 +368,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
   const panelPosition = { [top ? 'top' : 'bottom']: 88, [left ? 'left' : 'right']: 24 };
   const floatingControls = <div className={`pointer-events-auto fixed flex items-center gap-1 rounded-full border bg-background p-1.5 shadow-xl ${left ? 'flex-row-reverse' : ''}`} style={{ [top ? 'top' : 'bottom']: 24, [left ? 'left' : 'right']: 24 }}><Button aria-label={modalOpen ? 'Chiudi segnalazioni' : `Apri lista segnalazioni${unreadNotifications ? `, ${unreadNotifications} notifiche non lette` : ''}`} aria-expanded={modalOpen} disabled={busy} variant="ghost" size="icon" className="relative size-9 rounded-lg text-foreground" onClick={() => { if (modalOpen) { setModalOpen(false); } else { setOpen(false); setSettingsOpen(false); setNotificationsOpen(false); setSelected(null); setModalOpen(true); void run(async () => { await refresh(); }); } }}>{modalOpen ? <X className="size-5" /> : <Menu className="size-5" />}{unreadNotifications ? <span aria-hidden="true" className="absolute -top-1 -right-1 min-w-4 rounded-full bg-red-600 px-1 text-[10px] leading-4 text-white">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span> : null}</Button>    <Button aria-label={open ? 'Chiudi creazione segnalazione' : 'Crea segnalazione'} aria-expanded={open} disabled={busy} size="icon" className="size-10 rounded-full" onClick={() => { setOpen(!open); setModalOpen(false); }}><span className="flex transition-transform motion-reduce:transition-none" style={{transform:open?'rotate(45deg)':'rotate(0deg)'}}><Plus className="size-5" /></span></Button></div>;
   return <>
+    {nameDialog}
     {hover && mode ? <div className="pointer-events-none fixed border-2 border-indigo-500 bg-indigo-500/10" style={{ left: hover.left, top: hover.top, width: hover.width, height: hover.height }} /> : null}
     {mode ? <div className="pointer-events-auto fixed left-1/2 top-4 -translate-x-1/2 rounded-lg border bg-card p-3 text-sm shadow-xl">{mode === 'element' ? 'Seleziona un elemento' : 'Posiziona un pin'} · Esc per annullare <Button size="sm" variant="outline" onClick={() => { setMode(null); setOpen(true); }}>Annulla</Button></div> : null}
     {!mode && !draft && pinsVisible ? pageReports.filter(report => showResolved || report.status !== 'resolved').map(report => {
@@ -382,8 +390,8 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
 
     {!modalOpen ? floatingControls : null}
     {!mode && !draft ? <div className="pointer-events-none fixed flex flex-col gap-3" style={{ [top ? 'top' : 'bottom']: 88, [left ? 'left' : 'right']: 28 }} aria-hidden={!open}>
-      <Button variant="secondary" size="icon" aria-label="Seleziona elemento" title="Seleziona elemento" disabled={busy} tabIndex={open ? 0 : -1} className={`size-11 rounded-full border-border bg-card text-card-foreground shadow-lg hover:bg-accent transition-all duration-200 motion-reduce:transition-none ${open ? 'pointer-events-auto scale-100 opacity-100' : 'pointer-events-none scale-75 opacity-0'}`} style={{ transform: open ? 'translateY(0)' : `translateY(${top ? '-12px' : '12px'})` }} onClick={() => { setMode('element'); setOpen(false); }}><Crosshair className="size-5" aria-hidden="true" /></Button>
-      <Button variant="secondary" size="icon" aria-label="Pin libero" title="Pin libero" disabled={busy} tabIndex={open ? 0 : -1} className={`size-11 rounded-full border-border bg-card text-card-foreground shadow-lg hover:bg-accent transition-all duration-200 motion-reduce:transition-none ${open ? 'pointer-events-auto scale-100 opacity-100' : 'pointer-events-none scale-75 opacity-0'}`} style={{ transitionDelay: open ? '50ms' : '0ms', transform: open ? 'translateY(0)' : `translateY(${top ? '-20px' : '20px'})` }} onClick={() => { setMode('pin'); setOpen(false); }}><MapPin className="size-5" aria-hidden="true" /></Button>
+      <Button variant="secondary" size="icon" aria-label="Seleziona elemento" title="Seleziona elemento" disabled={busy} tabIndex={open ? 0 : -1} className={`size-11 rounded-full border-border bg-card text-card-foreground shadow-lg hover:bg-accent transition-all duration-200 motion-reduce:transition-none ${open ? 'pointer-events-auto scale-100 opacity-100' : 'pointer-events-none scale-75 opacity-0'}`} style={{ transform: open ? 'translateY(0)' : `translateY(${top ? '-12px' : '12px'})` }} onClick={() => void run(async () => { await ensureIdentity(); setMode('element'); setOpen(false); })}><Crosshair className="size-5" aria-hidden="true" /></Button>
+      <Button variant="secondary" size="icon" aria-label="Pin libero" title="Pin libero" disabled={busy} tabIndex={open ? 0 : -1} className={`size-11 rounded-full border-border bg-card text-card-foreground shadow-lg hover:bg-accent transition-all duration-200 motion-reduce:transition-none ${open ? 'pointer-events-auto scale-100 opacity-100' : 'pointer-events-none scale-75 opacity-0'}`} style={{ transitionDelay: open ? '50ms' : '0ms', transform: open ? 'translateY(0)' : `translateY(${top ? '-20px' : '20px'})` }} onClick={() => void run(async () => { await ensureIdentity(); setMode('pin'); setOpen(false); })}><MapPin className="size-5" aria-hidden="true" /></Button>
     </div> : null}
     {open && !mode && draft ? <section aria-label="Crea segnalazione" className="pointer-events-auto fixed max-h-[75vh] w-[min(380px,calc(100vw-48px))] space-y-4 overflow-y-auto rounded-xl border bg-background p-4 text-sm text-foreground shadow-xl" style={panelPosition}>
       {<form className="grid gap-3" onSubmit={event => { event.preventDefault(); void run(async () => {

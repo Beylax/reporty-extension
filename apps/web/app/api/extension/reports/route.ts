@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   }
   const supabase = await createClient();
   const { data, error } = await supabase.rpc(operation.startsWith('notification') ? 'notification_operation' : 'report_operation', { secret, target, operation, payload });
-  if (error) return Response.json({ error: error.code === '42501' ? 'Accesso non consentito o revocato.' : 'Operazione non riuscita.' }, { status: error.code === '42501' ? 403 : 400 });
+  if (error) return Response.json({ error: error.message === 'REVIEWER_NAME_REQUIRED' ? 'Inserisci il tuo nome per intervenire sulla segnalazione.' : error.code === '42501' ? 'Accesso non consentito o revocato.' : 'Operazione non riuscita.' }, { status: error.code === '42501' ? 403 : 400 });
   let warning: string | undefined;
   if (image) {
     const path = `${data.project_id}/${data.id}.jpg`;

@@ -27,13 +27,13 @@
 - Segnalazioni collegate a elementi DOM o pin liberi, con descrizione, screenshot opzionale e risposte.
 - Stati: `open`, `in_progress`, `validation`, `resolved`. Priorità: `low`, `medium`, `high`, inizialmente `medium`.
 - Identità pagina: ambiente e percorso; query conservate come contesto, percorsi hash distinti.
-- Non acquisire o ripristinare stato interno React, cookie o storage del sito. La modalità con script è disponibile per ambiente: chiave pubblica e toggle inizialmente disabilitato, nome obbligatorio, permessi completi limitati all’ambiente. API e database verificano il toggle; frontend lo controlla ogni 10 secondi.
+- Non acquisire o ripristinare stato interno React, cookie o storage del sito. La modalità con script è disponibile per ambiente: chiave pubblica e toggle inizialmente disabilitato, consultazione senza nome, nome obbligatorio alla prima scrittura e permessi completi limitati all’ambiente. API e database verificano il toggle; frontend lo controlla ogni 10 secondi.
 
 ## Permessi
 
 - Tutti gli sviluppatori autenticati (Google, non account anonimi) vedono, modificano ed eliminano tutti i progetti, ambienti e segnalazioni. Non esistono più ruoli o membership nella UI né inviti sviluppatore.
 - Ogni ambiente ha un link ospite generato automaticamente alla creazione, recuperabile in sola lettura nella propria card della tab Ambienti. Rigenerarlo revoca solo quel link e le sessioni associate; gli altri link restano validi. Non esistono tabelle amministratori o membri di progetto.
-- Gli inviti ospiti indicano un ambiente iniziale; nome obbligatorio e avvio dal link, collegamento automatico e consenso browser sul dominio quando necessario. Gli ospiti possono creare, leggere e rispondere e modificare stato e priorità delle segnalazioni del proprio progetto; non modificano il testo né eliminano segnalazioni.
+- Gli inviti ospiti indicano un ambiente iniziale; avvio dal link senza nome, collegamento automatico e consenso browser sul dominio quando necessario. Gli ospiti senza nome possono leggere lista, pin, dettagli, screenshot e risposte. Il nome è obbligatorio alla prima creazione, risposta o modifica e viene conservato nella sessione. Gli ospiti identificati possono creare e rispondere e modificare stato e priorità delle segnalazioni del proprio progetto; non modificano il testo né eliminano segnalazioni. API e database bloccano tutte le scritture delle sessioni senza nome.
 - Autorizzare ogni operazione sul backend e nel database: nascondere un pulsante non è un controllo di sicurezza.
 
 ## Database, sessioni e screenshot
