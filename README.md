@@ -36,8 +36,9 @@ Il monorepo usa un solo `package-lock.json` nella root.
 - Il team usa sia dashboard sia estensione. I revisori ospiti (Designer e clienti) installano l'estensione e accedono tramite link riutilizzabili fino a revoca, inserendo solo il nome, senza registrazione. Vedono tutte le segnalazioni del progetto e rispondono dall'estensione, senza dashboard o cambio di stato.
 - Abilitazione esplicita dell'estensione per sito; pulsante flottante con posizione personalizzabile.
 - Creazione tramite selezione elemento o pin libero; screenshot automatico dell'area visibile con anteprima e rimozione prima dell'invio.
-- Le anteprime dei pin in estensione e widget restano entro la viewport, anche vicino al bordo superiore e su pagine senza scorrimento; nelle viewport basse il contenuto dell’anteprima scorre internamente.
+- Le anteprime dei pin in estensione e widget restano entro la viewport, anche vicino ai bordi superiore, destro e sinistro e su pagine senza scorrimento; nelle viewport basse il contenuto dell’anteprima scorre internamente.
 - Nelle card della lista estensione/widget, su mobile (larghezza inferiore a 640 px) le pillole di stato e priorità sono una sotto l’altra, sotto la descrizione; su desktop sono una accanto all’altra, a destra della descrizione.
+- Lista e Kanban della dashboard aggiornano automaticamente le segnalazioni ogni 10 secondi e al ritorno sulla scheda, mantenendo filtri, ordinamento e vista. Il controllo si sospende nelle schede nascoste; gli aggiornamenti attendono la fine delle operazioni in corso.
 - Identità pagina: ambiente e percorso; query e URL completo rimangono contesto. I percorsi dei router hash sono distinti.
 - Nessun SDK nel sito e nessun ripristino dello stato React nell'MVP. Screenshot e contesto documentano lo stato originale; elementi non più trovati devono essere segnalati come tali.
 - La revisione senza estensione tramite script nei siti gestiti dal team è rimandata a una fase successiva ed esclusa dall'MVP.

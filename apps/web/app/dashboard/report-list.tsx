@@ -16,7 +16,7 @@ import { useEffect, useEffectEvent, useRef, useState, useOptimistic, useTransiti
 import { ReportKanban } from './report-kanban';
 import { useRouter } from 'next/navigation';
 import { matchesReportUsers, compareReportsBy, type ReportSort, formatReportDateTime, priorityLabels, type BulkReportRequest, type ProjectParticipant, type Report, type ReportComment } from '@reporty/shared';
-import { NOTIFICATIONS_CHANGED } from '@/lib/notification-polling';
+import { NOTIFICATIONS_CHANGED, startNotificationPolling } from '@/lib/notification-polling';
 import { getReportThread, mutateReport, mutateReportsBulk } from './report-actions';
 import { compareReportTableRows, type ReportTableSort } from '@/lib/report-table-order';
 import { ReportTableHeading } from './report-table-heading';
@@ -73,6 +73,12 @@ export function ReportList({ reports, environments, participants, initialReportI
   const selectedReports = filtered.filter(report => selectedIds.has(report.id));
   const allFilteredSelected = filtered.length > 0 && selectedReports.length === filtered.length;
   const bulkDisabled = busy || moving || Boolean(bulkProgress);
+  const [refreshing, startRefresh] = useTransition();
+  const refreshReports = useEffectEvent(() => {
+    if (bulkDisabled || refreshing) return;
+    startRefresh(() => router.refresh());
+  });
+  useEffect(() => startNotificationPolling(async () => { refreshReports(); }), []);
   function selectReport(id: string, checked: boolean) {
     setBulkSelection(previous => ({ scope: bulkScope, ids: checked ? [...new Set([...previous.ids,id])] : previous.ids.filter(item => item !== id) }));
   }
