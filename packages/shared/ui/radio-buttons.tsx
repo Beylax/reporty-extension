@@ -40,7 +40,6 @@ function SegmentShape({ first, last, tip, checked }: { first: boolean; last: boo
     {width && height ? <>
       <path d={path} className={cn('fill-background', !checked && 'group-hover/segment:fill-muted')} />
       {checked ? <path d={path} className="fill-primary/10 group-hover/segment:fill-primary/15" /> : null}
-      <path d={path} fill="none" strokeWidth="1" vectorEffect="non-scaling-stroke" className={cn('group-focus-visible/segment:stroke-ring', checked ? 'stroke-primary' : 'stroke-border group-hover/segment:stroke-primary/40')} />
     </> : null}
   </svg>;
 }
