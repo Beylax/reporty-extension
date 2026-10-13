@@ -37,6 +37,7 @@ Il monorepo usa un solo `package-lock.json` nella root.
 - Abilitazione esplicita dell'estensione per sito; pulsante flottante con posizione personalizzabile.
 - Creazione tramite selezione elemento o pin libero; screenshot automatico dell'area visibile con anteprima e rimozione prima dell'invio.
 - Le anteprime dei pin in estensione e widget restano entro la viewport, anche vicino ai bordi superiore, destro e sinistro e su pagine senza scorrimento; nelle viewport basse il contenuto dell’anteprima scorre internamente.
+- Il testo dell’anteprima è limitato a 4 righe. Durante l’apertura le scrollbar sono nascoste; a pannello aperto lo scorrimento verticale è disponibile quando necessario, senza scorrimento orizzontale.
 - “Apri pagina originale” dalla dashboard scorre fino alla segnalazione ed evidenzia il pin, senza aprire automaticamente la modale del dettaglio. Il dettaglio si apre cliccando il pin.
 - L’evidenziazione del pin dura 2,4 secondi: sfondo e centro lampeggiano insieme ogni 100 ms con maggiore contrasto. Con movimento ridotto l’evidenziazione resta statica.
 - Nelle card della lista estensione/widget, su mobile (larghezza inferiore a 640 px) le pillole di stato e priorità sono una sotto l’altra, sotto la descrizione; su desktop sono una accanto all’altra, a destra della descrizione.

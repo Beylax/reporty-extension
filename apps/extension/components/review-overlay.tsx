@@ -48,7 +48,14 @@ const priorityColors = { low: 'bg-slate-100 text-slate-700', medium: 'bg-amber-1
 function ExpandingPin({ children, anchorX, anchorY, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { anchorX: number; anchorY: number }) {
   const button = useRef<HTMLButtonElement>(null);
   const [expanded, setExpanded] = useState(false);
+  const [expandedReady, setExpandedReady] = useState(false);
   const [height, setHeight] = useState(44);
+  useEffect(() => {
+    if (!expanded) return;
+    // Match the 300ms size transition before enabling vertical scrolling.
+    const timer = setTimeout(() => setExpandedReady(true), 300);
+    return () => clearTimeout(timer);
+  }, [expanded]);
   useEffect(() => {
     const content = button.current?.querySelector<HTMLElement>('[data-pin-preview]');
     if (!content) return;
@@ -64,7 +71,7 @@ function ExpandingPin({ children, anchorX, anchorY, ...props }: React.ButtonHTML
     width: viewport?.width ?? document.documentElement.clientWidth,
     height: viewport?.height ?? document.documentElement.clientHeight,
   });
-  return <button {...props} ref={button} style={{ width: layout.width, height: layout.height, translate: `${layout.shiftX}px ${layout.shiftY}px`, overflowY: expanded ? 'auto' : 'hidden', '--reporty-pin-preview-width': `${layout.previewWidth}px` } as React.CSSProperties} onMouseEnter={() => setExpanded(true)} onMouseLeave={() => setExpanded(false)}>{children}</button>;
+  return <button {...props} ref={button} style={{ width: layout.width, height: layout.height, translate: `${layout.shiftX}px ${layout.shiftY}px`, overflowX: 'hidden', overflowY: expanded && expandedReady ? 'auto' : 'hidden', '--reporty-pin-preview-width': `${layout.previewWidth}px` } as React.CSSProperties} onMouseEnter={() => { setExpandedReady(window.matchMedia('(prefers-reduced-motion: reduce)').matches); setExpanded(true); }} onMouseLeave={() => { setExpanded(false); setExpandedReady(false); }}>{children}</button>;
 }
 
 type Draft = { id: string; context: ReportContext; screenshot?: string; body: string; priority: ReportPriority };
@@ -365,7 +372,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
           <span data-pin-preview className="invisible block opacity-0 transition-[opacity,visibility] duration-[150ms,0ms] delay-[0ms,150ms] ease-out group-hover:visible group-hover:opacity-100 group-hover:delay-[250ms,0ms] motion-reduce:transition-none">
             <span className="block w-[var(--reporty-pin-preview-width)] p-3 text-left">
               <span className="mb-3 flex flex-wrap gap-2 text-xs"><span className={`inline-flex items-center gap-1 rounded-full border border-[color-mix(in_oklab,currentColor_25%,transparent)] px-2 py-1 ${statusColors[report.status]}`}><ReportIcon value={report.status} />{statusLabels[report.status]}</span><span className={`inline-flex items-center gap-1 rounded-full border border-[color-mix(in_oklab,currentColor_25%,transparent)] px-2 py-1 ${priorityColors[report.priority ?? 'medium']}`}><ReportIcon value={report.priority ?? 'medium'} />Priorità {priorityLabels[report.priority ?? 'medium'].toLowerCase()}</span></span>
-              <span className="block max-h-40 overflow-hidden whitespace-pre-wrap break-words text-sm">{report.body}</span>
+              <span className="line-clamp-4 whitespace-pre-wrap break-words text-sm">{report.body}</span>
               <span className="mt-3 block truncate text-xs text-muted-foreground" title={report.authorName}>Segnalata da {report.authorName || 'Utente'}</span>
             </span>
           </span>
