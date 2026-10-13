@@ -37,6 +37,8 @@ Il monorepo usa un solo `package-lock.json` nella root.
 - Abilitazione esplicita dell'estensione per sito; pulsante flottante con posizione personalizzabile.
 - Creazione tramite selezione elemento o pin libero; screenshot automatico dell'area visibile con anteprima e rimozione prima dell'invio.
 - Le anteprime dei pin in estensione e widget restano entro la viewport, anche vicino ai bordi superiore, destro e sinistro e su pagine senza scorrimento; nelle viewport basse il contenuto dell’anteprima scorre internamente.
+- “Apri pagina originale” dalla dashboard scorre fino alla segnalazione ed evidenzia il pin, senza aprire automaticamente la modale del dettaglio. Il dettaglio si apre cliccando il pin.
+- L’evidenziazione del pin dura 2,4 secondi: sfondo e centro lampeggiano insieme ogni 100 ms con maggiore contrasto. Con movimento ridotto l’evidenziazione resta statica.
 - Nelle card della lista estensione/widget, su mobile (larghezza inferiore a 640 px) le pillole di stato e priorità sono una sotto l’altra, sotto la descrizione; su desktop sono una accanto all’altra, a destra della descrizione.
 - Lista e Kanban della dashboard aggiornano automaticamente le segnalazioni ogni 10 secondi e al ritorno sulla scheda, mantenendo filtri, ordinamento e vista. Il controllo si sospende nelle schede nascoste; gli aggiornamenti attendono la fine delle operazioni in corso.
 - Identità pagina: ambiente e percorso; query e URL completo rimangono contesto. I percorsi dei router hash sono distinti.
