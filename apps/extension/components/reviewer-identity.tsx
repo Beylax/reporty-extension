@@ -70,5 +70,5 @@ export function useReviewerIdentity(request: Request, environmentId: string) {
       <div className="flex justify-end gap-2"><Button type="button" variant="ghost" disabled={saving} onClick={() => finish(new Error('Operazione annullata.'))}>Annulla</Button><Button type="submit" disabled={saving || !name.trim()}>{saving ? <Skeleton className="h-4 w-20 bg-current opacity-30" /> : 'Continua'}</Button></div>
     </form>
   </dialog>;
-  return { ensureIdentity, nameDialog };
+  return { ensureIdentity, nameDialog, nameDialogOpen: open };
 }
