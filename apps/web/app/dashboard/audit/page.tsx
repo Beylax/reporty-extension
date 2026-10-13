@@ -25,7 +25,7 @@ function Usage({ used, limit }: { used: number | null; limit: number }) {
 export default async function AuditPage() {
   await requireUser();
   const audit = await getSupabaseAudit();
-  return <main className="mx-auto w-full max-w-7xl space-y-8 px-6 py-10 lg:px-10">
+  return <main className="w-full space-y-8 px-6 py-10 lg:px-10">
     <Link href="/dashboard" className={buttonVariants({ variant: 'outline' })}>← Tutti i progetti</Link>
     <header className="flex flex-wrap items-center justify-between gap-3"><div className="space-y-2"><h1 className="text-3xl font-semibold tracking-tight">Audit Supabase</h1><p className="text-muted-foreground">Utilizzo del progetto · Piano Free</p></div><RefreshAudit /></header>
     {!audit.configured ? <Card><CardHeader><CardTitle>Configura le metriche</CardTitle></CardHeader><CardContent>Imposta SUPABASE_ACCESS_TOKEN sul server e ripeti il deploy. Per un dominio Supabase personalizzato, imposta anche SUPABASE_PROJECT_REF.</CardContent></Card> : <>

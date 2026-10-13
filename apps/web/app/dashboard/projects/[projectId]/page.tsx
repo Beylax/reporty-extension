@@ -44,7 +44,7 @@ export default async function Project({ params, searchParams }: {
   const environments = environmentsResult.data ?? [];
   const participants = (participantsResult.data ?? []) as ProjectParticipant[];
   return (
-    <main className="mx-auto w-full max-w-7xl space-y-8 px-6 py-10 lg:px-10">
+    <main className="w-full space-y-8 px-6 py-10 lg:px-10">
       <Link href="/dashboard" className={buttonVariants({ variant: 'outline' })}>← Tutti i progetti</Link>
       <header className="flex flex-wrap items-center gap-3">
         <h1 className="text-3xl font-semibold tracking-tight">{project.name}</h1>

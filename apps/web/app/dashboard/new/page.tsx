@@ -7,7 +7,7 @@ import { SubmitButton } from '@/components/submit-button';
 
 export default async function NewProject({ searchParams }: { searchParams: Promise<{ message?: string }> }) {
   const { message } = await searchParams;
-  return <main className="mx-auto w-full max-w-3xl space-y-6 px-6 py-10 lg:px-10">
+  return <main className="w-full space-y-6 px-6 py-10 lg:px-10">
     <h1 className="text-3xl font-semibold tracking-tight">Nuovo progetto</h1>
     <Feedback message={message} />
     <Card><CardHeader><CardTitle>Un workspace per il tuo sito</CardTitle><CardDescription>Inserisci il sito: creeremo l’ambiente Produzione e il suo link per gli ospiti. Il progetto sarà condiviso con tutti gli sviluppatori.</CardDescription></CardHeader>

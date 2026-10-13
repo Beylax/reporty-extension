@@ -9,6 +9,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { SubmitButton } from '@/components/submit-button';
 import { Notifications } from './notifications';
 import { DashboardNav } from './nav';
+import { DashboardSidebar } from './sidebar';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { email, supabase } = await requireUser();
@@ -16,7 +17,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (projects.error) throw new Error('Impossibile caricare la navigazione.');
   return (
     <div className="min-h-screen md:grid md:grid-cols-[248px_minmax(0,1fr)]">
-      <aside className="border-b bg-sidebar text-sidebar-foreground md:sticky md:top-0 md:h-screen md:border-r md:border-b-0">
+      <DashboardSidebar>
         <div className="flex h-full min-h-0 flex-col gap-3 p-5">
           <div className="flex items-center justify-between gap-2"><Link href="/dashboard" className="min-w-0"><BrandLogo /></Link><div className="flex shrink-0 items-center gap-1"><Link href="/dashboard/audit" prefetch={false} aria-label="Apri audit Supabase" title="Audit Supabase" className={buttonVariants({ variant: 'outline', size: 'icon' })}><Activity className="size-4" aria-hidden="true" /></Link><Notifications /><ThemeSwitch /></div></div>
           <DashboardNav projects={projects.data ?? []} />
@@ -26,7 +27,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <form action={signOut}><SubmitButton variant="outline" size="sm" pendingLabel="Uscita…">Esci</SubmitButton></form>
           </div>
         </div>
-      </aside>
+      </DashboardSidebar>
       <div className="min-w-0 bg-muted/30">{children}</div>
     </div>
   );

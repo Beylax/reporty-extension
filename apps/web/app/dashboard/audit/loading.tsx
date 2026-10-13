@@ -1,7 +1,7 @@
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 export default function AuditLoading() {
-  return <main aria-label="Caricamento metriche Supabase" className="mx-auto w-full max-w-7xl space-y-8 px-6 py-10 lg:px-10">
+  return <main aria-label="Caricamento metriche Supabase" className="w-full space-y-8 px-6 py-10 lg:px-10">
     <Skeleton className="h-8 w-40" />
     <div className="flex items-center justify-between gap-3"><div className="space-y-2"><Skeleton className="h-9 w-64" /><Skeleton className="h-5 w-56" /></div><Skeleton className="h-8 w-28" /></div>
     <Skeleton className="h-4 w-80 max-w-full" />

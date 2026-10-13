@@ -71,6 +71,8 @@ Dopo aver applicato `supabase/widget.sql`, copiare lo snippet dalla card dell’
 
 Dashboard, estensione e widget usano il tema Violet Bloom di tweakcn, con modalità chiara/scura e font Plus Jakarta Sans incluso localmente (licenza OFL). Il marchio è testuale: Reporty. Select, checkbox, switch, input, textarea e accordion usano i componenti UI condivisi nello stile shadcn/Base UI; i popup dell’estensione restano nello shadow root o nella modale corrente.
 
+La dashboard occupa tutta la larghezza disponibile, mantenendo i margini interni. La sidebar è fissa su desktop; sotto i 768 px si apre dal menu hamburger come pannello laterale, con chiusura tramite pulsante, Escape, clic esterno o selezione di un link.
+
 ### Vista Kanban delle segnalazioni
 
 Nella dashboard si può passare da Lista a Kanban. Le quattro colonne rappresentano Aperta, In lavorazione, Validazione e Chiusa. Le card sono ordinate per priorità (alta, media, bassa), poi dalla meno recente. Trascinare una card in una colonna ne salva lo stato; il menu Priorità nella card permette di cambiarne la priorità. Lo stato è modificabile anche dal dettaglio della segnalazione. Ricerca e filtri si applicano anche alla board: una card spostata in uno stato escluso dai filtri viene nascosta. La paginazione rimane nella vista Lista; la board ha scorrimento indipendente per colonna.
