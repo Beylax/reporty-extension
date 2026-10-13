@@ -20,5 +20,5 @@ export function ResourceDelete({ id, kind, name, fullWidth = false }: { fullWidt
         toast.add({ title: result.warning ? 'Eliminazione completata con avviso' : kind === 'project' ? 'Progetto eliminato' : 'Ambiente eliminato', description: result.warning, type: result.warning ? 'error' : 'success' });
       } catch { toast.add({ title: 'Eliminazione non riuscita', description: 'Riprova.', type: 'error' }); }
 
-  }}>{kind === 'project' ? <><Trash2 className="size-4" aria-hidden="true" />Elimina progetto</> : 'Elimina ambiente'}</DeleteConfirm></div>;
+  }}><Trash2 className="size-4" aria-hidden="true" />{kind === 'project' ? 'Elimina progetto' : 'Elimina ambiente'}</DeleteConfirm></div>;
 }
