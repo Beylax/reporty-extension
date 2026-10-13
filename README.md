@@ -75,7 +75,9 @@ La dashboard occupa tutta la larghezza disponibile, mantenendo i margini interni
 
 Nel dettaglio progetto su mobile le tab scorrono orizzontalmente ed è disponibile solo la vista Lista, con card selezionabili per le azioni in blocco. La ricerca occupa una riga; nella riga successiva si trovano Filtri e ordinamento. Filtri apre un pannello dal basso con angoli superiori arrotondati: ogni voce apre le proprie opzioni multiselezione, con Indietro accanto a Chiudi. Le pillole dei filtri attivi restano rimovibili nella pagina. La selezione di tutti i risultati filtrati comprende anche le altre pagine.
 
-I selettori di stato e priorità nelle segnalazioni di dashboard, estensione e widget usano segmenti a chevron incastrati, con estremità arrotondate e opzione attiva evidenziata. Le etichette restano su una sola riga: quando lo spazio non basta, il selettore scorre orizzontalmente e rende visibile l’opzione selezionata. Lo stesso stile si applica alla priorità nelle card Kanban.
+I componenti UI identici di dashboard ed estensione (button, checkbox, input, textarea, select, switch, skeleton e selettori segmentati) hanno una sola implementazione in `packages/shared/ui`, esposta tramite `@reporty/shared/ui/*` e inclusa esplicitamente nelle due build Tailwind. Le modali e i toast mantengono le differenze specifiche di ciascuna superficie.
+
+I selettori di stato e priorità nelle segnalazioni di dashboard, estensione e widget usano segmenti a chevron incastrati, con estremità arrotondate e opzione attiva evidenziata. Il contorno SVG non occupa spazio nel layout e ogni incastro ha un solo separatore. Le etichette restano su una sola riga: quando lo spazio non basta, il selettore scorre orizzontalmente e rende visibile l’opzione selezionata. Lo stesso stile si applica alla priorità nelle card Kanban.
 
 ### Vista Kanban delle segnalazioni
 

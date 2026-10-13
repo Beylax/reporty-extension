@@ -16,7 +16,9 @@ export function shadowStyles(css: string) {
       }
     }
   }
-  const scoped = css.replace(/--[a-zA-Z][\w-]*/g, name => `--reporty-${name.slice(2)}`).replaceAll(':root', ':host').replaceAll('.dark{', ':host([data-theme=dark]){');
+  // Escaped variable names in Tailwind class selectors are literal class names.
+  // Rename declarations and var() references, while preserving those selectors.
+  const scoped = css.replace(/--[a-zA-Z][\w-]*(?![\w-]|\\)/g, name => `--reporty-${name.slice(2)}`).replaceAll(':root', ':host').replaceAll('.dark{', ':host([data-theme=dark]){');
   const defaults = Array.from(scoped.matchAll(/@property\s+(--[\w-]+)\s*\{([^}]+)\}/g), ([, name, body = '']) => {
     const value = body.match(/initial-value\s*:\s*([^;}]+)/)?.[1]?.trim() ?? 'initial';
     return `${name}:${value};`;

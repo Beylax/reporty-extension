@@ -1,0 +1,89 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { Radio } from '@base-ui/react/radio';
+import { RadioGroup } from '@base-ui/react/radio-group';
+import { cn } from 'cn';
+
+function SegmentOutline({ first, last, tip, checked, nextChecked }: { first: boolean; last: boolean; tip: number; checked: boolean; nextChecked: boolean }) {
+  const svg = useRef<SVGSVGElement>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const element = svg.current?.parentElement;
+    if (!element) return;
+    const observer = new ResizeObserver(() => {
+      const { width, height } = element.getBoundingClientRect();
+      setSize(previous => previous.width === width && previous.height === height ? previous : { width, height });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const { width, height } = size;
+  const edge = 0.5;
+  const radius = Math.max(0, height / 2 - edge);
+  // Keep the entire one-pixel stroke inside the clipped segment, including
+  // the diagonal edges. No inset background is needed to simulate a border.
+  const diagonalInset = Math.hypot(1, tip / (height / 2 || 1)) * edge;
+  const shoulderInset = tip * edge / (height / 2 || 1);
+  const left = first ? height / 2 : shoulderInset + diagonalInset;
+  const right = last ? width - height / 2 : width - tip + shoulderInset - diagonalInset;
+  const path = `M ${left} ${edge} H ${right} ${!last && nextChecked
+    ? `M ${right} ${height - edge}`
+    : last
+    ? `A ${radius} ${radius} 0 0 1 ${right} ${height - edge}`
+    : `L ${width - diagonalInset} ${height / 2} L ${right} ${height - edge}`}
+    H ${left} ${first
+      ? `A ${radius} ${radius} 0 0 1 ${left} ${edge}`
+      : checked ? `L ${tip + diagonalInset} ${height / 2} Z` : ''}`;
+
+  return <svg ref={svg} aria-hidden="true" width="100%" height="100%" className="pointer-events-none absolute inset-0 text-border group-hover/segment:text-primary/40 group-focus-visible/segment:text-ring group-data-[checked]/segment:text-primary">
+    {width && height ? <path d={path} fill="none" stroke="currentColor" strokeWidth="1" vectorEffect="non-scaling-stroke" /> : null}
+  </svg>;
+}
+
+export function RadioButtons({ id, label, value, options, onValueChange, disabled = false, compact = false }: {
+  id: string; label: string; value: string;
+  options: { value: string; label: string }[];
+  onValueChange: (value: string) => void; disabled?: boolean; compact?: boolean;
+}) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const selected = useRef<HTMLSpanElement>(null);
+  const tip = compact ? 7 : 10;
+
+  useEffect(() => {
+    const container = scroller.current;
+    const segment = selected.current;
+    if (!container || !segment) return;
+    function revealSelected() {
+      if (!container || !segment) return;
+      const left = segment.offsetLeft;
+      const right = left + segment.offsetWidth;
+      if (left < container.scrollLeft) container.scrollLeft = left;
+      else if (right > container.scrollLeft + container.clientWidth) container.scrollLeft = right - container.clientWidth;
+    }
+    revealSelected();
+    const observer = new ResizeObserver(revealSelected);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [value]);
+
+  return <div ref={scroller} className="min-w-0 max-w-full overflow-x-auto overscroll-x-contain py-1">
+    <RadioGroup id={id} aria-label={label} value={value} disabled={disabled} onValueChange={onValueChange} className="relative flex w-full min-w-max flex-nowrap">
+      {options.map((option, index) => {
+        const first = index === 0;
+        const last = index === options.length - 1;
+        const checked = value === option.value;
+        const clipPath = `polygon(0 0, ${last ? '100% 0, 100% 100%' : `calc(100% - ${tip}px) 0, 100% 50%, calc(100% - ${tip}px) 100%`}, 0 100%${first ? '' : `, ${tip}px 50%`})`;
+        return <Radio.Root key={option.value} ref={checked ? selected : undefined} value={option.value}
+          style={{ clipPath, marginLeft: first ? 0 : -tip, paddingLeft: first ? (compact ? 12 : 16) : tip + (compact ? 10 : 14), paddingRight: last ? (compact ? 12 : 16) : tip + (compact ? 10 : 14) }}
+          className={cn('group/segment relative inline-flex shrink-0 flex-1 cursor-pointer items-center justify-center whitespace-nowrap border-0 bg-background font-medium outline-none transition-colors focus-visible:z-30 hover:z-20 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 motion-reduce:transition-none', compact ? 'h-8 text-xs' : 'min-h-10 py-2 text-sm', first && 'rounded-l-full', last && 'rounded-r-full', checked ? 'z-10 text-primary' : 'text-foreground hover:bg-muted')}>
+          {checked ? <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-[inherit] bg-primary/10 transition-colors group-hover/segment:bg-primary/15 motion-reduce:transition-none" /> : null}
+          <SegmentOutline first={first} last={last} tip={tip} checked={checked} nextChecked={options[index + 1]?.value === value} />
+          <span className="relative group-focus-visible/segment:underline group-focus-visible/segment:underline-offset-4">{option.label}</span>
+        </Radio.Root>;
+      })}
+    </RadioGroup>
+  </div>;
+}

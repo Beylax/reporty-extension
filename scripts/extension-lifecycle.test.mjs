@@ -185,6 +185,17 @@ test('shadow styles initialize Tailwind properties locally without overriding ut
   assert.doesNotMatch(css, /(?:var\(|@property )--tw-/);
 });
 
+test('shadow styles preserve Tailwind arbitrary class selectors while isolating their colors', async () => {
+  const helper = await readFile(new URL('../apps/extension/lib/shadow-styles.ts', import.meta.url), 'utf8');
+  const scope = {};
+  runInNewContext(helper.replace('export function', 'function').replace('css: string', 'css') + ';this.shadowStyles = shadowStyles;', scope);
+  const selector = String.raw`.bg-\[color-mix\(in_oklab\,var\(--primary\)_10\%\,var\(--background\)\)\]`;
+  const css = scope.shadowStyles(`${selector}{background-color:color-mix(in oklab,var(--primary) 10%,var(--background))}:root{--primary:purple;--background:white}`);
+  assert.ok(css.includes(`${selector}{`), 'The class used by React must still match its CSS selector');
+  assert.ok(css.includes('color-mix(in oklab,var(--reporty-primary) 10%,var(--reporty-background))'));
+  assert.ok(css.includes(':host{--reporty-primary:purple;--reporty-background:white}'));
+});
+
 test('notification requests require the current page and preserve its session and scope', async () => {
   const h = harness('member');
   h.stored.sessionToken = 'a'.repeat(64);
