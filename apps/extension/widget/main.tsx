@@ -8,13 +8,22 @@ import { Label } from '@/components/ui/label';
 import { Plus } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { shadowStyles } from '@/lib/shadow-styles';
-import type { Environment } from '@/lib/session';
+import { isOpenerPosition } from '@/lib/opener-position';
+import type { Site, Environment } from '@/lib/session';
 import css from '@/entrypoints/popup/style.css?inline';
 
 const script=document.currentScript as HTMLScriptElement | null;
 const key=script?.dataset.reporty;
 const api=script ? new URL(script.src).origin : '';
 const storageKey=`reporty-widget:${key}`;
+const positionStorageKey = `${storageKey}:position`;
+function storedPosition(): Site['position'] {
+  try {
+    const saved = localStorage.getItem(positionStorageKey);
+    if (isOpenerPosition(saved)) return saved;
+  } catch { /* Storage unavailable: use the default position. */ }
+  return 'bottom_right';
+}
 function storedToken() {
   try { const saved = localStorage.getItem(storageKey); if (saved) return saved; } catch { /* Storage unavailable. */ }
   try { const legacy = sessionStorage.getItem(storageKey) ?? ''; if (legacy) { try { localStorage.setItem(storageKey, legacy); } catch { /* Keep legacy session. */ } } return legacy; } catch { return ''; }
@@ -30,6 +39,12 @@ host.id='reporty-widget';
 function Widget() {
   const [config,setConfig]=useState<{enabled:boolean;environment:Environment}|null>(null);
   const [token,setToken]=useState(storedToken);
+  const [position,setPosition]=useState(storedPosition);
+  async function changePosition(value: Site['position']) {
+    try { localStorage.setItem(positionStorageKey, value); }
+    catch { throw new Error('Impossibile salvare la posizione: lo storage del browser non è disponibile.'); }
+    setPosition(value);
+  }
   const [name,setName]=useState(''),[open,setOpen]=useState(false),[busy,setBusy]=useState(false);
   const notify=useNotify();
   useEffect(()=>{
@@ -54,8 +69,9 @@ function Widget() {
     return result;
   }
   if(!config?.enabled)return null;
-  if(token)return <ReviewOverlay host={host} site={{environmentId:config.environment.id,position:'bottom_right'}} environment={config.environment} transport={transport} logoUrl={`${api}/brand/reporty-symbol.png`} />;
-  return <><div className="pointer-events-auto fixed bottom-6 right-6 flex items-center rounded-full border bg-background p-1.5 shadow-xl"><Button aria-label={open ? 'Chiudi inserimento nome' : 'Inizia ad aggiungere segnalazioni'} aria-expanded={open} size="icon" className="size-10 rounded-full" onClick={()=>setOpen(value=>!value)}><span className="flex transition-transform duration-200 motion-reduce:transition-none" style={{transform:open?'rotate(45deg)':'rotate(0deg)'}}><Plus className="size-5" aria-hidden="true" /></span></Button></div>{open?<section className="pointer-events-auto fixed bottom-22 right-6 w-[min(380px,calc(100vw-48px))] space-y-4 rounded-xl border bg-card p-4 shadow-xl"><div className="flex justify-between"><h2 className="font-semibold">Inizia ad aggiungere segnalazioni</h2></div><p className="text-sm text-muted-foreground">{config.environment.projectName} · {config.environment.name}</p><form className="grid gap-3" onSubmit={event=>{event.preventDefault();if(busy)return;setBusy(true);void(async()=>{try{
+  if(token)return <ReviewOverlay host={host} site={{environmentId:config.environment.id,position}} onPositionChange={changePosition} environment={config.environment} transport={transport} logoUrl={`${api}/brand/reporty-symbol.png`} />;
+  const top = position.startsWith('top'), left = position.endsWith('left');
+  return <><div style={{ [top ? 'top' : 'bottom']: 24, [left ? 'left' : 'right']: 24 }} className="pointer-events-auto fixed flex items-center rounded-full border bg-background p-1.5 shadow-xl"><Button aria-label={open ? 'Chiudi inserimento nome' : 'Inizia ad aggiungere segnalazioni'} aria-expanded={open} size="icon" className="size-10 rounded-full" onClick={()=>setOpen(value=>!value)}><span className="flex transition-transform duration-200 motion-reduce:transition-none" style={{transform:open?'rotate(45deg)':'rotate(0deg)'}}><Plus className="size-5" aria-hidden="true" /></span></Button></div>{open?<section style={{ [top ? 'top' : 'bottom']: 88, [left ? 'left' : 'right']: 24 }} className="pointer-events-auto fixed w-[min(380px,calc(100vw-48px))] space-y-4 rounded-xl border bg-card p-4 shadow-xl"><div className="flex justify-between"><h2 className="font-semibold">Inizia ad aggiungere segnalazioni</h2></div><p className="text-sm text-muted-foreground">{config.environment.projectName} · {config.environment.name}</p><form className="grid gap-3" onSubmit={event=>{event.preventDefault();if(busy)return;setBusy(true);void(async()=>{try{
     const response=await fetch(`${api}/api/widget`,{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'start',key,name})});const result=await response.json();if(!response.ok)throw new Error(result.error);saveToken(result.token);setToken(result.token);notify('Ora puoi aggiungere segnalazioni.','success');
   }catch(error){notify(error instanceof Error?error.message:'Avvio non riuscito.');}finally{setBusy(false);}})();}}><Label htmlFor="reporty-widget-name">Il tuo nome</Label><Input id="reporty-widget-name" className="h-9 rounded-lg border bg-background px-3" required maxLength={80} value={name} onChange={event=>setName(event.target.value)} /><Button type="submit" disabled={busy}>{busy?<Skeleton className="h-4 w-32 bg-current opacity-30" />:'Inizia ad aggiungere segnalazioni'}</Button></form></section>:null}</>;
 }

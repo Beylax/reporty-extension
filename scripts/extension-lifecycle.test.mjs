@@ -222,3 +222,52 @@ test('notification requests require the current page and preserve its session an
   assert.equal(input.payload.pagePath, '/page');
   assert.equal(input.operation, 'notifications_read');
 });
+
+test('opener position is saved for the sender site without changing sessions or other sites', async () => {
+  const h = harness('member');
+  h.stored.sessionToken = 'a'.repeat(64);
+  h.stored.sites = {
+    'https://example.com': { environmentId: 'env', position: 'bottom_right' },
+    'https://other.example': { environmentId: 'other-env', position: 'bottom_left' },
+  };
+  const sender = { id: 'test', frameId: 0, tab: { id: 1 }, url: 'https://example.com/page' };
+  for (const position of ['top_left', 'top_right', 'bottom_left', 'bottom_right']) {
+    let response;
+    h.events.internal({ type: 'REPORTY_POSITION', environmentId: 'env', position }, sender, value => response = value);
+    await flush();
+    assert.equal(response.ok, true);
+    assert.equal(response.data.position, position);
+    assert.equal(h.stored.sites['https://example.com'].position, position);
+    assert.equal(h.stored.sites['https://other.example'].position, 'bottom_left');
+    assert.equal(h.stored.sessionToken, 'a'.repeat(64));
+  }
+  assert.equal(h.requests.some(request => request.url.endsWith('/reports')), false);
+  assert.ok(h.messages.some(message => message.message.type === 'REPORTY_REFRESH'));
+});
+
+test('opener position rejects invalid values, stale environments, foreign pages and subframes', async () => {
+  const h = harness('guest');
+  h.stored['guestSession:https://example.com'] = 'a'.repeat(64);
+  h.stored.sites = { 'https://example.com': { environmentId: 'env', position: 'bottom_right' } };
+  const sender = { id: 'test', frameId: 0, tab: { id: 1 }, url: 'https://example.com/page' };
+  for (const [input, source] of [
+    [{ position: 'middle' }, sender],
+    [{ position: null }, sender],
+    [{ environmentId: 'other-env' }, sender],
+    [{}, { ...sender, url: 'https://other.example/page' }],
+    [{}, { ...sender, frameId: 1 }],
+    [{}, { id: 'test', url: 'chrome-extension://test/popup.html' }],
+  ]) {
+    let response;
+    h.events.internal({ type: 'REPORTY_POSITION', environmentId: 'env', position: 'top_left', ...input }, source, value => response = value);
+    await flush();
+    assert.equal(response.ok, false);
+    assert.equal(h.stored.sites['https://example.com'].position, 'bottom_right');
+  }
+  h.contexts['Bearer ' + 'a'.repeat(64)] = { kind: 'guest', displayName: 'Client', environments: [] };
+  let response;
+  h.events.internal({ type: 'REPORTY_POSITION', environmentId: 'env', position: 'top_left' }, sender, value => response = value);
+  await flush();
+  assert.equal(response.ok, false);
+  assert.equal(h.stored.sites['https://example.com'].position, 'bottom_right');
+});

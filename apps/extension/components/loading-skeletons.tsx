@@ -4,7 +4,7 @@ export function PopupSkeleton() {
   return <div role="status" aria-label="Caricamento sito e account" className="space-y-4"><div className="space-y-4 rounded-xl border bg-card p-4"><Skeleton className="h-5 w-32" /><Skeleton className="h-4 w-5/6" /><div className="space-y-2 rounded-lg bg-muted p-3"><Skeleton className="h-4 w-40 bg-background" /><Skeleton className="h-3 w-24 bg-background" /></div><Skeleton className="h-4 w-36" /><Skeleton className="h-9 w-full" /><Skeleton className="h-8 w-full" /></div><div className="space-y-3 rounded-xl border bg-card p-4"><Skeleton className="h-5 w-32" /><Skeleton className="h-4 w-48" /><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div></div>;
 }
 export function ReportRowsSkeleton() {
-  return <div role="status" aria-label="Caricamento segnalazioni" className="grid gap-2">{[0,1,2].map(item => <div key={item} className="space-y-2 rounded-lg border p-3"><Skeleton className="h-4 w-5/6" /><Skeleton className="h-4 w-2/3" /><div className="flex gap-2"><Skeleton className="h-6 w-20 rounded-full" /><Skeleton className="h-6 w-28 rounded-full" /></div></div>)}</div>;
+  return <div role="status" aria-label="Caricamento segnalazioni" className="grid gap-2">{[0,1,2].map(item => <div key={item} className="space-y-2 rounded-lg border p-3"><Skeleton className="h-4 w-5/6" /><Skeleton className="h-4 w-2/3" /><div className="flex flex-col items-start gap-2"><Skeleton className="h-6 w-20 rounded-full" /><Skeleton className="h-6 w-28 rounded-full" /></div></div>)}</div>;
 }
 export function RepliesSkeleton() {
   return <div role="status" aria-label="Caricamento risposte" className="grid gap-2">{[0,1].map(item => <div key={item} className="space-y-2 rounded-lg bg-muted p-3"><Skeleton className="h-3 w-20 bg-background" /><Skeleton className="h-4 w-4/5 bg-background" /></div>)}</div>;
@@ -18,7 +18,7 @@ export function ReviewStartSkeleton() {
 
 export function ReportDetailSkeleton() {
   return <div role="status" aria-label="Caricamento dettaglio segnalazione" className="space-y-4">
-    <div className="flex flex-wrap justify-between gap-3"><div className="flex gap-2"><Skeleton className="h-6 w-24 rounded-full" /><Skeleton className="h-6 w-28 rounded-full" /></div><Skeleton className="h-8 w-40" /></div>
+    <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:justify-between"><div className="flex gap-2"><Skeleton className="h-6 w-24 rounded-full" /><Skeleton className="h-6 w-28 rounded-full" /></div><div className="flex gap-2"><Skeleton className="size-8 sm:w-40" /><Skeleton className="size-8 sm:w-40" /></div></div>
     <div className="space-y-3 rounded-xl border bg-muted/50 p-4"><Skeleton className="h-4 w-24" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-5/6" /><Skeleton className="h-4 w-2/3" /></div>
     <div className="space-y-4 rounded-xl border bg-muted/50 p-4">{[0,1].map(item => <div key={item} className="space-y-2"><Skeleton className="h-4 w-20" /><div className="flex flex-wrap gap-2"><Skeleton className="h-8 w-24" /><Skeleton className="h-8 w-28" /><Skeleton className="h-8 w-24" /></div></div>)}</div>
     <div className="space-y-3"><Skeleton className="h-4 w-24" /><RepliesSkeleton /><Skeleton className="h-20 w-full" /><Skeleton className="h-8 w-28" /></div>

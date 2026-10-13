@@ -1,3 +1,4 @@
+import { isOpenerPosition } from '@/lib/opener-position';
 import { getPageContext } from '@reporty/shared';
 import { apiOrigin, getContext, getSessionToken, guestSessionKey, token, type Sites, type Site, pattern } from '@/lib/session';
 
@@ -134,7 +135,7 @@ export default defineBackground(() => {
         await browser.storage.local.set({ [`pendingConnection:${sender.tab.id}`]: { nonce, tabId: sender.tab.id, expiresAt: Date.now() + 120000 } });
         return sendResponse({ ok: true, data: { nonce, extensionId: browser.runtime.id } });
       }
-      if (['REPORTY_REPORT', 'REPORTY_SCREENSHOT'].includes(message?.type)) {
+      if (['REPORTY_REPORT', 'REPORTY_SCREENSHOT', 'REPORTY_POSITION'].includes(message?.type)) {
         if (sender.frameId !== 0 || !sender.tab?.id || !sender.url) throw new Error('Pagina non valida.');
         const tab = await browser.tabs.get(sender.tab.id);
         if (!tab.url || new URL(tab.url).origin !== new URL(sender.url).origin) throw new Error('Pagina cambiata.');
@@ -144,6 +145,15 @@ export default defineBackground(() => {
         const sessionToken = await getSessionToken(origin);
         const context = sessionToken ? await getContext(origin, sessionToken) : null;
         if (!site || !context?.environments.some(item => item.id === site.environmentId && item.origin === origin)) throw new Error('Accesso al sito non disponibile.');
+        if (message.type === 'REPORTY_POSITION') {
+          if (message.environmentId !== site.environmentId) throw new Error('Ambiente cambiato.');
+          if (!isOpenerPosition(message.position)) throw new Error('Posizione non valida.');
+          const updatedSite = { ...site, position: message.position };
+          await browser.storage.local.set({ sites: { ...(sites as Sites), [origin]: updatedSite } });
+          sendResponse({ ok: true, data: updatedSite });
+          void refreshTabs().catch(() => undefined);
+          return;
+        }
         if (message.type === 'REPORTY_REPORT' && message.operation === 'create' && message.payload?.context?.url !== tab.url) throw new Error('La pagina è cambiata: crea una nuova segnalazione.');
         if (message.type === 'REPORTY_REPORT' && String(message.operation).startsWith('notification') && message.payload?.pagePath !== getPageContext(tab.url).pagePath) throw new Error('La pagina è cambiata: riapri le notifiche.');
         const endpoint = message.type === 'REPORTY_SCREENSHOT' ? 'screenshot' : 'reports';
@@ -207,7 +217,7 @@ export default defineBackground(() => {
           const context = await getContext(origin);
           const environment = context?.environments.find(item => item.id === message.environmentId && item.origin === origin);
           if (!environment) throw new Error('Nessun accesso a questo ambiente.');
-          if (!['bottom_right', 'bottom_left', 'top_right', 'top_left'].includes(message.position)) throw new Error('Posizione non valida.');
+          if (!isOpenerPosition(message.position)) throw new Error('Posizione non valida.');
           const { pendingSites = {} } = await browser.storage.local.get('pendingSites');
           await browser.storage.local.set({ pendingSites: { ...(pendingSites as object), [message.tabId]: { origin, environmentId: environment.id, position: message.position, expiresAt: Date.now() + 120000 } } });
           await applySite(message.tabId);

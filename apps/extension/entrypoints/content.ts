@@ -20,13 +20,23 @@ export default defineContentScript({
     const root = createRoot(mount);
     let disposed = false;
     let refreshVersion = 0;
+    function renderReview(data: { site: Site; environment: Environment } | null) {
+      root.render(data ? React.createElement(ToastProvider, { children: React.createElement(ReviewOverlay, {
+        ...data, host,
+        onPositionChange: async position => {
+          const response = await browser.runtime.sendMessage({ type: 'REPORTY_POSITION', environmentId: data.environment.id, position });
+          if (!response?.ok) throw new Error(response?.error ?? 'Posizione non aggiornata.');
+          if (!disposed) renderReview({ ...data, site: response.data as Site });
+        },
+      }) }) : null);
+    }
     async function refresh() {
       const version = ++refreshVersion;
       try {
         const response = await browser.runtime.sendMessage({ type: 'REPORTY_PAGE' });
         if (disposed || version !== refreshVersion) return;
         const data = response?.ok ? response.data as { site: Site; environment: Environment } | null : null;
-        root.render(data ? React.createElement(ToastProvider, { children: React.createElement(ReviewOverlay, { ...data, host }) }) : null);
+        renderReview(data);
       } catch { if (!disposed && version === refreshVersion) root.render(null); }
     }
     void refresh();
