@@ -79,7 +79,7 @@ Nel dettaglio progetto su mobile le tab scorrono orizzontalmente ed è disponibi
 
 I componenti UI identici di dashboard ed estensione (button, checkbox, input, textarea, select, switch, skeleton e selettori segmentati) hanno una sola implementazione in `packages/shared/ui`, esposta tramite `@reporty/shared/ui/*` e inclusa esplicitamente nelle due build Tailwind. Le modali e i toast mantengono le differenze specifiche di ciascuna superficie.
 
-I selettori di stato e priorità nelle segnalazioni di dashboard, estensione e widget usano segmenti a chevron incastrati, con estremità arrotondate e opzione attiva evidenziata. Il contorno SVG non occupa spazio nel layout e ogni incastro ha un solo separatore. Le etichette restano su una sola riga: quando lo spazio non basta, il selettore scorre orizzontalmente e rende visibile l’opzione selezionata. Lo stesso stile si applica alla priorità nelle card Kanban.
+I selettori di stato e priorità nelle segnalazioni di dashboard, estensione e widget usano segmenti a chevron incastrati, con estremità arrotondate e opzione attiva evidenziata. Fondo e contorno usano lo stesso profilo SVG chiuso, senza clip-path esterni. Le misure provengono dal border box di layout e restano corrette durante le animazioni delle modali; i profili adiacenti coincidono senza occupare spazio aggiuntivo. Le etichette restano su una sola riga: quando lo spazio non basta, il selettore scorre orizzontalmente e rende visibile l’opzione selezionata. Lo stesso stile si applica alla priorità nelle card Kanban.
 
 ### Vista Kanban delle segnalazioni
 
