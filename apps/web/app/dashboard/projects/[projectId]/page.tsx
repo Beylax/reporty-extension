@@ -43,6 +43,10 @@ export default async function Project({ params, searchParams }: {
   const canManage = permissionResult.data === true;
   const environments = environmentsResult.data ?? [];
   const participants = (participantsResult.data ?? []) as ProjectParticipant[];
+  const settingsParticipants = [
+    ...participants.filter(person => person.kind === 'developer'),
+    ...participants.filter(person => person.kind === 'guest'),
+  ];
   return (
     <main className="w-full space-y-8 px-6 py-10 lg:px-10">
       <Link href="/dashboard" className={buttonVariants({ variant: 'outline' })}>← Tutti i progetti</Link>
@@ -85,12 +89,12 @@ export default async function Project({ params, searchParams }: {
           <div className="grid min-w-60 flex-1 gap-2"><Label htmlFor="project-name">Nome</Label><Input id="project-name" name="name" defaultValue={project.name} maxLength={120} required /></div>
           <SubmitButton>Salva nome</SubmitButton>
         </form></CardContent>
-      </Card><Card>
-        <CardHeader><CardTitle>Utenti</CardTitle><CardDescription>Sviluppatori e ospiti che hanno partecipato al progetto. Gli ospiti sono identificati dalla propria sessione.</CardDescription></CardHeader>
-        <CardContent className="space-y-3">
-          {participantsResult.error ? <FeedbackToast message="Impossibile caricare gli utenti. Verifica di aver applicato supabase/report_updates.sql." /> : participants.length ? participants.map(person => <div key={person.key} className="flex items-center justify-between gap-3 rounded-lg border bg-muted/50 p-3"><span className="min-w-0 break-words text-sm">{person.name}</span><Badge variant="secondary">{person.kind === 'developer' ? 'Sviluppatore' : 'Guest'}</Badge></div>) : <p className="text-sm text-muted-foreground">Nessun partecipante.</p>}
-        </CardContent>
-      </Card><section aria-label="Zona pericolosa" className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4"><h3 className="text-sm font-semibold text-destructive">Zona pericolosa</h3><ResourceDelete fullWidth id={projectId} kind="project" name={project.name} /></section></> : null} />
+      </Card><AccordionSection variant="card" title="Utenti">
+        <p className="text-sm text-muted-foreground">Sviluppatori e ospiti che hanno partecipato al progetto. Gli ospiti sono identificati dalla propria sessione.</p>
+        <div className="space-y-3">
+          {participantsResult.error ? <FeedbackToast message="Impossibile caricare gli utenti. Verifica di aver applicato supabase/report_updates.sql." /> : settingsParticipants.length ? settingsParticipants.map(person => <div key={person.key} className="flex items-center justify-between gap-3 rounded-lg border bg-muted/50 p-3"><span className="min-w-0 break-words text-sm">{person.name}</span><Badge variant="secondary">{person.kind === 'developer' ? 'Sviluppatore' : 'Guest'}</Badge></div>) : <p className="text-sm text-muted-foreground">Nessun partecipante.</p>}
+        </div>
+      </AccordionSection><section aria-label="Zona pericolosa" className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4"><h3 className="text-sm font-semibold text-destructive">Zona pericolosa</h3><ResourceDelete fullWidth id={projectId} kind="project" name={project.name} /></section></> : null} />
     </main>
   );
 }

@@ -73,6 +73,8 @@ Dashboard, estensione e widget usano il tema Violet Bloom di tweakcn, con modali
 
 La dashboard occupa tutta la larghezza disponibile, mantenendo i margini interni. La sidebar è fissa su desktop; sotto i 768 px si apre dal menu hamburger come pannello laterale, con chiusura tramite pulsante, Escape, clic esterno o selezione di un link.
 
+Nella tab Impostazioni, la sezione Utenti è un accordion inizialmente chiuso; l’elenco mostra prima gli sviluppatori e poi gli ospiti, mantenendo l’ordine esistente all’interno dei due gruppi.
+
 Nella tab Ambienti, ogni ambiente è un accordion inizialmente chiuso. L’intestazione mostra sempre nome, URL e Apri sito; il link apre il sito separatamente dal comando di espansione. Modifica, link ospite, script e cancellazione restano nel contenuto espandibile.
 
 Nel dettaglio progetto su mobile le tab scorrono orizzontalmente ed è disponibile solo la vista Lista, con card selezionabili per le azioni in blocco. La ricerca occupa una riga; nella riga successiva si trovano Filtri e ordinamento. Filtri apre un pannello dal basso con angoli superiori arrotondati: ogni voce apre le proprie opzioni multiselezione, con Indietro accanto a Chiudi. Le pillole dei filtri attivi restano rimovibili nella pagina. La selezione di tutti i risultati filtrati comprende anche le altre pagine.
