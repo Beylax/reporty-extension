@@ -1,4 +1,5 @@
 import { AccordionSection } from '@/components/ui/accordion';
+import { Plus, Save } from 'lucide-react';
 import { EnvironmentWidget } from '../../environment-widget';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -79,7 +80,7 @@ export default async function Project({ params, searchParams }: {
           <input type="hidden" name="projectId" value={projectId} />
           <div className="grid gap-2"><Label htmlFor="new-name">Nome ambiente</Label><Input id="new-name" name="name" placeholder="Produzione" maxLength={80} required /></div>
           <div className="grid gap-2"><Label htmlFor="new-origin">Origine del sito</Label><Input id="new-origin" name="origin" type="url" placeholder="https://example.com" required /></div>
-          <div className="sm:col-span-2"><SubmitButton>Aggiungi ambiente</SubmitButton></div>
+          <div className="sm:col-span-2"><SubmitButton><Plus className="size-4" aria-hidden="true" />Aggiungi ambiente</SubmitButton></div>
         </form></CardContent>
       </Card> : null}
       </>} settings={canManage ? <><Card>
@@ -87,7 +88,7 @@ export default async function Project({ params, searchParams }: {
         <CardContent><form action={renameProject} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="projectId" value={projectId} />
           <div className="grid min-w-60 flex-1 gap-2"><Label htmlFor="project-name">Nome</Label><Input id="project-name" name="name" defaultValue={project.name} maxLength={120} required /></div>
-          <SubmitButton>Salva nome</SubmitButton>
+          <SubmitButton><Save className="size-4" aria-hidden="true" />Salva nome</SubmitButton>
         </form></CardContent>
       </Card><AccordionSection variant="card" title="Utenti">
         <p className="text-sm text-muted-foreground">Sviluppatori e ospiti che hanno partecipato al progetto. Gli ospiti sono identificati dalla propria sessione.</p>
