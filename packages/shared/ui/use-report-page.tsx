@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
-import type { ReportPage, ReportPageQuery } from '../src/reports';
+import type { Report, ReportPage, ReportPageQuery } from '../src/reports';
 
 const empty: ReportPage = { reports: [], total: 0, projectTotal: 0, pages: [] };
 /** One request per page; stale requests cannot update a different filter or scope. */
@@ -76,5 +76,15 @@ export function useReportPage(query: ReportPageQuery, load: (query: ReportPageQu
       }
     } finally { polling.current = false; }
   }
-  return { ...(state.key === key ? state.data : empty), loading: enabled && (state.key !== key || state.loading), failed: state.key === key && state.failed, loadMore, poll, refresh: () => setRefreshKey(value => value + 1) };
+  function patchReport(change: Pick<Report, 'id'> & Partial<Pick<Report, 'status' | 'priority'>>) {
+    if (cache.current.key !== key) return;
+    // Confirm the mutation before the optimistic transition ends. Older reads
+    // must not restore the value from before this confirmed write.
+    version.current++;
+    pending.current = false;
+    const data = { ...cache.current.data, reports: cache.current.data.reports.map(report => report.id === change.id ? { ...report, ...change } : report) };
+    cache.current = { key, data };
+    setState({ key, data, loading: false, failed: false });
+  }
+  return { ...(state.key === key ? state.data : empty), loading: enabled && (state.key !== key || state.loading), failed: state.key === key && state.failed, loadMore, poll, patchReport, refresh: () => setRefreshKey(value => value + 1) };
 }

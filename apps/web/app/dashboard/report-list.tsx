@@ -201,6 +201,7 @@ export function ReportList({ environments, participants, initialReportId }: { in
       try {
         const result = await mutateReport(report.environment_id, priority ? 'priority' : 'status', { id: report.id, ...(priority ? { priority } : { status }) });
         if (result.error) throw new Error(result.error);
+        feed.patchReport({ id: report.id, ...(priority ? { priority } : { status }) });
         toast.add({ title: priority ? `Priorità aggiornata: ${priorityLabels[priority]}` : `Segnalazione spostata in ${labels[status]}`, type: 'success' });
         setSelected(previous => previous?.id === report.id ? { ...previous, ...(priority ? { priority } : { status }) } : previous);
         if (!priority) window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));

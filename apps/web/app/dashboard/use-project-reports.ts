@@ -1,6 +1,6 @@
 'use client';
 import { useReportPage } from '@reporty/shared/ui/use-report-page';
-import type { ReportPageQuery } from '@reporty/shared';
+import type { Report, ReportPageQuery } from '@reporty/shared';
 import { getReportPage } from './report-actions';
 
 export function useProjectReports(environmentId: string | undefined, query: ReportPageQuery, view: 'list' | 'kanban', revision: unknown, onError: (message: string) => void) {
@@ -14,5 +14,8 @@ export function useProjectReports(environmentId: string | undefined, query: Repo
     resolved: useReportPage({ ...query, offset: 0, statuses: ['resolved'] }, load, { ...options, enabled: view === 'kanban', infinite: true }),
   };
   const active = view === 'list' ? list : columns.open;
-  return { ...active, columns, poll: async () => { await Promise.all((view === 'list' ? [list] : Object.values(columns)).map(feed => feed.poll())); }, reports: view === 'list' ? list.reports : Object.values(columns).flatMap(column => column.reports) };
+  function patchReport(change: Pick<Report, 'id'> & Partial<Pick<Report, 'status' | 'priority'>>) {
+    [list, ...Object.values(columns)].forEach(feed => feed.patchReport(change));
+  }
+  return { ...active, columns, patchReport, poll: async () => { await Promise.all((view === 'list' ? [list] : Object.values(columns)).map(feed => feed.poll())); }, reports: view === 'list' ? list.reports : Object.values(columns).flatMap(column => column.reports) };
 }

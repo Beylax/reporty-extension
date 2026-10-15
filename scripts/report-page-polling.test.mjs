@@ -84,3 +84,40 @@ test('leaving the view ignores a background response even after loading more',as
   background=true;const poll=h.value.poll();h.close();const updates=h.updates;
   slow.resolve(page());await poll;assert.equal(h.updates,updates);
 });
+
+test('confirmed priority survives an older poll and a failed refresh, while later updates still apply',async()=>{
+  const stale=deferred();let calls=0,priority='medium',fail=false;
+  const data=()=>({...page(0,1,1),reports:[{id:'0',priority,status:'open'}]});
+  const h=host(async()=>{calls++;if(calls===2)return stale.promise;if(fail)throw new Error('offline');return data();});
+  try {
+    h.render();await flush();h.render();
+    const poll=h.value.poll();
+    h.value.patchReport({id:'0',priority:'high'});h.render();
+    assert.equal(h.value.reports[0].priority,'high');
+    stale.resolve(data());await poll;h.render();
+    assert.equal(h.value.reports[0].priority,'high');
+    fail=true;h.value.refresh();h.render();
+    assert.equal(h.value.reports[0].priority,'high');
+    await flush();h.render();
+    assert.equal(h.value.reports[0].priority,'high');
+    fail=false;priority='low';await h.value.poll();h.render();
+    assert.equal(h.value.reports[0].priority,'low');
+  }finally{h.close();}
+});
+
+test('a confirmed status survives an older explicit refresh without blocking subsequent loads',async()=>{
+  const stale=deferred();let calls=0;
+  const data=()=>({...page(0,1,1),reports:[{id:'0',priority:'medium',status:'open'}]});
+  const h=host(async()=>++calls===2?stale.promise:data());
+  try {
+    h.render();await flush();h.render();
+    h.value.refresh();h.render();await flush();
+    h.value.patchReport({id:'0',status:'validation'});h.render();
+    stale.resolve(data());await flush();h.render();
+    assert.equal(h.value.reports[0].status,'validation');
+    assert.equal(h.value.loading,false);
+    h.value.refresh();h.render();await flush();h.render();
+    assert.equal(h.value.reports[0].status,'open');
+    assert.equal(h.value.loading,false);
+  }finally{h.close();}
+});
