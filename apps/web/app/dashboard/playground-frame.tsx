@@ -1,20 +1,23 @@
 'use client';
 
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
+import { Minimize2 } from 'lucide-react';
 import { isUuid } from '@reporty/shared';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToastManager } from '@/components/ui/toast';
 import { capturePlaygroundFrame } from '@/lib/playground-capture';
-import { isPlaygroundMessage, playgroundUrl, type PlaygroundEnvironment, type Viewport } from '@/lib/playground';
+import { isPlaygroundMessage, playgroundFrameLayout, playgroundUrl, type PlaygroundEnvironment, type Viewport } from '@/lib/playground';
 
-export function PlaygroundFrame({ environment, url, viewport, active, reload, requestedReport, onPage }: {
+export function PlaygroundFrame({ environment, url, viewport, active, reload, requestedReport, onPage, fitWidth, fullscreen, onExitFullscreen }: {
+  fitWidth: boolean; fullscreen: boolean; onExitFullscreen: () => void;
   environment: PlaygroundEnvironment; url: string; viewport: Viewport; active: boolean; reload: number;
   requestedReport?: { id: string; requestId: string };
   onPage: (url: string, connected: boolean) => void;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const stage = useRef<HTMLDivElement>(null);
+  const exitButton = useRef<HTMLButtonElement>(null);
   const [nonce] = useState(() => crypto.randomUUID());
   const [available, setAvailable] = useState({ width: 0, height: 0 });
   const [loadedRevision, setLoadedRevision] = useState(-1);
@@ -27,7 +30,8 @@ export function PlaygroundFrame({ environment, url, viewport, active, reload, re
   const generation = useRef(0);
   const toast = useToastManager();
   const notifyPage = useEffectEvent(onPage);
-  const scale = available.width && available.height ? Math.min(1, available.width / viewport.width, available.height / viewport.height) : 0;
+  const layout = playgroundFrameLayout(viewport, available, fitWidth || fullscreen);
+  const scale = layout.scale;
   const post = useCallback((data: Record<string, unknown>) => {
     frame.current?.contentWindow?.postMessage({ ...data, nonce }, environment.origin);
   }, [environment.origin, nonce]);
@@ -39,10 +43,15 @@ export function PlaygroundFrame({ environment, url, viewport, active, reload, re
   const cancelFromEffect = useEffectEvent(cancelCapture);
   useEffect(() => {
     if (!stage.current) return;
-    const observer = new ResizeObserver(([entry]) => setAvailable({ width: Math.max(0, entry.contentRect.width - 32), height: Math.max(0, entry.contentRect.height - 32) }));
+    const observer = new ResizeObserver(([entry]) => setAvailable({ width: Math.max(0, entry.contentRect.width), height: Math.max(0, entry.contentRect.height) }));
     observer.observe(stage.current);
     return () => observer.disconnect();
   }, []);
+  useEffect(() => {
+    if (!fullscreen || !active) return;
+    const frame = requestAnimationFrame(() => exitButton.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [fullscreen, active]);
   useEffect(() => {
     if (!active) {
       generation.current++;
@@ -106,7 +115,7 @@ export function PlaygroundFrame({ environment, url, viewport, active, reload, re
     generation.current++;
     const timer = setTimeout(() => cancelFromEffect('Viewport cambiata. Ripeti la cattura.'), 0);
     return () => clearTimeout(timer);
-  }, [viewport.width, viewport.height]);
+  }, [layout.width, layout.height]);
   async function takeScreenshot() {
     if (!capture || !frame.current || captureLock.current) return;
     const request = capture, version = generation.current;
@@ -124,16 +133,17 @@ export function PlaygroundFrame({ environment, url, viewport, active, reload, re
     } finally { captureLock.current = false; setCapturing(false); setCapture(null); }
   }
   const reset = () => { generation.current++; setLoadedRevision(reload); setConnected(false); cancelCapture('La pagina è stata ricaricata.'); onPage(currentUrl.current, false); post({ type: 'REPORTY_PLAYGROUND_CONNECT', key: environment.publicKey }); };
-  return <div className={`min-h-0 min-w-0 flex-1 flex-col ${active ? 'flex' : 'hidden'}`}>
-    <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-background px-4 py-2 text-xs text-muted-foreground">
+  return <div className={`relative min-h-0 min-w-0 flex-1 flex-col ${active ? 'flex' : 'hidden'}`}>
+    <div className={`${fullscreen ? 'hidden' : 'flex'} flex-wrap items-center justify-between gap-2 border-b bg-background px-4 py-2 text-xs text-muted-foreground`}>
       <span>{connected ? 'Widget collegato' : 'In attesa del widget: verifica script, attivazione e permesso di incorporamento del sito.'}</span>
-      <span>{viewport.width} × {viewport.height} · {Math.round(scale * 100)}%</span>
+      <span>{layout.width} × {layout.height} · {Math.round(scale * 100)}%</span>
     </div>
-    {capture ? <div role="status" className="flex flex-wrap items-center justify-between gap-3 border-b bg-primary/5 p-3 text-sm"><p>Condividi questa scheda per acquisire solo la pagina, con il punto evidenziato.</p><div className="flex gap-2"><Button disabled={capturing} onClick={() => void takeScreenshot()}>Condividi scheda e acquisisci</Button><Button variant="outline" disabled={capturing} onClick={() => cancelCapture('Acquisizione annullata.')}>Annulla</Button></div></div> : null}
-    <div ref={stage} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted/60 p-4">
+    {capture && !capturing ? <div role="status" className="absolute inset-x-0 top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b bg-background p-3 text-sm shadow-sm"><p>Condividi questa scheda per acquisire solo la pagina, con il punto evidenziato.</p><div className="flex gap-2"><Button disabled={capturing} onClick={() => void takeScreenshot()}>Condividi scheda e acquisisci</Button><Button variant="outline" disabled={capturing} onClick={() => cancelCapture('Acquisizione annullata.')}>Annulla</Button></div></div> : null}
+    <div ref={stage} className={`relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted/60 p-4 ${fullscreen ? 'pt-16' : ''}`}>
+      {fullscreen ? <Button ref={exitButton} variant="outline" size="sm" className="absolute right-4 top-4 z-10 bg-background shadow-sm" onClick={onExitFullscreen}><Minimize2 aria-hidden="true" />Esci da schermo intero</Button> : null}
       {loadedRevision !== reload ? <div role="status" aria-label="Caricamento pagina del playground" className="absolute inset-4 space-y-6 rounded-lg border bg-background p-6"><div className="flex gap-4"><Skeleton className="h-8 w-28" /><Skeleton className="ml-auto h-8 w-48" /></div><Skeleton className="h-12 w-2/3" /><Skeleton className="h-5 w-4/5" /><div className="grid grid-cols-3 gap-4">{[0,1,2].map(i => <Skeleton key={i} className="h-48 w-full" />)}</div></div> : null}
-      <div className="relative shrink-0 bg-white shadow-lg" style={{ width: viewport.width * scale, height: viewport.height * scale, visibility: scale ? 'visible' : 'hidden' }}>
-        <iframe key={reload} ref={frame} src={url} title={`Pagina ${url}`} onLoad={reset} sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals" className="absolute left-0 top-0 origin-top-left border-0 bg-white" style={{ width: viewport.width, height: viewport.height, transform: `scale(${scale})` }} />
+      <div className="relative shrink-0 bg-white shadow-lg" style={{ width: layout.width * scale, height: layout.height * scale, visibility: scale ? 'visible' : 'hidden' }}>
+        <iframe key={reload} ref={frame} src={url} title={`Pagina ${url}`} onLoad={reset} sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals" className="absolute left-0 top-0 origin-top-left border-0 bg-white" style={{ width: layout.width, height: layout.height, transform: `scale(${scale})` }} />
       </div>
     </div>
   </div>;

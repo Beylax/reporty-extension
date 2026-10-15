@@ -2,6 +2,14 @@ import { getPageContext } from '@reporty/shared';
 
 export type PlaygroundEnvironment = { id: string; name: string; origin: string; publicKey: string; enabled: boolean };
 export type Viewport = { width: number; height: number };
+
+export function playgroundFrameLayout(viewport: Viewport, available: Viewport, fluid: boolean) {
+  const width = Math.max(0, Math.floor(available.width));
+  const height = Math.max(0, Math.floor(available.height));
+  const size = fluid ? { width, height } : viewport;
+  const scale = width && height ? fluid ? 1 : Math.min(1, width / size.width, height / size.height) : 0;
+  return { ...size, scale };
+}
 export const viewportPresets = [
   { label: 'Desktop', width: 1440, height: 900 },
   { label: 'Tablet', width: 768, height: 1024 },
