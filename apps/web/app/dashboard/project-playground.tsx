@@ -65,9 +65,9 @@ function EnvironmentPlayground({ initialReport, environment, fullscreen, fullscr
     void getReportPage(environment.id, { environments: [environment.id], limit: 1 }).then(result => {
       if (disposed) return;
       const pages = result.pages.flatMap(path => { try { return [playgroundUrl(path, environment.origin)]; } catch { return []; } });
-      const requestedUrl = initialReport ? playgroundUrl(initialReport.url, environment.origin) : undefined;
-      const next = [...new Set([...(requestedUrl ? [requestedUrl] : []), ...(pages.length ? pages : [environment.origin])])].map(makeTab);
-      if (initialReport) next[0].requestedReport = { id: initialReport.id, requestId: crypto.randomUUID() };
+      const requestedUrl = initialReport ? new URL(playgroundUrl(initialReport.url, environment.origin)) : undefined;
+      if (requestedUrl && initialReport) requestedUrl.searchParams.set('__reporty_issue', initialReport.id);
+      const next = [...new Set([...(requestedUrl ? [requestedUrl.href] : []), ...(pages.length ? pages : [environment.origin])])].map(makeTab);
       next[0].visited = true;
       setTabs(next); setActiveId(next[0].id); setFailed(false);
     }).catch(error => {

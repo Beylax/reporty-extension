@@ -169,6 +169,6 @@ Nella dashboard il polling delle segnalazioni aggiorna in background soltanto la
 
 La vista Lista/Kanban della pagina progetto viene ricordata nel browser per ciascun progetto per un anno, anche dopo un ricaricamento. Su mobile si usa sempre la lista senza sovrascrivere la preferenza desktop. In assenza di preferenza viene mostrata la Kanban.
 
-Con il tasto destro su una card Kanban o una riga della lista si apre il menu della segnalazione: dettaglio in modale, pagina originale in una nuova scheda, playground sulla pagina e segnalazione selezionate, oppure eliminazione con conferma per chi ha il permesso. Il menu supporta anche la tastiera e la pressione prolungata nella lista mobile. Per aprire il dettaglio dentro il playground serve il widget installato e abilitato nell’ambiente.
+Con il tasto destro su una card Kanban o una riga della lista si apre il menu della segnalazione: dettaglio in modale, pagina originale in una nuova scheda, playground sulla pagina della segnalazione, con scorrimento al punto e pulsazione del pin, oppure eliminazione con conferma per chi ha il permesso. Il menu supporta anche la tastiera e la pressione prolungata nella lista mobile. Per aprire il dettaglio dentro il playground serve il widget installato e abilitato nell’ambiente.
 
 Il playground è disponibile solo su desktop (larghezza da 768 px): su mobile sono nascosti il pulsante del progetto, quelli degli ambienti e la voce nel menu contestuale; anche l’apertura è bloccata.
