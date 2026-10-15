@@ -19,6 +19,7 @@ import { ProjectReports } from '../../project-reports';
 import { buttonVariants } from '@/components/ui/button';
 import { ResourceDelete } from '../../resource-delete';
 import { ProjectTabs } from '../../project-tabs';
+import { EnvironmentPlaygroundTrigger } from '../../playground-trigger';
 
 export default async function Project({ params, searchParams }: {
   params: Promise<{ projectId: string }>;
@@ -60,7 +61,7 @@ export default async function Project({ params, searchParams }: {
       <section className="space-y-4" aria-labelledby="environments-title">
         <div><h2 id="environments-title" className="text-xl font-semibold">Ambienti</h2></div>
         {!environments.length ? <Card><CardContent className="py-6 text-muted-foreground">Nessun ambiente aggiunto.</CardContent></Card> : null}
-        {environments.map(environment => <AccordionSection key={environment.id} defaultOpen={environment.id === expandedEnvironment} variant="card" title={<span className="min-w-0 space-y-1"><span className="block break-words text-base font-semibold">{environment.name}</span><span className="block break-all text-sm font-normal text-muted-foreground">{environment.origin}</span></span>} action={<a href={environment.origin} target="_blank" rel="noopener noreferrer" aria-label={`Apri sito ${environment.name}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>Apri sito ↗</a>}>
+        {environments.map(environment => <AccordionSection key={environment.id} defaultOpen={environment.id === expandedEnvironment} variant="card" title={<span className="min-w-0 space-y-1"><span className="block break-words text-base font-semibold">{environment.name}</span><span className="block break-all text-sm font-normal text-muted-foreground">{environment.origin}</span></span>} action={<div className="flex flex-col items-end gap-2 lg:flex-row"><EnvironmentPlaygroundTrigger environmentId={environment.id} environmentName={environment.name} /><a href={environment.origin} target="_blank" rel="noopener noreferrer" aria-label={`Apri sito ${environment.name}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>Apri sito ↗</a></div>}>
             {canManage ? <form action={saveEnvironment} className="flex flex-wrap items-end gap-3">
               <input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="environmentId" value={environment.id} />
               <div className="grid flex-1 gap-2"><Label htmlFor={`name-${environment.id}`}>Nome ambiente</Label><Input id={`name-${environment.id}`} name="name" defaultValue={environment.name} maxLength={80} required /></div>

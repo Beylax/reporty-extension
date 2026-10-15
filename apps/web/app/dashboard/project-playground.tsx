@@ -19,7 +19,7 @@ function makeTab(url: string): PageTab {
   return { fitWidth: false, visited: false, id: crypto.randomUUID(), src: url, url, viewport: { width: 1440, height: 900 }, connected: false, reload: 0 };
 }
 
-export default function ProjectPlayground({ projectName, environments, onClose }: { projectName: string; environments: PlaygroundEnvironment[]; onClose: () => void }) {
+export default function ProjectPlayground({ projectName, environments, initialEnvironmentId, onClose }: { initialEnvironmentId?: string; projectName: string; environments: PlaygroundEnvironment[]; onClose: () => void }) {
   const [open, setOpen] = useState(false);
   const opened = useRef(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -28,7 +28,7 @@ export default function ProjectPlayground({ projectName, environments, onClose }
     setFullscreen(false);
     requestAnimationFrame(() => fullscreenTrigger.current?.focus());
   }
-  const [environmentId, setEnvironmentId] = useState(environments[0]?.id ?? '');
+  const [environmentId, setEnvironmentId] = useState(() => environments.find(environment => environment.id === initialEnvironmentId)?.id ?? environments[0]?.id ?? '');
   const environment = environments.find(item => item.id === environmentId);
   useEffect(() => {
     const frame = requestAnimationFrame(() => { opened.current = true; setOpen(true); });
