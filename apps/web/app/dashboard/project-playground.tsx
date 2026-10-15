@@ -3,7 +3,7 @@
 import { useEffect, useEffectEvent, useId, useRef, useState } from 'react';
 import { Dialog } from '@base-ui/react/dialog';
 import { Tabs } from '@base-ui/react/tabs';
-import { ExternalLink, Maximize2, MonitorPlay, PanelLeftClose, PanelLeftOpen, PanelLeft, RotateCw, X } from 'lucide-react';
+import { ExternalLink, Maximize2, MonitorPlay, PanelLeftClose, PanelLeftOpen, RotateCw, X } from 'lucide-react';
 import { getPageContext } from '@reporty/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,7 +49,7 @@ export default function ProjectPlayground({ projectName, environments, onClose }
 }
 
 function EnvironmentPlayground({ environment, fullscreen, fullscreenTrigger, onFullscreen, onExitFullscreen }: { environment: PlaygroundEnvironment; fullscreen: boolean; fullscreenTrigger: React.RefObject<HTMLButtonElement | null>; onFullscreen: () => void; onExitFullscreen: () => void }) {
-  const [sidebar, setSidebar] = useState<'open' | 'compact' | 'hidden'>('open');
+  const [sidebar, setSidebar] = useState<'open' | 'hidden'>('open');
   const sidebarId = useId();
   const [tabs, setTabs] = useState<PageTab[]>([]);
   const [activeId, setActiveId] = useState('');
@@ -98,7 +98,7 @@ function EnvironmentPlayground({ environment, fullscreen, fullscreenTrigger, onF
       {failed ? <div className="flex items-center gap-3 p-4"><p className="text-sm">Impossibile caricare le pagine.</p><Button variant="outline" onClick={() => { setLoading(true); setAttempt(value => value + 1); }}>Riprova</Button></div> : null}
       {active ? <ViewportToolbar key={active.id} tab={active} hidden={fullscreen} sidebar={sidebar} sidebarId={sidebarId} onSidebar={setSidebar} fullscreenTrigger={fullscreenTrigger} onFullscreen={onFullscreen} onFitWidth={() => update(active.id, { fitWidth: !active.fitWidth })} onViewport={viewport => update(active.id, { viewport, fitWidth: false })} onReload={() => update(active.id, { src: active.url, reload: active.reload + 1, connected: false })} /> : null}
       <div className="flex min-h-0 flex-1 overflow-auto">
-        {active ? <aside id={sidebarId} className={`${fullscreen || sidebar === 'hidden' ? 'hidden' : 'block'} ${sidebar === 'compact' ? 'w-60' : 'w-72 xl:w-80'} shrink-0 overflow-y-auto border-r p-4`} aria-label="Segnalazioni della pagina attiva"><PlaygroundReports key={`${environment.id}:${getPageContext(active.url).pagePath}`} environment={environment} pagePath={getPageContext(active.url).pagePath} connected={active.connected} onSelectReport={id => update(active.id, { requestedReport: { id, requestId: crypto.randomUUID() } })} /></aside> : null}
+        {active ? <aside id={sidebarId} inert={fullscreen || sidebar === 'hidden'} aria-hidden={fullscreen || sidebar === 'hidden'} className={`${fullscreen || sidebar === 'hidden' ? 'w-0 pointer-events-none opacity-0' : 'w-72 opacity-100 xl:w-80'} min-w-0 shrink-0 overflow-hidden transition-[width,opacity] duration-200 ease-in-out motion-reduce:transition-none`} aria-label="Segnalazioni della pagina attiva"><div className={`h-full w-72 overflow-y-auto border-r p-4 transition-transform duration-200 ease-in-out motion-reduce:transition-none ${fullscreen || sidebar === 'hidden' ? '-translate-x-3' : 'translate-x-0'} xl:w-80`}><PlaygroundReports key={`${environment.id}:${getPageContext(active.url).pagePath}`} environment={environment} pagePath={getPageContext(active.url).pagePath} connected={active.connected} onSelectReport={id => update(active.id, { requestedReport: { id, requestId: crypto.randomUUID() } })} /></div></aside> : null}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {tabs.filter(tab => tab.visited).map(tab => <PlaygroundFrame key={tab.id} environment={environment} url={tab.src} viewport={tab.viewport} active={tab.id === activeId} fitWidth={tab.fitWidth} fullscreen={fullscreen && tab.id === activeId} onExitFullscreen={onExitFullscreen} reload={tab.reload} requestedReport={tab.requestedReport} onPage={(url, connected) => setTabs(items => items.map(item => item.id === tab.id && (item.url !== url || item.connected !== connected) ? { ...item, url, connected, requestedReport: item.url !== url ? undefined : item.requestedReport } : item))} />)}
           {!tabs.length ? <p className="p-6 text-sm text-muted-foreground">Nessuna pagina aperta. Riapri il playground o cambia ambiente per caricare nuovamente le pagine.</p> : null}
@@ -108,7 +108,7 @@ function EnvironmentPlayground({ environment, fullscreen, fullscreenTrigger, onF
   </div>;
 }
 
-function ViewportToolbar({ tab, onViewport, onReload, hidden, sidebar, sidebarId, onSidebar, fullscreenTrigger, onFullscreen, onFitWidth }: { tab: PageTab; onViewport: (viewport: Viewport) => void; onReload: () => void; hidden: boolean; sidebar: 'open' | 'compact' | 'hidden'; sidebarId: string; onSidebar: (value: 'open' | 'compact' | 'hidden') => void; fullscreenTrigger: React.RefObject<HTMLButtonElement | null>; onFullscreen: () => void; onFitWidth: () => void }) {
+function ViewportToolbar({ tab, onViewport, onReload, hidden, sidebar, sidebarId, onSidebar, fullscreenTrigger, onFullscreen, onFitWidth }: { tab: PageTab; onViewport: (viewport: Viewport) => void; onReload: () => void; hidden: boolean; sidebar: 'open' | 'hidden'; sidebarId: string; onSidebar: (value: 'open' | 'hidden') => void; fullscreenTrigger: React.RefObject<HTMLButtonElement | null>; onFullscreen: () => void; onFitWidth: () => void }) {
   const [width, setWidth] = useState(String(tab.viewport.width)), [height, setHeight] = useState(String(tab.viewport.height));
   const toast = useToastManager();
   function apply(event: React.FormEvent<HTMLFormElement>) {
@@ -117,10 +117,7 @@ function ViewportToolbar({ tab, onViewport, onReload, hidden, sidebar, sidebarId
     onViewport({ width: Number(width), height: Number(height) });
   }
   return <div className={`${hidden ? 'hidden' : 'flex'} shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2`}>
-    <div role="group" aria-label="Visibilità sidebar" className="flex gap-1">
       <Button variant="outline" size="icon" aria-controls={sidebarId} aria-expanded={sidebar !== 'hidden'} aria-label={sidebar === 'hidden' ? 'Apri sidebar' : 'Nascondi sidebar'} title={sidebar === 'hidden' ? 'Apri sidebar' : 'Nascondi sidebar'} onClick={() => onSidebar(sidebar === 'hidden' ? 'open' : 'hidden')}>{sidebar === 'hidden' ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}</Button>
-      {sidebar !== 'hidden' ? <Button variant={sidebar === 'compact' ? 'secondary' : 'outline'} size="icon" aria-controls={sidebarId} aria-pressed={sidebar === 'compact'} aria-label={sidebar === 'compact' ? 'Espandi sidebar' : 'Riduci sidebar'} title={sidebar === 'compact' ? 'Espandi sidebar' : 'Riduci sidebar'} onClick={() => onSidebar(sidebar === 'compact' ? 'open' : 'compact')}><PanelLeft aria-hidden="true" /></Button> : null}
-    </div>
     <Button variant="outline" size="icon" aria-label="Ricarica pagina" onClick={onReload}><RotateCw aria-hidden="true" /></Button>
     <a href={tab.url} target="_blank" rel="noopener noreferrer" className="mr-auto flex min-w-0 max-w-72 items-center gap-1 rounded-sm text-xs text-muted-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring"><span className="truncate">{tab.url}</span><ExternalLink className="size-3 shrink-0" aria-hidden="true" /><span className="sr-only">Apri pagina in una nuova scheda</span></a>
     <div role="group" aria-label="Preset viewport" className="flex gap-1">{viewportPresets.map(preset => <Button key={preset.label} variant={!tab.fitWidth && tab.viewport.width === preset.width && tab.viewport.height === preset.height ? 'secondary' : 'ghost'} size="sm" aria-pressed={!tab.fitWidth && tab.viewport.width === preset.width && tab.viewport.height === preset.height} onClick={() => { setWidth(String(preset.width)); setHeight(String(preset.height)); onViewport({ width: preset.width, height: preset.height }); }}>{preset.label}</Button>)}</div>
