@@ -52,7 +52,26 @@ export function RadioButtons({ id, label, value, options, onValueChange, disable
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const selected = useRef<HTMLSpanElement>(null);
+  const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
   const tip = compact ? 7 : 10;
+
+  useEffect(() => {
+    if (variant !== 'standard') return;
+    const segment = selected.current;
+    const group = segment?.parentElement;
+    if (!segment || !group) return;
+    function positionIndicator() {
+      if (!segment) return;
+      const left = segment.offsetLeft;
+      const width = segment.offsetWidth;
+      setIndicator(previous => previous?.left === left && previous.width === width ? previous : { left, width });
+    }
+    positionIndicator();
+    const observer = new ResizeObserver(positionIndicator);
+    observer.observe(group);
+    observer.observe(segment);
+    return () => observer.disconnect();
+  }, [value, variant, compact, options.length]);
 
   useEffect(() => {
     const container = scroller.current;
@@ -72,13 +91,16 @@ export function RadioButtons({ id, label, value, options, onValueChange, disable
   }, [value]);
 
   return <div ref={scroller} className="min-w-0 max-w-full overflow-x-auto overscroll-x-contain py-1">
-    <RadioGroup id={id} aria-label={label} value={value} disabled={disabled} onValueChange={onValueChange} className={cn('relative flex w-full min-w-max flex-nowrap', variant === 'standard' && 'gap-2')}>
+    <RadioGroup id={id} aria-label={label} value={value} disabled={disabled} onValueChange={onValueChange} className={cn('relative isolate flex w-full min-w-max flex-nowrap', variant === 'standard' && 'rounded-full bg-muted p-1')}>
+      {variant === 'standard' && indicator ? <span aria-hidden="true"
+        className={cn('pointer-events-none absolute inset-y-1 left-0 rounded-full bg-background shadow-sm transition-[transform,width] duration-400 ease-[cubic-bezier(0.34,1.56,0.64,1)] motion-reduce:transition-none', disabled && 'opacity-50')}
+        style={{ width: indicator.width, transform: `translateX(${indicator.left}px)` }} /> : null}
       {options.map((option, index) => {
         const first = index === 0;
         const last = index === options.length - 1;
         const checked = value === option.value;
         if (variant === 'standard') return <Radio.Root key={option.value} ref={checked ? selected : undefined} value={option.value}
-          className={cn('relative inline-flex shrink-0 flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-lg border font-medium outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 motion-reduce:transition-none', compact ? 'h-8 px-3 text-xs' : 'min-h-10 px-4 py-2 text-sm', checked ? 'border-primary bg-primary/10 text-primary hover:bg-primary/15' : 'border-border bg-background text-foreground hover:border-primary hover:bg-muted')}>
+          className={cn('relative z-10 inline-flex shrink-0 flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-full border-0 bg-transparent font-medium outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 motion-reduce:transition-none', compact ? 'h-8 px-3 text-xs' : 'min-h-10 px-4 py-2 text-sm', checked ? 'text-primary' : 'text-muted-foreground hover:text-foreground')}>
           {option.label}
         </Radio.Root>;
         return <Radio.Root key={option.value} ref={checked ? selected : undefined} value={option.value}
