@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { getReportPage } from './report-actions';
 import { PlaygroundReports } from './playground-reports';
 import { PlaygroundFrame } from './playground-frame';
+import type { PlaygroundReport } from './playground-trigger';
 import { isViewportDimension, playgroundUrl, viewportPresets, type PlaygroundEnvironment, type Viewport } from '@/lib/playground';
 
 type PageTab = { fitWidth: boolean; visited: boolean; id: string; src: string; url: string; viewport: Viewport; connected: boolean; reload: number; requestedReport?: { id: string; requestId: string } };
@@ -19,7 +20,7 @@ function makeTab(url: string): PageTab {
   return { fitWidth: false, visited: false, id: crypto.randomUUID(), src: url, url, viewport: { width: 1440, height: 900 }, connected: false, reload: 0 };
 }
 
-export default function ProjectPlayground({ projectName, environments, initialEnvironmentId, onClose }: { initialEnvironmentId?: string; projectName: string; environments: PlaygroundEnvironment[]; onClose: () => void }) {
+export default function ProjectPlayground({ projectName, environments, initialEnvironmentId, initialReport, onClose }: { initialReport?: PlaygroundReport; initialEnvironmentId?: string; projectName: string; environments: PlaygroundEnvironment[]; onClose: () => void }) {
   const [open, setOpen] = useState(false);
   const opened = useRef(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -43,12 +44,12 @@ export default function ProjectPlayground({ projectName, environments, initialEn
         <Dialog.Close render={<Button variant="outline" size="icon" aria-label="Chiudi playground" />}><X aria-hidden="true" /></Dialog.Close>
       </header>
       <Dialog.Description className="sr-only">Sfoglia le pagine del progetto, modifica la viewport e gestisci le segnalazioni con il widget Reporty installato sul sito.</Dialog.Description>
-      {environment ? <EnvironmentPlayground key={environment.id} environment={environment} fullscreen={fullscreen} fullscreenTrigger={fullscreenTrigger} onFullscreen={() => setFullscreen(true)} onExitFullscreen={exitFullscreen} /> : <p className="p-6 text-muted-foreground">Aggiungi un ambiente per aprire il playground.</p>}
+      {environment ? <EnvironmentPlayground initialReport={environment.id === initialEnvironmentId ? initialReport : undefined} key={environment.id} environment={environment} fullscreen={fullscreen} fullscreenTrigger={fullscreenTrigger} onFullscreen={() => setFullscreen(true)} onExitFullscreen={exitFullscreen} /> : <p className="p-6 text-muted-foreground">Aggiungi un ambiente per aprire il playground.</p>}
     </Dialog.Popup></Dialog.Portal>
   </Dialog.Root>;
 }
 
-function EnvironmentPlayground({ environment, fullscreen, fullscreenTrigger, onFullscreen, onExitFullscreen }: { environment: PlaygroundEnvironment; fullscreen: boolean; fullscreenTrigger: React.RefObject<HTMLButtonElement | null>; onFullscreen: () => void; onExitFullscreen: () => void }) {
+function EnvironmentPlayground({ initialReport, environment, fullscreen, fullscreenTrigger, onFullscreen, onExitFullscreen }: { initialReport?: PlaygroundReport; environment: PlaygroundEnvironment; fullscreen: boolean; fullscreenTrigger: React.RefObject<HTMLButtonElement | null>; onFullscreen: () => void; onExitFullscreen: () => void }) {
   const [sidebar, setSidebar] = useState<'open' | 'hidden'>('open');
   const sidebarId = useId();
   const [tabs, setTabs] = useState<PageTab[]>([]);
@@ -64,7 +65,9 @@ function EnvironmentPlayground({ environment, fullscreen, fullscreenTrigger, onF
     void getReportPage(environment.id, { environments: [environment.id], limit: 1 }).then(result => {
       if (disposed) return;
       const pages = result.pages.flatMap(path => { try { return [playgroundUrl(path, environment.origin)]; } catch { return []; } });
-      const next = [...new Set(pages.length ? pages : [environment.origin])].map(makeTab);
+      const requestedUrl = initialReport ? playgroundUrl(initialReport.url, environment.origin) : undefined;
+      const next = [...new Set([...(requestedUrl ? [requestedUrl] : []), ...(pages.length ? pages : [environment.origin])])].map(makeTab);
+      if (initialReport) next[0].requestedReport = { id: initialReport.id, requestId: crypto.randomUUID() };
       next[0].visited = true;
       setTabs(next); setActiveId(next[0].id); setFailed(false);
     }).catch(error => {
@@ -73,7 +76,7 @@ function EnvironmentPlayground({ environment, fullscreen, fullscreenTrigger, onF
       loadError(error);
     }).finally(() => { if (!disposed) setLoading(false); });
     return () => { disposed = true; };
-  }, [environment.id, environment.origin, attempt]);
+  }, [environment.id, environment.origin, attempt, initialReport]);
   function update(id: string, change: Partial<PageTab>) { setTabs(items => items.map(item => item.id === id ? { ...item, ...change } : item)); }
   function activateTab(id: string) { setActiveId(id); setTabs(items => items.map(item => item.id === id && !item.visited ? { ...item, visited: true } : item)); }
   function closeTab(id: string) {

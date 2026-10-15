@@ -51,13 +51,13 @@ export default async function Project({ params, searchParams }: {
   ];
   return (
     <main className="w-full space-y-8 px-6 py-10 lg:px-10">
-      <Link href="/dashboard" className={buttonVariants({ variant: 'outline' })}>← Tutti i progetti</Link>
+      <Link href="/dashboard" className={buttonVariants({ variant: 'ghost' })}>← Tutti i progetti</Link>
       <header className="flex flex-wrap items-center gap-3">
         <h1 className="text-3xl font-semibold tracking-tight">{project.name}</h1>
         <Badge variant="secondary">Sviluppatore</Badge>
       </header>
       <Feedback message={message} />
-      <ProjectTabs projectName={project.name} playgroundEnvironments={environments.map(environment => { const widget = widgetsResult.data?.find(item => item.environment_id === environment.id); return { ...environment, publicKey: widget?.public_key ?? "", enabled: widget?.enabled === true }; })} key={`${report ?? "project"}:${tab ?? "reports"}:${expandedEnvironment ?? ""}`} initialTab={tab === "environments" || tab === "settings" ? tab : "reports"} reports={<ProjectReports initialReportId={report} environments={environments} participants={participants} />} environments={<>
+      <ProjectTabs projectName={project.name} playgroundEnvironments={environments.map(environment => { const widget = widgetsResult.data?.find(item => item.environment_id === environment.id); return { ...environment, publicKey: widget?.public_key ?? "", enabled: widget?.enabled === true }; })} key={`${report ?? "project"}:${tab ?? "reports"}:${expandedEnvironment ?? ""}`} initialTab={tab === "environments" || tab === "settings" ? tab : "reports"} reports={<ProjectReports projectId={projectId} initialReportId={report} environments={environments} participants={participants} />} environments={<>
       <section className="space-y-4" aria-labelledby="environments-title">
         <div><h2 id="environments-title" className="text-xl font-semibold">Ambienti</h2></div>
         {!environments.length ? <Card><CardContent className="py-6 text-muted-foreground">Nessun ambiente aggiunto.</CardContent></Card> : null}
