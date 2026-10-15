@@ -8,6 +8,9 @@ const source = stripTypeScriptTypes(await readFile(new URL('../packages/shared/u
   .replace(/import .* from 'react';/, 'const { useCallback, useEffect, useEffectEvent, useRef, useState } = hooks;')
   .replace('export function useReportPage','function useReportPage');
 const createHook = new Function('hooks',source+'\nreturn useReportPage;');
+const debounceSource = stripTypeScriptTypes(await readFile(new URL('../packages/shared/ui/use-debounced-value.tsx',import.meta.url),'utf8'))
+  .replace(/import .* from 'react';/, 'const { useEffect, useState } = hooks;')
+  .replace('export function useDebouncedValue','function useDebouncedValue');
 const flush = () => new Promise(resolve => setTimeout(resolve,0));
 const deferred = () => { let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject}; };
 const page = (offset=0,length=20,total=100) => ({reports:Array.from({length},(_,index)=>({id:String(offset+index)})),total,projectTotal:total,pages:['/']});
@@ -28,6 +31,28 @@ function host(load,{infinite=false}={}) {
     close(){for(const slot of slots)slot?.cleanup?.();},
   };
 }
+
+test('search waits for a pause in typing, including clearing, and cancels on unmount',t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  let current='',cleanup,previous;
+  const useDebouncedValue=new Function('hooks',debounceSource+'\nreturn useDebouncedValue;')({
+    useState:()=>[current,next=>{current=next;}],
+    useEffect:(effect,deps)=>{if(previous!==deps[0]){cleanup?.();previous=deps[0];cleanup=effect();}},
+  });
+  const render=value=>useDebouncedValue(value);
+  try {
+    assert.equal(render(''),'');
+    render('m');t.mock.timers.tick(200);
+    assert.equal(render('me'),'');t.mock.timers.tick(200);
+    assert.equal(render('menu'),'');t.mock.timers.tick(299);
+    assert.equal(current,'');t.mock.timers.tick(1);
+    assert.equal(render('menu'),'menu');
+    assert.equal(render(''),'menu');t.mock.timers.tick(300);
+    assert.equal(render(''),'');
+    render('discarded');cleanup();t.mock.timers.tick(300);
+    assert.equal(current,'');
+  }finally{cleanup?.();}
+});
 
 test('polling retains visible rows and never enables loading; explicit refresh still does',async()=>{
   const requests=[];

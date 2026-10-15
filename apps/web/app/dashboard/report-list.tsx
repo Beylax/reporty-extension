@@ -1,4 +1,5 @@
 'use client';
+import { useDebouncedValue } from '@reporty/shared/ui/use-debounced-value';
 import { ReplyComposer, ReplyAttachmentList } from '@reporty/shared/ui/reply-attachments';
 import type { AttachmentRequest } from '@reporty/shared';
 import { ReportPagination, REPORT_PAGE_SIZE } from '@/components/report-pagination';
@@ -53,7 +54,8 @@ export function ReportList({ environments, participants, initialReportId }: { in
   const moveLock = useRef(false);
   const [movingId, setMovingId] = useState<string | null>(null);
   const selectionVersion = useRef(0);
-  const [search, setSearch] = useState(''), [filter, setFilter] = useState<string[]>([]), [priority, setPriority] = useState<string[]>([]), [environment, setEnvironment] = useState<string[]>([]), [page, setPage] = useState<string[]>([]);
+  const [searchInput, setSearch] = useState(''), [filter, setFilter] = useState<string[]>([]), [priority, setPriority] = useState<string[]>([]), [environment, setEnvironment] = useState<string[]>([]), [page, setPage] = useState<string[]>([]);
+  const search = useDebouncedValue(searchInput);
   const [users, setUsers] = useState<string[]>([]);
   const [selected, setSelected] = useState<Report | null>(null), [comments, setComments] = useState<ReportComment[]>([]);
   const [edited, setEdited] = useState(''), [image, setImage] = useState('');
@@ -81,7 +83,7 @@ export function ReportList({ environments, participants, initialReportId }: { in
   const selectedReports = bulkSelection.scope === bulkScope ? bulkSelection.targets : [];
   const selectedIds = new Set(selectedReports.map(report => report.id));
   const allFilteredSelected = feed.total > 0 && selectedReports.length === feed.total;
-  const bulkDisabled = busy || moving || Boolean(bulkProgress) || feed.loading || selectingAll;
+  const bulkDisabled = busy || moving || Boolean(bulkProgress) || feed.loading || selectingAll || searchInput !== search;
   const refreshReports = useEffectEvent(async () => {
     if (bulkDisabled) return;
     await feed.poll();
@@ -215,7 +217,7 @@ export function ReportList({ environments, participants, initialReportId }: { in
   }
   return <section className="space-y-5" aria-labelledby="reports-title">
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="reports-title" className="text-xl font-semibold">Segnalazioni ({feed.projectTotal})</h2><div role="group" aria-label="Modalità di visualizzazione" className="hidden gap-1 rounded-lg border bg-background p-1 md:inline-flex"><Button variant={view === 'list' ? 'default' : 'ghost'} aria-pressed={view === 'list'} disabled={bulkDisabled} onClick={() => setView('list')}><List className="size-4" />Lista</Button><Button variant={view === 'kanban' ? 'default' : 'ghost'} aria-pressed={view === 'kanban'} disabled={bulkDisabled} onClick={() => setView('kanban')}><Columns3 className="size-4" />Kanban</Button></div></div>
-    <div><Input disabled={Boolean(bulkProgress)} aria-label="Cerca segnalazioni" className="w-full" placeholder="Cerca commento o pagina…" value={search} onChange={event => setSearch(event.target.value)} /></div>
+    <div><Input disabled={Boolean(bulkProgress)} aria-label="Cerca segnalazioni" className="w-full" placeholder="Cerca commento o pagina…" value={searchInput} onChange={event => setSearch(event.target.value)} /></div>
     {mobile ? <div className="flex items-center gap-2"><ReportFilterPanel filters={filterGroups} disabled={Boolean(bulkProgress)} /><ReportListOrder value={listOrder} onChange={setListOrder} disabled={bulkDisabled} /></div> : <fieldset disabled={Boolean(bulkProgress)} className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">{filterGroups.map(group => <ReportFilter key={group.label} {...group} />)}{view === 'kanban' ? <ReportOrder value={kanbanOrder} onChange={setKanbanOrder} kanban /> : null}</fieldset>}
     {activeFilters.length ? <div className="flex flex-wrap gap-2" aria-label="Filtri attivi">{activeFilters.map(item => <FilterPill key={item.key} label={item.label} onRemove={() => { if (!bulkProgress) item.remove(); }}><ReportIcon value={item.key.replace(/^(status|priority)-/, "")} /></FilterPill>)}</div> : null}
 

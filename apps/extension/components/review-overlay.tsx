@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioButtons } from '@/components/ui/radio-buttons';
+import { useDebouncedValue } from '@reporty/shared/ui/use-debounced-value';
 import { DeleteConfirm } from '@/components/delete-confirm';
 import { ReportOrder } from '@/components/report-order';
 import { ReportFilter } from '@/components/report-filter';
@@ -94,7 +95,8 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
   const [modalOpen, setModalOpen] = useState(false);
   const modal = useRef<HTMLDialogElement>(null);
   const [order, setOrder] = useState<ReportSort>({ field: 'status', direction: 'asc' });
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearch] = useState('');
+  const search = useDebouncedValue(searchInput);
   const [statuses, setStatuses] = useState<string[]>([]);
   const [priorities, setPriorities] = useState<string[]>([]);
   const [showResolved, setShowResolved] = useState(false);
@@ -470,7 +472,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
         }} />
         </section><footer className="rounded-xl border bg-muted/50 dark:bg-card p-4 text-xs text-muted-foreground"><p>Segnalata da {selected.authorName}</p><p>{selected.updated_at ? <>Ultima modifica: {selected.updatedByName ?? 'Utente'} · {formatReportDateTime(selected.updated_at)}</> : 'Nessuna modifica registrata'}</p><p>Viewport originale: {selected.context.viewport.width} × {selected.context.viewport.height} · scroll {Math.round(selected.context.scroll.y)} px</p></footer>{selected.canEdit ? <section aria-label="Zona pericolosa" className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4"><h3 className="text-sm font-semibold text-destructive">Zona pericolosa</h3><div className="flex justify-end"><DeleteConfirm fullWidth disabled={busy} description="Eliminare questa segnalazione e tutte le sue risposte? Questa operazione è definitiva." onConfirm={() => run(async () => { const result = await message({ type: 'REPORTY_REPORT', operation: 'delete', payload: { id: selected.id } }); setStatus('Segnalazione eliminata.', 'success'); if (result.warning) setStatus(result.warning,'error'); setSelected(null); await refresh(); })}><Trash2 className="size-4" aria-hidden="true" />Elimina</DeleteConfirm></div></section> : null}
       </div> : <div className="flex min-h-0 flex-1 flex-col gap-5">
-  <Input aria-label="Cerca segnalazioni" placeholder="Cerca commento o pagina…" className="h-10 w-full rounded-lg border bg-background px-3" value={search} onChange={event => setSearch(event.target.value)} />
+  <Input aria-label="Cerca segnalazioni" placeholder="Cerca commento o pagina…" className="h-10 w-full rounded-lg border bg-background px-3" value={searchInput} onChange={event => setSearch(event.target.value)} />
   <div className="flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-2">
     <ReportFilter label="Stato" options={Object.entries(statusLabels).map(([value,label]) => ({value,label}))} selected={statuses} onChange={setStatuses} />
     <ReportFilter label="Priorità" options={Object.entries(priorityLabels).map(([value,label]) => ({value,label}))} selected={priorities} onChange={setPriorities} />

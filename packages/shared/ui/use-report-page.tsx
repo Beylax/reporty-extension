@@ -24,7 +24,7 @@ export function useReportPage(query: ReportPageQuery, load: (query: ReportPageQu
     const parsed = JSON.parse(key)[1] as ReportPageQuery;
     const previous = cache.current.key === key ? cache.current.data : empty;
     setState({ key, data: previous, loading: true, failed: false });
-    // Debounce typing and collapse changes to multiple filters in the same render.
+    // Collapse changes to multiple filters in the same render.
     const timer = setTimeout(() => {
       const size = parsed.limit ?? 20;
       const batches = infinite ? Math.max(1, Math.ceil(previous.reports.length / size)) : 1;
@@ -34,7 +34,7 @@ export function useReportPage(query: ReportPageQuery, load: (query: ReportPageQu
       }).catch(error => {
         if (!disposed && request === version.current) { setState({ key, data: previous, loading: false, failed: true }); onError(error instanceof Error ? error.message : 'Segnalazioni non disponibili.'); }
       }).finally(() => { if (request === version.current) pending.current = false; });
-    }, parsed.search ? 250 : 0);
+    }, 0);
     return () => { disposed = true; clearTimeout(timer); version.current++; };
   }, [key, enabled, revision, refreshKey, infinite]);
   const loadMore = useCallback(async () => {
