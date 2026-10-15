@@ -146,3 +146,29 @@ test('a confirmed status survives an older explicit refresh without blocking sub
     assert.equal(h.value.loading,false);
   }finally{h.close();}
 });
+
+test('confirmed Kanban writes remain visible without loading while columns reconcile',async()=>{
+  const slow=deferred();let reload=false;
+  const h=host(async()=>reload?slow.promise:{...page(),reports:[{id:'move',status:'open',priority:'medium'}]},{infinite:true});
+  try {
+    h.render();await flush();h.render();
+    h.value.patchReport({id:'move',status:'resolved'});h.render();
+    assert.equal(h.value.reports[0].status,'resolved');assert.equal(h.value.loading,false);
+    reload=true;const commits=[];const pending=h.value.poll(apply=>commits.push(apply));h.render();
+    assert.equal(h.value.loading,false);assert.equal(h.value.reports[0].status,'resolved');
+    slow.resolve({...page(),reports:[]});assert.equal(await pending,true);h.render();
+    assert.equal(h.value.reports[0].status,'resolved');
+    commits.forEach(apply=>apply());h.render();assert.equal(h.value.reports.length,0);assert.equal(h.value.loading,false);
+  }finally{h.close();}
+});
+
+test('a staged column response cannot undo a later confirmed move',async()=>{
+  const h=host(async()=>({...page(),reports:[{id:'move',status:'open',priority:'medium'}]}),{infinite:true});
+  try {
+    h.render();await flush();h.render();const commits=[];
+    await h.value.poll(apply=>commits.push(apply));
+    h.value.patchReport({id:'move',status:'validation'});h.render();
+    commits.forEach(apply=>apply());h.render();
+    assert.equal(h.value.reports[0].status,'validation');assert.equal(h.value.loading,false);
+  }finally{h.close();}
+});

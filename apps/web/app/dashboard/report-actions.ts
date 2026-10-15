@@ -6,7 +6,7 @@ import { requireUser } from '@/lib/auth';
 import { executeBulkReports } from '@/lib/bulk-reports';
 import { removeStoredFiles } from '@/lib/supabase/storage';
 
-export async function mutateReport(environmentId: string, operation: string, payload: { id: string; body?: string; status?: string; priority?: string; replyId?: string; attachments?: string[] }) {
+export async function mutateReport(environmentId: string, operation: string, payload: { id: string; body?: string; status?: string; priority?: string; replyId?: string; attachments?: string[] }, refreshDashboard = true) {
   const { supabase } = await requireUser();
   if (!isUuid(environmentId) || !isUuid(payload.id) || !['reply', 'edit', 'status', 'priority', 'delete'].includes(operation)) return { error: 'Dati non validi.' };
   const { data, error } = await supabase.rpc('report_operation', { secret: null, target: environmentId, operation, payload });
@@ -15,7 +15,8 @@ export async function mutateReport(environmentId: string, operation: string, pay
   if (operation === 'delete') {
     try { await removeStoredFiles([...(data?.screenshot_path ? [data.screenshot_path] : []),...(data?.attachment_paths ?? [])]); } catch { warning = 'Segnalazione eliminata; pulizia dei file incompleta.'; }
   }
-  revalidatePath('/dashboard');
+  // Kanban confirms status/priority in its local cache and reloads only its data.
+  if (refreshDashboard !== false || !['status', 'priority'].includes(operation)) revalidatePath('/dashboard');
   return { success: true, warning };
 }
 

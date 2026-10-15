@@ -201,13 +201,14 @@ export function ReportList({ environments, participants, initialReportId }: { in
     startMove(async () => {
       updateOptimisticStatus({ id: report.id, ...(priority ? { priority } : { status }) });
       try {
-        const result = await mutateReport(report.environment_id, priority ? 'priority' : 'status', { id: report.id, ...(priority ? { priority } : { status }) });
+        const result = await mutateReport(report.environment_id, priority ? 'priority' : 'status', { id: report.id, ...(priority ? { priority } : { status }) }, view !== 'kanban');
         if (result.error) throw new Error(result.error);
         feed.patchReport({ id: report.id, ...(priority ? { priority } : { status }) });
         toast.add({ title: priority ? `Priorità aggiornata: ${priorityLabels[priority]}` : `Segnalazione spostata in ${labels[status]}`, type: 'success' });
         setSelected(previous => previous?.id === report.id ? { ...previous, ...(priority ? { priority } : { status }) } : previous);
         if (!priority) window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
-        router.refresh();
+        if (view === 'kanban') await feed.poll();
+        else router.refresh();
       } catch (error) { toast.add({ title: priority ? 'Aggiornamento priorità non riuscito' : 'Spostamento non riuscito', description: error instanceof Error ? error.message : 'Riprova.', type: 'error' }); }
       finally { moveLock.current = false; setMovingId(null); }
     });

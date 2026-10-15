@@ -54,8 +54,8 @@ export function useReportPage(query: ReportPageQuery, load: (query: ReportPageQu
       if (request === version.current) { setState(previous => ({ ...previous, loading: false, failed: true })); options.onError(error instanceof Error ? error.message : 'Segnalazioni non disponibili.'); }
     } finally { if (request === version.current) pending.current = false; }
   }, [enabled, infinite, key, state, load, query, options]);
-  async function poll() {
-    if (!enabled || pending.current || polling.current || state.key !== key) return;
+  async function poll(stageCommit?: (apply: () => void) => void) {
+    if (!enabled || pending.current || polling.current || state.key !== key) return false;
     const request = version.current;
     const previous = cache.current.key === key ? cache.current.data : state.data;
     polling.current = true;
@@ -63,17 +63,24 @@ export function useReportPage(query: ReportPageQuery, load: (query: ReportPageQu
       const size = query.limit ?? 20;
       const batches = infinite ? Math.max(1, Math.ceil(previous.reports.length / size)) : 1;
       const results = await Promise.all(Array.from({ length: batches }, (_, index) => load({ ...query, offset: (query.offset ?? 0) + index * size })));
-      if (request !== version.current) return;
+      if (request !== version.current) return false;
       const data = { ...(results[0] ?? empty), reports: results.flatMap(result => result.reports) };
-      cache.current = { key, data };
-      // Replace only the data: background work never enables skeletons or disables controls.
-      setState({ key, data, loading: false, failed: false });
-      pollingFailed.current = false;
+      const apply = () => {
+        if (request !== version.current) return;
+        cache.current = { key, data };
+        // Replace only the data: background work never enables skeletons or disables controls.
+        setState({ key, data, loading: false, failed: false });
+        pollingFailed.current = false;
+      };
+      if (stageCommit) stageCommit(apply);
+      else apply();
+      return true;
     } catch (error) {
       if (request === version.current && !pollingFailed.current) {
         pollingFailed.current = true;
         options.onError(error instanceof Error ? error.message : 'Segnalazioni non disponibili.');
       }
+      return false;
     } finally { polling.current = false; }
   }
   function patchReport(change: Pick<Report, 'id'> & Partial<Pick<Report, 'status' | 'priority'>>) {
