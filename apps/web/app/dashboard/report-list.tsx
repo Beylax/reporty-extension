@@ -82,12 +82,11 @@ export function ReportList({ environments, participants, initialReportId }: { in
   const selectedIds = new Set(selectedReports.map(report => report.id));
   const allFilteredSelected = feed.total > 0 && selectedReports.length === feed.total;
   const bulkDisabled = busy || moving || Boolean(bulkProgress) || feed.loading || selectingAll;
-  const [refreshing, startRefresh] = useTransition();
-  const refreshReports = useEffectEvent(() => {
-    if (bulkDisabled || refreshing) return;
-    startRefresh(() => router.refresh());
+  const refreshReports = useEffectEvent(async () => {
+    if (bulkDisabled) return;
+    await feed.poll();
   });
-  useEffect(() => startNotificationPolling(async () => { refreshReports(); }), []);
+  useEffect(() => startNotificationPolling(() => refreshReports()), []);
   function selectReport(id: string, checked: boolean) {
     const report = reports.find(item => item.id === id);
     if (!report) return;

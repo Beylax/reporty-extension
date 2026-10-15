@@ -10,6 +10,8 @@ export function useReportPage(query: ReportPageQuery, load: (query: ReportPageQu
   const [state, setState] = useState({ key: '', data: empty, loading: false, failed: false });
   const version = useRef(0);
   const pending = useRef(false);
+  const polling = useRef(false);
+  const pollingFailed = useRef(false);
   const cache = useRef({ key: '', data: empty });
   const [refreshKey, setRefreshKey] = useState(0);
   const fetchPage = useEffectEvent(load);
@@ -33,11 +35,12 @@ export function useReportPage(query: ReportPageQuery, load: (query: ReportPageQu
         if (!disposed && request === version.current) { setState({ key, data: previous, loading: false, failed: true }); onError(error instanceof Error ? error.message : 'Segnalazioni non disponibili.'); }
       }).finally(() => { if (request === version.current) pending.current = false; });
     }, parsed.search ? 250 : 0);
-    return () => { disposed = true; clearTimeout(timer); };
+    return () => { disposed = true; clearTimeout(timer); version.current++; };
   }, [key, enabled, revision, refreshKey, infinite]);
   const loadMore = useCallback(async () => {
     if (!infinite || !enabled || pending.current || state.key !== key || state.data.reports.length >= state.data.total) return;
-    const request = version.current;
+    // A user request takes precedence over an in-flight background update.
+    const request = ++version.current;
     pending.current = true;
     setState(previous => ({ ...previous, loading: true, failed: false }));
     try {
@@ -51,5 +54,27 @@ export function useReportPage(query: ReportPageQuery, load: (query: ReportPageQu
       if (request === version.current) { setState(previous => ({ ...previous, loading: false, failed: true })); options.onError(error instanceof Error ? error.message : 'Segnalazioni non disponibili.'); }
     } finally { if (request === version.current) pending.current = false; }
   }, [enabled, infinite, key, state, load, query, options]);
-  return { ...(state.key === key ? state.data : empty), loading: enabled && (state.key !== key || state.loading), failed: state.key === key && state.failed, loadMore, refresh: () => setRefreshKey(value => value + 1) };
+  async function poll() {
+    if (!enabled || pending.current || polling.current || state.key !== key) return;
+    const request = version.current;
+    const previous = cache.current.key === key ? cache.current.data : state.data;
+    polling.current = true;
+    try {
+      const size = query.limit ?? 20;
+      const batches = infinite ? Math.max(1, Math.ceil(previous.reports.length / size)) : 1;
+      const results = await Promise.all(Array.from({ length: batches }, (_, index) => load({ ...query, offset: (query.offset ?? 0) + index * size })));
+      if (request !== version.current) return;
+      const data = { ...(results[0] ?? empty), reports: results.flatMap(result => result.reports) };
+      cache.current = { key, data };
+      // Replace only the data: background work never enables skeletons or disables controls.
+      setState({ key, data, loading: false, failed: false });
+      pollingFailed.current = false;
+    } catch (error) {
+      if (request === version.current && !pollingFailed.current) {
+        pollingFailed.current = true;
+        options.onError(error instanceof Error ? error.message : 'Segnalazioni non disponibili.');
+      }
+    } finally { polling.current = false; }
+  }
+  return { ...(state.key === key ? state.data : empty), loading: enabled && (state.key !== key || state.loading), failed: state.key === key && state.failed, loadMore, poll, refresh: () => setRefreshKey(value => value + 1) };
 }

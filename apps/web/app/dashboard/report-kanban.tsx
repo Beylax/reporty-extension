@@ -39,7 +39,7 @@ function InfiniteColumn({ children, total, visible, loading, failed, onLoadMore 
   return <div ref={root} className="max-h-[65vh] min-h-40 space-y-3 overflow-y-auto p-3">
     {children}
     {hasMore || loading || failed ? <div ref={sentinel} role="status" aria-label="Caricamento altre segnalazioni" className="space-y-3">
-      {!failed ? <div className="space-y-3 rounded-xl border bg-card p-4"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /><Skeleton className="h-10 w-full" /></div> : null}
+      {loading && !failed ? <div className="space-y-3 rounded-xl border bg-card p-4"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /><Skeleton className="h-10 w-full" /></div> : null}
       <Button variant="outline" className="w-full" disabled={loading} onClick={onLoadMore}>{failed ? 'Riprova il caricamento' : 'Carica altre segnalazioni'}</Button>
     </div> : null}
   </div>;

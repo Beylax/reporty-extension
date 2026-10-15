@@ -14,5 +14,5 @@ export function useProjectReports(environmentId: string | undefined, query: Repo
     resolved: useReportPage({ ...query, offset: 0, statuses: ['resolved'] }, load, { ...options, enabled: view === 'kanban', infinite: true }),
   };
   const active = view === 'list' ? list : columns.open;
-  return { ...active, columns, reports: view === 'list' ? list.reports : Object.values(columns).flatMap(column => column.reports) };
+  return { ...active, columns, poll: async () => { await Promise.all((view === 'list' ? [list] : Object.values(columns)).map(feed => feed.poll())); }, reports: view === 'list' ? list.reports : Object.values(columns).flatMap(column => column.reports) };
 }
