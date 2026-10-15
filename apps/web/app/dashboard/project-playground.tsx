@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { Dialog } from '@base-ui/react/dialog';
 import { Tabs } from '@base-ui/react/tabs';
-import { ExternalLink, MonitorPlay, Plus, RotateCw, X } from 'lucide-react';
+import { ExternalLink, MonitorPlay, RotateCw, X } from 'lucide-react';
 import { getPageContext } from '@reporty/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,10 +20,16 @@ function makeTab(url: string): PageTab {
 }
 
 export default function ProjectPlayground({ projectName, environments, onClose }: { projectName: string; environments: PlaygroundEnvironment[]; onClose: () => void }) {
+  const [open, setOpen] = useState(false);
+  const opened = useRef(false);
   const [environmentId, setEnvironmentId] = useState(environments[0]?.id ?? '');
   const environment = environments.find(item => item.id === environmentId);
-  return <Dialog.Root open onOpenChange={open => { if (!open) onClose(); }}>
-    <Dialog.Portal><Dialog.Backdrop className="fixed inset-0 z-50 bg-background" /><Dialog.Popup className="fixed inset-0 z-50 flex h-dvh min-h-0 flex-col bg-background text-foreground outline-none">
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => { opened.current = true; setOpen(true); });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  return <Dialog.Root open={open} onOpenChange={setOpen} onOpenChangeComplete={value => { if (!value && opened.current) onClose(); }}>
+    <Dialog.Portal><Dialog.Backdrop className="fixed inset-0 z-50 bg-black/40 transition-opacity duration-200 ease-out data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 motion-reduce:transition-none" /><Dialog.Popup className="fixed inset-0 z-50 flex h-dvh min-h-0 flex-col bg-background text-foreground outline-none transition-[opacity,scale,translate] duration-200 ease-out data-[starting-style]:translate-y-3 data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0 data-[ending-style]:translate-y-3 data-[ending-style]:scale-[0.98] data-[ending-style]:opacity-0 motion-reduce:transition-none motion-reduce:transform-none">
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-3">
         <MonitorPlay className="size-5 text-primary" aria-hidden="true" />
         <Dialog.Title className="min-w-0 truncate font-semibold">Playground · {projectName}</Dialog.Title>
@@ -42,7 +48,6 @@ function EnvironmentPlayground({ environment }: { environment: PlaygroundEnviron
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const [urlInput, setUrlInput] = useState('');
   const toast = useToastManager();
   const active = tabs.find(tab => tab.id === activeId);
   const loadError = useEffectEvent((error: unknown) => toast.add({ title: 'Pagine non disponibili', description: error instanceof Error ? error.message : 'Riprova.', type: 'error' }));
@@ -62,17 +67,6 @@ function EnvironmentPlayground({ environment }: { environment: PlaygroundEnviron
     return () => { disposed = true; };
   }, [environment.id, environment.origin, attempt]);
   function update(id: string, change: Partial<PageTab>) { setTabs(items => items.map(item => item.id === id ? { ...item, ...change } : item)); }
-  function addPage(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    try {
-      const url = playgroundUrl(urlInput, environment.origin);
-      const existing = tabs.find(tab => getPageContext(tab.url).pagePath === getPageContext(url).pagePath && tab.url === url);
-      if (existing) activateTab(existing.id);
-      else { const tab = { ...makeTab(url), visited: true }; setTabs(items => [...items, tab]); setActiveId(tab.id); }
-      setUrlInput('');
-      toast.add({ title: existing ? 'Pagina già aperta' : 'Pagina aggiunta', type: 'success' });
-    } catch (error) { toast.add({ title: 'URL non valido', description: error instanceof Error ? error.message : 'Controlla l’indirizzo.', type: 'error' }); }
-  }
   function activateTab(id: string) { setActiveId(id); setTabs(items => items.map(item => item.id === id && !item.visited ? { ...item, visited: true } : item)); }
   function closeTab(id: string) {
     const index = tabs.findIndex(tab => tab.id === id), remaining = tabs.filter(tab => tab.id !== id);
@@ -92,7 +86,6 @@ function EnvironmentPlayground({ environment }: { environment: PlaygroundEnviron
             </div>)}
           </Tabs.List>
         </Tabs.Root>
-        <form onSubmit={addPage} className="flex w-full gap-2 sm:w-auto"><Input aria-label="URL della pagina da aggiungere" value={urlInput} onChange={event => setUrlInput(event.target.value)} placeholder="/pagina oppure URL dell’ambiente" className="sm:w-72" maxLength={8192} required /><Button type="submit" variant="outline" aria-label="Aggiungi pagina"><Plus aria-hidden="true" /></Button></form>
       </div>
       {failed ? <div className="flex items-center gap-3 p-4"><p className="text-sm">Impossibile caricare le pagine.</p><Button variant="outline" onClick={() => { setLoading(true); setAttempt(value => value + 1); }}>Riprova</Button></div> : null}
       {active ? <ViewportToolbar key={active.id} tab={active} onViewport={viewport => update(active.id, { viewport })} onReload={() => update(active.id, { src: active.url, reload: active.reload + 1, connected: false })} /> : null}
@@ -100,7 +93,7 @@ function EnvironmentPlayground({ environment }: { environment: PlaygroundEnviron
         {active ? <aside className="w-72 shrink-0 overflow-y-auto border-r p-4 xl:w-80" aria-label="Segnalazioni della pagina attiva"><PlaygroundReports key={`${environment.id}:${getPageContext(active.url).pagePath}`} environment={environment} pagePath={getPageContext(active.url).pagePath} connected={active.connected} onSelectReport={id => update(active.id, { requestedReport: { id, requestId: crypto.randomUUID() } })} /></aside> : null}
         <div className="flex min-h-0 min-w-80 flex-1 flex-col">
           {tabs.filter(tab => tab.visited).map(tab => <PlaygroundFrame key={tab.id} environment={environment} url={tab.src} viewport={tab.viewport} active={tab.id === activeId} reload={tab.reload} requestedReport={tab.requestedReport} onPage={(url, connected) => setTabs(items => items.map(item => item.id === tab.id && (item.url !== url || item.connected !== connected) ? { ...item, url, connected, requestedReport: item.url !== url ? undefined : item.requestedReport } : item))} />)}
-          {!tabs.length ? <p className="p-6 text-sm text-muted-foreground">Aggiungi un URL dell’ambiente per iniziare.</p> : null}
+          {!tabs.length ? <p className="p-6 text-sm text-muted-foreground">Nessuna pagina aperta. Riapri il playground o cambia ambiente per caricare nuovamente le pagine.</p> : null}
         </div>
       </div>
     </>}
