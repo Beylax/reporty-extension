@@ -24,6 +24,11 @@ export default defineContentScript({
     function renderReview(data: { site: Site; environment: Environment } | null) {
       root.render(data ? React.createElement(ToastProvider, { children: React.createElement(ReviewOverlay, {
         ...data, host,
+        onHiddenChange: async hidden => {
+          const response = await browser.runtime.sendMessage({ type: 'REPORTY_VISIBILITY', environmentId: data.environment.id, hidden });
+          if (!response?.ok) throw new Error(response?.error ?? 'Visibilità non aggiornata.');
+          if (!disposed) renderReview({ ...data, site: response.data as Site });
+        },
         onPositionChange: async position => {
           const response = await browser.runtime.sendMessage({ type: 'REPORTY_POSITION', environmentId: data.environment.id, position });
           if (!response?.ok) throw new Error(response?.error ?? 'Posizione non aggiornata.');

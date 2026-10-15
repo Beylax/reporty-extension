@@ -317,3 +317,38 @@ test('attachment transport binds the environment and trusted tab, keeping the se
   await flush();
   assert.equal(response?.ok,false);
 });
+
+
+test('Reporty visibility survives page reloads and remains scoped to the connected site', async () => {
+  const h = harness('guest');
+  h.stored['guestSession:https://example.com'] = 'a'.repeat(64);
+  h.stored.sites = {
+    'https://example.com': { environmentId: 'env', position: 'top_left' },
+    'https://other.example': { environmentId: 'other-env', position: 'bottom_right' },
+  };
+  const sender = { id: 'test', frameId: 0, tab: { id: 1 }, url: 'https://example.com/page' };
+  for (const hidden of [true, false]) {
+    let response;
+    h.events.internal({ type: 'REPORTY_VISIBILITY', environmentId: 'env', hidden }, sender, value => response = value);
+    await flush();
+    assert.equal(response.ok, true);
+    h.events.internal({ type: 'REPORTY_PAGE' }, sender, value => response = value);
+    await flush();
+    assert.equal(response.data.site.hidden, hidden);
+    assert.equal(response.data.site.position, 'top_left');
+    assert.equal(h.stored.sites['https://other.example'].hidden, undefined);
+    assert.equal(h.stored['guestSession:https://example.com'], 'a'.repeat(64));
+  }
+  for (const [input, source] of [
+    [{ hidden: 'true' }, sender],
+    [{ environmentId: 'other-env' }, sender],
+    [{}, { ...sender, frameId: 1 }],
+    [{}, { ...sender, url: 'https://other.example/page' }],
+  ]) {
+    let response;
+    h.events.internal({ type: 'REPORTY_VISIBILITY', environmentId: 'env', hidden: true, ...input }, source, value => response = value);
+    await flush();
+    assert.equal(response.ok, false);
+    assert.equal(h.stored.sites['https://example.com'].hidden, false);
+  }
+});

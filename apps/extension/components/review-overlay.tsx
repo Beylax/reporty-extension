@@ -27,7 +27,7 @@ import type { ReportSort, ReportNotification } from '@reporty/shared';
 import { useReportPage } from '@reporty/shared/ui/use-report-page';
 import type { NotificationPage, ReportPage, ReportPageQuery, ReportPin } from '@reporty/shared';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, Bell, Settings, Menu, X, Crosshair, Eye, MapPin, Pencil, Plus, Target, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Bell, Settings, Menu, X, Crosshair, Eye, EyeOff, MapPin, Pencil, Plus, Target, Trash2 } from 'lucide-react';
 import { notificationSummary, formatReportDateTime, getPageContext, priorityLabels, type ReportPriority, type Anchor, type Report, type ReportComment, type ReportContext } from '@reporty/shared';
 import type { Environment, Site } from '@/lib/session';
 import { captureHighlightedScreenshot } from '@/lib/screenshot';
@@ -80,7 +80,7 @@ function ExpandingPin({ children, anchorX, anchorY, ...props }: React.ButtonHTML
 
 type Draft = { id: string; context: ReportContext; screenshot?: string; body: string; priority: ReportPriority };
 
-export function ReviewOverlay({ site, environment, host, transport, logoUrl, onPositionChange }: { site: Site; environment: Environment; host: HTMLElement; onPositionChange: (position: Site['position']) => Promise<void>; transport?: (body: Record<string, unknown>) => Promise<unknown>; logoUrl?: string }) {
+export function ReviewOverlay({ site, environment, host, transport, logoUrl, onPositionChange, onHiddenChange }: { site: Site; environment: Environment; host: HTMLElement; onPositionChange: (position: Site['position']) => Promise<void>; onHiddenChange: (hidden: boolean) => Promise<void>; transport?: (body: Record<string, unknown>) => Promise<unknown>; logoUrl?: string }) {
   const rawMessage = async (body: Record<string, unknown>) => (transport ? await transport(body) : await extensionMessage(body)) as Awaited<ReturnType<typeof extensionMessage>>;
   const { ensureIdentity, nameDialog, nameDialogOpen } = useReviewerIdentity(rawMessage, environment.id);
   const message = async (body: Record<string, unknown>) => {
@@ -101,7 +101,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
   const [priorities, setPriorities] = useState<string[]>([]);
   const [showResolved, setShowResolved] = useState(false);
   const [pinsVisible, setPinsVisible] = useState(true);
-  const [hideReporty, setHideReporty] = useState(false);
+  const hideReporty = site.hidden === true;
   const [controlsRevealed, setControlsRevealed] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -224,6 +224,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
     try { await work(); } catch (error) { setStatus(error instanceof Error ? error.message : 'Operazione non riuscita.'); }
     finally { setBusy(false); }
   }
+  const visibilityLock = useRef(false);
   const positionLock = useRef(false);
   function updatePosition(value: string) {
     if (!isOpenerPosition(value) || value === site.position || busy || positionLock.current) return;
@@ -437,7 +438,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
           {notificationFilters.length ? <div className="flex shrink-0 flex-wrap gap-2" aria-label="Filtri notifiche attivi">{notificationFilters.map(filter => <FilterPill key={filter.key} label={filter.label} onRemove={filter.remove} />)}</div> : null}
           <InfiniteList key={JSON.stringify([environment.id, page.pagePath, notificationStatuses, notificationReads])} label="Lista notifiche della pagina" items={filteredNotifications} total={notificationFeed.total} onLoadMore={() => void notificationFeed.loadMore()} failed={notificationFeed.failed} onRetry={notificationFeed.refresh} loading={notificationsLoading} disabled={busy} loadingContent={<NotificationRowsSkeleton />} emptyContent={<p className="text-sm text-muted-foreground">{notificationFeed.totalInScope ? 'Nessuna notifica corrisponde ai filtri selezionati.' : 'Nessuna notifica per questa pagina.'}</p>} renderItem={item => <NotificationCard key={item.id} item={item} disabled={busy} reading={notificationReadingId === item.id} onOpen={() => readNotifications(item)} onMarkRead={() => readNotifications(item, false)} />} />
         </section> : settingsOpen ? <section className="space-y-4" aria-label="Impostazioni Reporty">
-          <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/50 p-4 dark:bg-card"><div className="space-y-1"><Label htmlFor="reporty-hidden">Nascondi Reporty</Label><p id="reporty-hidden-help" className="text-xs text-muted-foreground">Nasconde i pin e ritrae i pulsanti quando i pannelli sono chiusi. Usa la chevron sul bordo per riaprirli.</p></div><Switch id="reporty-hidden" checked={hideReporty} onCheckedChange={value => { setHideReporty(value); setControlsRevealed(false); }} aria-describedby="reporty-hidden-help" /></div>
+          <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/50 p-4 dark:bg-card"><div className="space-y-1"><Label htmlFor="reporty-hidden">Nascondi Reporty</Label><p id="reporty-hidden-help" className="text-xs text-muted-foreground">Nasconde i pin e ritrae i pulsanti quando i pannelli sono chiusi. Usa la chevron sul bordo per riaprirli.</p></div><Button id="reporty-hidden" variant="outline" size="icon" disabled={busy} aria-label="Nascondi Reporty" title={hideReporty ? 'Mostra Reporty' : 'Nascondi Reporty'} aria-pressed={hideReporty} aria-describedby="reporty-hidden-help" onClick={() => { if (busy || visibilityLock.current) return; visibilityLock.current = true; void run(async () => { try { await onHiddenChange(!hideReporty); setControlsRevealed(false); setStatus(hideReporty ? 'Reporty visibile.' : 'Reporty nascosto.', 'success'); } finally { visibilityLock.current = false; } }); }}>{hideReporty ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}</Button></div>
           <div className="space-y-3 rounded-xl border bg-muted/50 p-4 dark:bg-card"><div className="space-y-1"><Label htmlFor="reporty-opener-position">Posizione dei pulsanti</Label><p className="text-xs text-muted-foreground">Scegli dove mostrare il menu e il pulsante + su questo sito.</p></div><SelectField id="reporty-opener-position" value={site.position} options={openerPositionOptions} disabled={busy} onValueChange={updatePosition} /></div>
           <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/50 p-4 dark:bg-card"><div className="space-y-1"><Label htmlFor="reporty-pins-visible">Mostra segnalazioni sulla pagina</Label><p id="reporty-pins-help" className="text-xs text-muted-foreground">Mostra o nasconde tutti i pin. Le segnalazioni restano disponibili nella lista.</p></div><Switch id="reporty-pins-visible" checked={pinsVisible && !hideReporty} disabled={hideReporty} onCheckedChange={setPinsVisible} aria-describedby="reporty-pins-help" /></div>
           <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/50 p-4 dark:bg-card"><div className="space-y-1"><Label htmlFor="reporty-resolved">Mostra risolte</Label><p id="reporty-resolved-help" className="text-xs text-muted-foreground">Include i pin delle segnalazioni chiuse sulla pagina. Non modifica i filtri della lista.</p></div><Switch id="reporty-resolved" checked={showResolved && !hideReporty} onCheckedChange={setShowResolved} disabled={hideReporty || !pinsVisible} aria-describedby="reporty-resolved-help" /></div>

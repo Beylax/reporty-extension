@@ -135,7 +135,7 @@ export default defineBackground(() => {
         await browser.storage.local.set({ [`pendingConnection:${sender.tab.id}`]: { nonce, tabId: sender.tab.id, expiresAt: Date.now() + 120000 } });
         return sendResponse({ ok: true, data: { nonce, extensionId: browser.runtime.id } });
       }
-      if (['REPORTY_REPORT', 'REPORTY_SCREENSHOT', 'REPORTY_ATTACHMENT', 'REPORTY_POSITION', 'REPORTY_IDENTITY'].includes(message?.type)) {
+      if (['REPORTY_REPORT', 'REPORTY_SCREENSHOT', 'REPORTY_ATTACHMENT', 'REPORTY_POSITION', 'REPORTY_VISIBILITY', 'REPORTY_IDENTITY'].includes(message?.type)) {
         if (sender.frameId !== 0 || !sender.tab?.id || !sender.url) throw new Error('Pagina non valida.');
         const tab = await browser.tabs.get(sender.tab.id);
         if (!tab.url || new URL(tab.url).origin !== new URL(sender.url).origin) throw new Error('Pagina cambiata.');
@@ -145,6 +145,15 @@ export default defineBackground(() => {
         const sessionToken = await getSessionToken(origin);
         const context = sessionToken ? await getContext(origin, sessionToken) : null;
         if (!site || !context?.environments.some(item => item.id === site.environmentId && item.origin === origin)) throw new Error('Accesso al sito non disponibile.');
+        if (message.type === 'REPORTY_VISIBILITY') {
+          if (message.environmentId !== site.environmentId) throw new Error('Ambiente cambiato.');
+          if (typeof message.hidden !== 'boolean') throw new Error('Visibilità non valida.');
+          const updatedSite = { ...site, hidden: message.hidden };
+          await browser.storage.local.set({ sites: { ...(sites as Sites), [origin]: updatedSite } });
+          sendResponse({ ok: true, data: updatedSite });
+          void refreshTabs().catch(() => undefined);
+          return;
+        }
         if (message.type === 'REPORTY_POSITION') {
           if (message.environmentId !== site.environmentId) throw new Error('Ambiente cambiato.');
           if (!isOpenerPosition(message.position)) throw new Error('Posizione non valida.');

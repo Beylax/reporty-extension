@@ -15,6 +15,10 @@ const script=document.currentScript as HTMLScriptElement | null;
 const key=script?.dataset.reporty;
 const api=script ? new URL(script.src).origin : '';
 const storageKey=`reporty-widget:${key}`;
+const hiddenStorageKey = `${storageKey}:hidden`;
+function storedHidden() {
+  try { return localStorage.getItem(hiddenStorageKey) === 'true'; } catch { return false; }
+}
 const positionStorageKey = `${storageKey}:position`;
 function storedPosition(): Site['position'] {
   try {
@@ -39,6 +43,12 @@ function Widget() {
   const [config,setConfig]=useState<{enabled:boolean;environment:Environment}|null>(null);
   const [token,setToken]=useState(storedToken);
   const [position,setPosition]=useState(storedPosition);
+  const [hidden,setHidden]=useState(storedHidden);
+  async function changeHidden(value: boolean) {
+    try { localStorage.setItem(hiddenStorageKey, String(value)); }
+    catch { throw new Error('Impossibile salvare la visibilità: lo storage del browser non è disponibile.'); }
+    setHidden(value);
+  }
   async function changePosition(value: Site['position']) {
     try { localStorage.setItem(positionStorageKey, value); }
     catch { throw new Error('Impossibile salvare la posizione: lo storage del browser non è disponibile.'); }
@@ -86,7 +96,7 @@ function Widget() {
     return result;
   }
   if(!config?.enabled)return null;
-  if(token)return <ReviewOverlay host={host} site={{environmentId:config.environment.id,position}} onPositionChange={changePosition} environment={config.environment} transport={transport} logoUrl={`${api}/brand/reporty-symbol.png`} />;
+  if(token)return <ReviewOverlay host={host} site={{environmentId:config.environment.id,position,hidden}} onHiddenChange={changeHidden} onPositionChange={changePosition} environment={config.environment} transport={transport} logoUrl={`${api}/brand/reporty-symbol.png`} />;
   const top = position.startsWith('top'), left = position.endsWith('left');
   return <div role={sessionStarting ? 'status' : undefined} aria-label={sessionStarting ? 'Caricamento pannello segnalazioni' : undefined} style={{ [top ? 'top' : 'bottom']: 24, [left ? 'left' : 'right']: 24 }} className="pointer-events-auto fixed flex items-center gap-1 rounded-full border bg-background p-1.5 shadow-xl">{sessionStarting ? <><Skeleton className="size-9 rounded-lg" /><Skeleton className="size-10 rounded-full" /></> : <Button size="icon" variant="ghost" aria-label="Riprova ad aprire le segnalazioni" onClick={() => setSessionAttempt(value => value + 1)}><Menu className="size-5" /></Button>}</div>;
 }
