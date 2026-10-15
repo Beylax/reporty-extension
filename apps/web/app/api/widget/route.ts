@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { isUuid, validateName } from '@reporty/shared';
+import { widgetOriginAllowed } from '@/lib/widget-origin';
 import { newToken, validToken } from '@/lib/invitation-token';
 import { POST as reports } from '../extension/reports/route';
 import { POST as attachment } from '../extension/attachments/route';
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
   if (!isUuid(key)) return new Response(null,{status:400});
   const supabase = await createClient();
   const {data,error} = await supabase.rpc('widget_config',{key});
-  if (error || !data || data.environment.origin !== origin) return new Response(null,{status:403});
+  if (error || !data || !widgetOriginAllowed(data.environment.origin, origin)) return new Response(null,{status:403});
   return cors(Response.json(data),origin);
 }
 export async function POST(request: Request) {

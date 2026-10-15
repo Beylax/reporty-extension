@@ -58,6 +58,20 @@ for (const migrate of [false, true]) test(`unnamed review sessions: ${migrate ? 
       assert.equal((await db.query('select count(*)::int as count from public.comment_attachments')).rows[0].count,1);
       await as(null);
     }
+    if (migrate) {
+      await db.exec('reset role');
+      const previousWidget = await readFile(new URL('../widget.sql', import.meta.url), 'utf8');
+      const previousReviewer = await readFile(new URL('../reviewer_read_only.sql', import.meta.url), 'utf8');
+      for (const [source, name] of [[previousWidget,'widget_authorize'], [previousWidget,'report_actor'], [previousReviewer,'start_widget_session']]) {
+        const start = source.indexOf('function public.' + name + '(');
+        const definition = 'create or replace ' + source.slice(start, source.indexOf('\n$$;', start) + 4);
+        await db.exec(definition);
+      }
+      const update = await readFile(new URL('../widget_localhost.sql', import.meta.url), 'utf8');
+      await db.exec(update);
+      await db.exec(update);
+      await as(null);
+    }
     const guest = '2'.repeat(64), handoff = '3'.repeat(64), extension = '4'.repeat(64), widgetToken = '5'.repeat(64);
     await db.query('select public.start_guest_session($1,null,$2)',[link,guest]);
     await db.query("select public.create_guest_handoff($1,encode(sha256(convert_to($2,'UTF8')),'hex'))",[guest,handoff]);
@@ -85,6 +99,31 @@ for (const migrate of [false, true]) test(`unnamed review sessions: ${migrate ? 
       await assert.rejects(identity(secret,otherEnv,'Intruder'),/Not authorized|unavailable/);
       await assert.rejects(identity(secret,env,'   '),/Invalid name/);
     }
+    const localTokens = [];
+    for (const [index, origin] of ['http://localhost', 'http://localhost:3000', 'https://localhost:8443'].entries()) {
+      const token = String(index + 7).repeat(64);
+      localTokens.push(token);
+      await db.query('select public.start_widget_session($1,$2,null,$3)', [widget,origin,token]);
+      assert.equal((await db.query('select public.widget_authorize($1,$2) as id', [token,origin])).rows[0].id, env);
+      for (const other of ['https://review.example', 'http://localhost:4000', 'https://foreign.example']) {
+        await assert.rejects(db.query('select public.widget_authorize($1,$2)', [token,other]), /unavailable/);
+      }
+      await assert.rejects(db.query('select public.widget_authorize($1,$2)', [widgetToken,origin]), /unavailable/);
+      assert.ok((await report(token,env,'list')).length);
+      await assert.rejects(report(token,env2,'list'), /Not authorized|unavailable/);
+      const localContext = {...context, origin, url:origin + '/local?debug=1#/route', pagePath:'/local#/route'};
+      await assert.rejects(report(token,env,'create',{body:'Name required',context:localContext}), /REVIEWER_NAME_REQUIRED/);
+      await identity(token,env,'Local reviewer');
+      const created = await report(token,env,'create',{body:'Local report',context:localContext});
+      assert.equal(created.context.url, localContext.url);
+      assert.equal(created.environment_id, env);
+      await assert.rejects(report(token,env,'create',{body:'Wrong origin',context}), /Invalid report/);
+      await report(token,env,'reply',{id:created.id,body:'Local reply'});
+      await report(token,env,'status',{id:created.id,status:'validation'});
+    }
+    for (const origin of ['https://foreign.example','http://localhost.evil.test:3000','http://localhost@evil.test','http://127.0.0.1:3000','null','http://localhost:3000/path']) {
+      await assert.rejects(db.query('select public.start_widget_session($1,$2,null,$3)', [widget,origin,'a'.repeat(64)]), /Widget unavailable/);
+    }
     await assert.rejects(report(widgetToken,env2,'list'),/Not authorized|unavailable/);
     assert.deepEqual(await report(extension,env2,'list'),[]);
     await assert.rejects(db.query('update public.guest_sessions set display_name=$1',['Bypass']),/permission denied/);
@@ -105,11 +144,15 @@ for (const migrate of [false, true]) test(`unnamed review sessions: ${migrate ? 
     await as(developer);
     await db.query('update public.environment_widgets set enabled=false where environment_id=$1',[env]);
     await as(null);
+    for (const token of localTokens) await assert.rejects(report(token,env,'list'), /unavailable/);
+    await assert.rejects(db.query('select public.start_widget_session($1,$2,null,$3)',[widget,'http://localhost:3000','b'.repeat(64)]), /Widget unavailable/);
     await assert.rejects(identity(widgetToken,env),/unavailable/);
     await assert.rejects(report(widgetToken,env,'list'),/unavailable/);
     await as(developer);
     await db.query('select public.regenerate_environment_review_link($1)',[env]);
+    await db.query('update public.environment_widgets set enabled=true where environment_id=$1',[env]);
     await as(null);
+    for (const token of localTokens) await assert.rejects(report(token,env,'list'), /unavailable/);
     await assert.rejects(identity(extension,env,'Revoked'),/revoked/);
     await assert.rejects(report(extension,env,'list'),/revoked/);
     await assert.rejects(db.query('select public.start_guest_session($1,null,$2)',[link,'7'.repeat(64)]),/Invalid invitation/);
