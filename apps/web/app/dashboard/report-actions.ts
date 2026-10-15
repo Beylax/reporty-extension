@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { bulkReportRequestSchema, isUuid } from '@reporty/shared';
+import { bulkReportRequestSchema, isUuid, reportPageSchema, type ReportPage, type ReportSelection } from '@reporty/shared';
 import { requireUser } from '@/lib/auth';
 import { executeBulkReports } from '@/lib/bulk-reports';
 import { removeStoredFiles } from '@/lib/supabase/storage';
@@ -44,4 +44,18 @@ export async function mutateReportsBulk(input: unknown) {
     for (const id of projects) revalidatePath(`/dashboard/projects/${id}`);
   }
   return { data: result };
+}
+
+export async function getReportPage(environmentId: string, input: unknown): Promise<ReportPage> {
+  const { supabase } = await requireUser();
+  const parsed = reportPageSchema.safeParse(input);
+  if (!isUuid(environmentId) || !parsed.success) throw new Error('Dati di paginazione non validi.');
+  const { data, error } = await supabase.rpc('report_page', { secret: null, target: environmentId, payload: { ...parsed.data, projectScope: true } });
+  if (error) throw new Error('Caricamento segnalazioni non riuscito. Verifica che report_pagination.sql sia applicato e riprova.');
+  return data as ReportPage;
+}
+
+export async function getReportSelection(environmentId: string, input: unknown): Promise<ReportSelection[]> {
+  const page = await getReportPage(environmentId, { ...reportPageSchema.parse(input), selectionOnly: true });
+  return page.reports;
 }

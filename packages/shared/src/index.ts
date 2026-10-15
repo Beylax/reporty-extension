@@ -29,3 +29,9 @@ export interface ReportContext extends PageContext {
 }
 export { MAX_ATTACHMENT_BYTES, MAX_REPLY_ATTACHMENTS, attachmentRequestSchema, attachmentMime, isPreviewImage } from './attachments';
 export type { AttachmentRequest, ReplyAttachment } from './attachments';
+
+export { reportPageSchema } from './reports';
+export type { ReportPage, ReportPageQuery, ReportPin, ReportSelection } from './reports';
+
+export { notificationPageSchema } from './reports';
+export type { NotificationPageQuery, NotificationPage, NotificationCursor } from './reports';

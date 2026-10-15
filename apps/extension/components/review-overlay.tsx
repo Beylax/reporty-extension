@@ -1,6 +1,6 @@
 import { ReplyComposer, ReplyAttachmentList } from '@reporty/shared/ui/reply-attachments';
 import type { AttachmentRequest } from '@reporty/shared';
-import { ReportPagination, useReportPagination, REPORT_PAGE_SIZE } from '@/components/report-pagination';
+import { ReportPagination, REPORT_PAGE_SIZE } from '@/components/report-pagination';
 import { FilterPill } from '@/components/filter-pill';
 import { ReportIcon } from '@/components/report-icon';
 import { Switch } from '@/components/ui/switch';
@@ -15,6 +15,7 @@ import { openerPositionOptions, isOpenerPosition } from '@/lib/opener-position';
 import { ThemeSwitch } from '@/components/theme-switch';
 
 import { NotificationCard, NotificationRowsSkeleton } from '@/components/notification-content';
+import { useNotificationFeed } from '@reporty/shared/ui/use-notification-feed';
 import { InfiniteList } from '@reporty/shared/ui/infinite-list';
 import { BrandLogo } from '@/components/brand-logo';
 import { useNotify } from '@/components/ui/toast';
@@ -22,10 +23,11 @@ import { RepliesSkeleton, ReportDetailSkeleton, ReportRowsSkeleton, ScreenshotSk
 import { LoadingImage } from '@/components/loading-image';
 import { ScreenshotGallery } from '@/components/screenshot-gallery';
 import type { ReportSort, ReportNotification } from '@reporty/shared';
-import { compareReportsBy } from '@reporty/shared';
+import { useReportPage } from '@reporty/shared/ui/use-report-page';
+import type { NotificationPage, ReportPage, ReportPageQuery, ReportPin } from '@reporty/shared';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, Bell, Settings, Menu, X, Crosshair, Eye, MapPin, Pencil, Plus, Target, Trash2 } from 'lucide-react';
-import { notificationSummary, createNotificationArrivalTracker, compareReports, formatReportDateTime, getPageContext, priorityLabels, type ReportPriority, type Anchor, type Report, type ReportComment, type ReportContext } from '@reporty/shared';
+import { notificationSummary, formatReportDateTime, getPageContext, priorityLabels, type ReportPriority, type Anchor, type Report, type ReportComment, type ReportContext } from '@reporty/shared';
 import type { Environment, Site } from '@/lib/session';
 import { captureHighlightedScreenshot } from '@/lib/screenshot';
 import { captureTab } from '@/lib/capture-tab';
@@ -87,7 +89,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
   };
   const deepLink = useRef(new URL(location.href).searchParams.get('__reporty_issue'));
   const [page, setPage] = useState(getPageContext(location.href));
-  const [reports, setReports] = useState<Report[]>([]);
+  const [reports, setReports] = useState<ReportPin[]>([]);
   const [open, setOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const modal = useRef<HTMLDialogElement>(null);
@@ -101,55 +103,34 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
   const [controlsRevealed, setControlsRevealed] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<ReportNotification[]>([]);
   const [notificationStatuses, setNotificationStatuses] = useState<string[]>([]);
   const [notificationReads, setNotificationReads] = useState<string[]>(['unread']);
   const [notificationReadingId, setNotificationReadingId] = useState<string | null>(null);
-  const [notificationsLoading, setNotificationsLoading] = useState(true);
   const [notificationDetailLoading, setNotificationDetailLoading] = useState(false);
   const notificationLock = useRef(false);
-  const notificationRevision = useRef(0);
-  const collectNotificationArrivals = useRef(createNotificationArrivalTracker());
   const notificationScope = useRef('');
   notificationScope.current = environment.id + ':' + page.pagePath;
-  const pageNotifications = notifications.filter(item => item.environment_id === environment.id && item.page_path === page.pagePath);
-  const unreadNotifications = pageNotifications.filter(item => !item.read_at).length;
   const notificationReadLabels: Record<string, string> = { unread: 'Non lette', read: 'Lette' };
-  const filteredNotifications = pageNotifications.filter(item => (!notificationStatuses.length || notificationStatuses.includes(item.status)) && (!notificationReads.length || notificationReads.includes(item.read_at ? 'read' : 'unread')));
+  const notificationFeed = useNotificationFeed({ pagePath: page.pagePath, statuses: notificationStatuses as ReportNotification['status'][], reads: notificationReads as ('read' | 'unread')[] }, async query => {
+    const result = await message({ type: 'REPORTY_REPORT', operation: 'notifications', payload: query });
+    return result.data as NotificationPage;
+  }, { scope: environment.id + ':' + page.pagePath, enabled: modalOpen && notificationsOpen, onArrival: data => {
+    const item = data.latest;
+    if (item) setStatus(data.arrivalCount === 1 ? `${notificationSummary(item)} · ${(item.reply_body ?? item.body).slice(0,120)}` : `${data.arrivalCount} nuove notifiche per questa pagina.`, 'success');
+  }, onError: text => setStatus(text) });
+  const notificationsLoading = notificationFeed.loading || notificationFeed.summaryLoading;
+  const unreadNotifications = notificationFeed.unread;
+  const filteredNotifications = notificationFeed.items;
   const notificationFilters = [
     ...notificationStatuses.map(value => ({ key: 'status-'+value, label: 'Stato: '+statusLabels[value as keyof typeof statusLabels], remove: () => setNotificationStatuses(items => items.filter(item => item !== value)) })),
     ...notificationReads.map(value => ({ key: 'read-'+value, label: 'Lettura: '+notificationReadLabels[value], remove: () => setNotificationReads(items => items.filter(item => item !== value)) })),
   ];
-  function acceptNotifications(next: ReportNotification[]) {
-    const arrivals = collectNotificationArrivals.current(next);
-    setNotifications(next);
-    const item = arrivals[0];
-    if (!item) return;
-    setStatus(arrivals.length === 1 ? `${notificationSummary(item)} · ${(item.reply_body ?? item.body).slice(0,120)}` : `${arrivals.length} nuove notifiche per questa pagina.`, 'success');
-  }
   useEffect(() => {
-    collectNotificationArrivals.current = createNotificationArrivalTracker();
-    let disposed = false, pending = false, failed = false;
-    setNotifications([]); setNotificationReadingId(null); setNotificationsLoading(true); setNotificationsOpen(false); setNotificationDetailLoading(false);
-    async function refreshNotifications() {
-      if (pending || notificationLock.current) return;
-      pending = true;
-      const version = notificationRevision.current;
-      try {
-        const result = await message({ type: 'REPORTY_REPORT', operation: 'notifications', payload: { pagePath: page.pagePath } });
-        if (!disposed && version === notificationRevision.current) { acceptNotifications(result.data); failed = false; }
-      } catch (error) {
-        if (!disposed && !failed) setStatus(error instanceof Error ? error.message : 'Notifiche non disponibili.');
-        failed = true;
-      } finally { pending = false; if (!disposed) setNotificationsLoading(false); }
-    }
-    void refreshNotifications();
-    const timer = setInterval(() => { if (document.visibilityState === 'visible') void refreshNotifications(); }, 10000);
-    return () => { disposed = true; clearInterval(timer); };
+    setNotificationReadingId(null); setNotificationsOpen(false); setNotificationDetailLoading(false);
   }, [environment.id, page.pagePath]);
   async function readNotifications(item?: ReportNotification, openReport = true) {
     if (notificationLock.current) return;
-    notificationLock.current = true; notificationRevision.current++;
+    notificationLock.current = true;
     const scope = notificationScope.current;
     setNotificationReadingId(item && !openReport ? item.id : null);
     if (item && openReport) {
@@ -159,13 +140,13 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
     }
     await run(async () => {
       try {
-        const result = await message({ type: 'REPORTY_REPORT', operation: item ? 'notification_read' : 'notifications_read', payload: { pagePath: page.pagePath, ...(item ? { id: item.id } : {}) } });
+        const result = await message({ type: 'REPORTY_REPORT', operation: item ? 'notification_read' : 'notifications_read', payload: { paginated: true, mode: 'summary', pagePath: page.pagePath, ...(item ? { id: item.id } : {}) } });
         if (scope !== notificationScope.current) return;
-        acceptNotifications(result.data);
+        notificationFeed.applyRead(result.data as NotificationPage, item?.id);
         if (item && openReport) {
-          const [thread, listing] = await Promise.all([loadThread(item.issue_id), message({ type: 'REPORTY_REPORT', operation: 'list', payload: { pagePath: page.pagePath } })]);
+          const [thread, listing] = await Promise.all([loadThread(item.issue_id), message({ type: 'REPORTY_REPORT', operation: 'page', payload: { pagePath: page.pagePath, id: item.issue_id, limit: 1 } })]);
           if (scope !== notificationScope.current) return;
-          const report = (listing.data as Report[]).find(entry => entry.id === item.issue_id);
+          const report = (listing.data as ReportPage).reports.find(entry => entry.id === item.issue_id);
           if (!report) throw new Error('Segnalazione non disponibile.');
           if (report.environment_id !== environment.id || report.page_path !== page.pagePath) throw new Error('Segnalazione non disponibile in questa pagina.');
           setReports(items => items.some(entry => entry.id === report.id) ? items.map(entry => entry.id === report.id ? { ...entry, ...report } : entry) : [...items, report]);
@@ -194,11 +175,22 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
   const [imageUrl, setImageUrl] = useState('');
   const [galleryOpen, setGalleryOpen] = useState(false);
   const setStatus = useNotify();
-  const [listLoading, setListLoading] = useState(true);
+  const [pinsLoading, setPinsLoading] = useState(true);
   const [threadLoading, setThreadLoading] = useState(false);
   const [imageLoading, setImageLoading] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const filterKey = JSON.stringify([environment.id, page.pagePath, search, statuses, priorities, order]);
+  const [pageSelection, setPageSelection] = useState({ key: filterKey, page: 1 });
+  const pageNumber = pageSelection.key === filterKey ? pageSelection.page : 1;
+  async function fetchPage(query: ReportPageQuery): Promise<ReportPage> {
+    const result = await message({ type: 'REPORTY_REPORT', operation: 'page', payload: query });
+    return result.data;
+  }
+  const listFeed = useReportPage({ pagePath: page.pagePath, offset: (pageNumber - 1) * REPORT_PAGE_SIZE, limit: REPORT_PAGE_SIZE, search, statuses: statuses as Report['status'][], priorities: priorities as ReportPriority[], sort: order }, fetchPage, { scope: environment.id, onError: message => setStatus(message) });
+  const listLoading = listFeed.loading;
+  const pagination = { page: pageNumber, pages: Math.max(1, Math.ceil(listFeed.total / REPORT_PAGE_SIZE)), setPage: (next: number) => setPageSelection({ key: filterKey, page: next }) };
+  if (!listFeed.loading && !listFeed.failed && pageNumber > pagination.pages) setPageSelection({ key: filterKey, page: pagination.pages });
   const [, tick] = useState(0);
   const [hover, setHover] = useState<DOMRect | null>(null);
   async function loadThread(id: string) {
@@ -213,14 +205,17 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
     setCapturing(true);
     try { return await captureHighlightedScreenshot(host, context, captureTab); } finally { setCapturing(false); }
   }
+  const pinsRevision = useRef(0);
   async function refresh() {
-    setListLoading(true);
+    const revision = ++pinsRevision.current;
+    const scope = notificationScope.current;
+    setPinsLoading(true);
+    listFeed.refresh();
     try {
-      const result = await message({ type: 'REPORTY_REPORT', operation: 'list', payload: {} });
-      const ordered = [...(result.data as Report[])].sort(compareReports);
-      setReports(ordered);
-      return ordered;
-    } finally { setListLoading(false); }
+      const result = await message({ type: 'REPORTY_REPORT', operation: 'pins', payload: { pagePath: page.pagePath } });
+      if (scope === notificationScope.current && revision === pinsRevision.current) setReports(result.data);
+      return result.data as ReportPin[];
+    } finally { if (scope === notificationScope.current && revision === pinsRevision.current) setPinsLoading(false); }
   }
   async function run(work: () => Promise<void>) {
     setBusy(true); setStatus('');
@@ -251,9 +246,9 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
         await message({ type: 'REPORTY_REPORT', operation: field, payload: { id: previous.id, [field]: value } });
         setStatus(field === 'status' ? 'Stato aggiornato.' : 'Priorità aggiornata.', 'success');
         try {
-          const result = await message({ type: 'REPORTY_REPORT', operation: 'list', payload: {} });
-          setReports(result.data);
-          setSelected(item => item?.id === previous.id ? result.data.find((report: Report) => report.id === previous.id) ?? item : item);
+          await refresh();
+          const result = await fetchPage({ id: previous.id, limit: 1, pagePath: page.pagePath });
+          setSelected(item => item?.id === previous.id ? result.reports[0] ?? item : item);
         } catch { /* A confirmed mutation is not rolled back if reloading fails. */ }
       } catch (error) {
         setReports(items => items.map(item => item.id === previous.id ? { ...item, [field]: previous[field] } : item));
@@ -262,23 +257,31 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
       } finally { updateLock.current = false; }
     });
   }
-  async function view(report: Report) {
-    setSettingsOpen(false); setNotificationsOpen(false); setSelected(report); setDraft(null); setEdit(null); setComments([]); setImageUrl(''); setOpen(false); setModalOpen(true);
+  async function view(report: Report | ReportPin) {
+    if (busy) return;
+    const scope = notificationScope.current;
+    setSettingsOpen(false); setNotificationsOpen(false); setDraft(null); setEdit(null); setComments([]); setImageUrl(''); setOpen(false); setModalOpen(true);
+    setSelected('project_id' in report ? report : null);
+    setNotificationDetailLoading(true);
     await run(async () => {
-      const result = await loadThread(report.id);
-      setComments(result.data.comments);
+      try {
+        const [thread, listing] = await Promise.all([loadThread(report.id), fetchPage({ id: report.id, pagePath: page.pagePath, limit: 1 })]);
+        if (scope !== notificationScope.current) return;
+        if (!listing.reports[0]) throw new Error('Segnalazione non disponibile.');
+        setSelected(listing.reports[0]); setComments(thread.data.comments);
+      } finally { setNotificationDetailLoading(false); }
     });
   }
   useEffect(() => {
     let disposed = false;
-    setListLoading(true);
-    void refresh().catch(error => { if (!disposed) setStatus(error.message); }).finally(() => { if (!disposed) setListLoading(false); });
+    setPinsLoading(true);
+    void refresh().catch(error => { if (!disposed) setStatus(error.message); }).finally(() => { if (!disposed) setPinsLoading(false); });
     setSelected(null); setComments([]); setImageUrl('');
     return () => { disposed = true; };
   }, [page.pagePath, environment.id]);
   useEffect(() => {
     const id = deepLink.current;
-    if (!id || listLoading) return;
+    if (!id || pinsLoading) return;
     const report = reports.find(item => item.id === id && item.page_path === page.pagePath);
     if (!report) return;
     let attempts = 0;
@@ -310,7 +313,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
     };
     timer = setTimeout(move, 250);
     return () => { disposed = true; clearTimeout(timer); };
-  }, [reports, listLoading, page.pagePath]);
+  }, [reports, pinsLoading, page.pagePath]);
   useEffect(() => {
     const timer = setInterval(() => {
       const current = getPageContext(location.href);
@@ -358,9 +361,8 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
   }, [modalOpen]);
   useEffect(() => () => { modal.current?.close(); }, []);
   const pageReports = reports.filter(report => report.page_path === page.pagePath);
-  const filtered = pageReports.filter(report => (!statuses.length || statuses.includes(report.status)) && (!priorities.length || priorities.includes(report.priority ?? 'medium')) && `${report.body} ${report.page_path} ${report.authorName}`.toLocaleLowerCase('it').includes(search.toLocaleLowerCase('it'))).sort((a,b) => compareReportsBy(a,b,order));
-  const pagination = useReportPagination(filtered.length, JSON.stringify([search, statuses, priorities, page.pagePath, environment.id, order]));
-  const paginated = filtered.slice(pagination.start, pagination.start + REPORT_PAGE_SIZE);
+  const filtered = listFeed.reports;
+  const paginated = filtered;
   const listRef = useRef<HTMLElement | null>(null);
   const filters = [
     ...statuses.map(value => ({key: 'status-'+value, label: 'Stato: '+statusLabels[value as keyof typeof statusLabels], remove: () => setStatuses(items => items.filter(item => item !== value))})),
@@ -431,7 +433,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
         {notificationDetailLoading ? <ReportDetailSkeleton /> : notificationsOpen ? <section className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden" aria-label="Notifiche della pagina">
           <div className="flex shrink-0 items-center justify-between gap-2"><div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto pb-1"><ReportFilter label="Stato" options={Object.entries(statusLabels).map(([value,label]) => ({value,label}))} selected={notificationStatuses} onChange={setNotificationStatuses} /><ReportFilter label="Lettura" options={Object.entries(notificationReadLabels).map(([value,label]) => ({value,label}))} selected={notificationReads} onChange={setNotificationReads} /></div><Button variant="outline" size="sm" disabled={busy || notificationsLoading || !unreadNotifications} onClick={() => void readNotifications()}>Segna tutte come lette</Button></div>
           {notificationFilters.length ? <div className="flex shrink-0 flex-wrap gap-2" aria-label="Filtri notifiche attivi">{notificationFilters.map(filter => <FilterPill key={filter.key} label={filter.label} onRemove={filter.remove} />)}</div> : null}
-          <InfiniteList key={JSON.stringify([environment.id, page.pagePath, notificationStatuses, notificationReads])} label="Lista notifiche della pagina" items={filteredNotifications} loading={notificationsLoading} disabled={busy} loadingContent={<NotificationRowsSkeleton />} emptyContent={<p className="text-sm text-muted-foreground">{pageNotifications.length ? 'Nessuna notifica corrisponde ai filtri selezionati.' : 'Nessuna notifica per questa pagina.'}</p>} renderItem={item => <NotificationCard key={item.id} item={item} disabled={busy} reading={notificationReadingId === item.id} onOpen={() => readNotifications(item)} onMarkRead={() => readNotifications(item, false)} />} />
+          <InfiniteList key={JSON.stringify([environment.id, page.pagePath, notificationStatuses, notificationReads])} label="Lista notifiche della pagina" items={filteredNotifications} total={notificationFeed.total} onLoadMore={() => void notificationFeed.loadMore()} failed={notificationFeed.failed} onRetry={notificationFeed.refresh} loading={notificationsLoading} disabled={busy} loadingContent={<NotificationRowsSkeleton />} emptyContent={<p className="text-sm text-muted-foreground">{notificationFeed.totalInScope ? 'Nessuna notifica corrisponde ai filtri selezionati.' : 'Nessuna notifica per questa pagina.'}</p>} renderItem={item => <NotificationCard key={item.id} item={item} disabled={busy} reading={notificationReadingId === item.id} onOpen={() => readNotifications(item)} onMarkRead={() => readNotifications(item, false)} />} />
         </section> : settingsOpen ? <section className="space-y-4" aria-label="Impostazioni Reporty">
           <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/50 p-4 dark:bg-card"><div className="space-y-1"><Label htmlFor="reporty-hidden">Nascondi Reporty</Label><p id="reporty-hidden-help" className="text-xs text-muted-foreground">Nasconde i pin e ritrae i pulsanti quando i pannelli sono chiusi. Usa la chevron sul bordo per riaprirli.</p></div><Switch id="reporty-hidden" checked={hideReporty} onCheckedChange={value => { setHideReporty(value); setControlsRevealed(false); }} aria-describedby="reporty-hidden-help" /></div>
           <div className="space-y-3 rounded-xl border bg-muted/50 p-4 dark:bg-card"><div className="space-y-1"><Label htmlFor="reporty-opener-position">Posizione dei pulsanti</Label><p className="text-xs text-muted-foreground">Scegli dove mostrare il menu e il pulsante + su questo sito.</p></div><SelectField id="reporty-opener-position" value={site.position} options={openerPositionOptions} disabled={busy} onValueChange={updatePosition} /></div>
@@ -450,7 +452,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
           else window.scrollTo({ top: selected.context.scroll.y, left: selected.context.scroll.x, behavior: 'smooth' });
         }}><Target className="size-4" aria-hidden="true" /><span className="hidden sm:inline">Vai alla segnalazione</span></Button></div></div>
         <section className="space-y-3 rounded-xl border bg-muted/50 dark:bg-card p-4"><h4 className="text-sm font-semibold">Descrizione</h4>{edit === null ? <p className="whitespace-pre-wrap break-words leading-relaxed">{selected.body}</p> : null}
-        {selected.canEdit ? <div className="flex flex-col items-end gap-2">{edit === null ? <Button variant="outline" size="icon" aria-label="Modifica testo" title="Modifica testo" disabled={busy} onClick={() => setEdit(selected.body)}><Pencil className="size-4" aria-hidden="true" /></Button> : <form className="grid w-full gap-2" onSubmit={event => { event.preventDefault(); if (busy || !edit?.trim() || edit.trim() === selected.body.trim()) return; void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'edit', payload: { id: selected.id, body: edit } }); setStatus('Testo aggiornato.', 'success'); const items = await refresh(); setSelected(items.find(item => item.id === selected.id) ?? null); setEdit(null); }); }}><Textarea aria-label="Modifica descrizione" className="min-h-28 rounded-lg border bg-background p-3" required value={edit} maxLength={10000} onChange={event => setEdit(event.target.value)} /><div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={busy} onClick={() => setEdit(null)}>Annulla</Button><Button type="submit" disabled={busy || !edit.trim() || edit.trim() === selected.body.trim()}>Salva testo</Button></div></form>}</div> : null}</section>
+        {selected.canEdit ? <div className="flex flex-col items-end gap-2">{edit === null ? <Button variant="outline" size="icon" aria-label="Modifica testo" title="Modifica testo" disabled={busy} onClick={() => setEdit(selected.body)}><Pencil className="size-4" aria-hidden="true" /></Button> : <form className="grid w-full gap-2" onSubmit={event => { event.preventDefault(); if (busy || !edit?.trim() || edit.trim() === selected.body.trim()) return; void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'edit', payload: { id: selected.id, body: edit } }); setStatus('Testo aggiornato.', 'success'); await refresh(); const listing = await fetchPage({ id: selected.id, pagePath: page.pagePath, limit: 1 }); setSelected(listing.reports[0] ?? null); setEdit(null); }); }}><Textarea aria-label="Modifica descrizione" className="min-h-28 rounded-lg border bg-background p-3" required value={edit} maxLength={10000} onChange={event => setEdit(event.target.value)} /><div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={busy} onClick={() => setEdit(null)}>Annulla</Button><Button type="submit" disabled={busy || !edit.trim() || edit.trim() === selected.body.trim()}>Salva testo</Button></div></form>}</div> : null}</section>
         {galleryOpen ? <ScreenshotGallery autoOpen loading={imageLoading || !imageUrl} onClose={() => { setGalleryOpen(false); setImageUrl(''); }} src={imageUrl} aspectRatio={`${selected.context.viewport.width} / ${selected.context.viewport.height}`} /> : null}
         {selected.page_path === page.pagePath && !locate(selected.context.anchor) ? <p className="rounded-lg bg-muted p-3">Elemento non trovato o modificato. Consulta lo screenshot originale.</p> : null}
         <section className="space-y-4 rounded-xl border bg-muted/50 dark:bg-card p-4" aria-label="Gestione segnalazione">
@@ -478,13 +480,14 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
 
   <section ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1" aria-label="Lista segnalazioni">
     {listLoading ? <ReportRowsSkeleton /> : null}
-    {!listLoading && !filtered.length ? <p className="p-6 text-muted-foreground">Nessuna segnalazione trovata.</p> : null}
+    {listFeed.failed ? <Button variant="outline" onClick={listFeed.refresh}>Riprova il caricamento</Button> : null}
+    {!listLoading && !listFeed.failed && !filtered.length ? <p className="p-6 text-muted-foreground">Nessuna segnalazione trovata.</p> : null}
     {!listLoading && paginated.map(report => <button key={report.id} className="block w-full space-y-3 rounded-xl border bg-card p-4 text-left transition-colors duration-150 hover:border-primary/30 hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none" onClick={() => void view(report)}>
       <div className="flex flex-col items-start justify-between gap-3 sm:flex-row"><p className="min-w-0 flex-1 line-clamp-3 break-words font-medium">{report.body}</p><div className="flex shrink-0 flex-col items-start gap-2 text-xs sm:flex-row"><span className={`inline-flex items-center gap-1 rounded-full border border-[color-mix(in_oklab,currentColor_25%,transparent)] px-2 py-1 ${statusColors[report.status]}`}><ReportIcon value={report.status} />{statusLabels[report.status]}</span><span className={`inline-flex items-center gap-1 rounded-full border border-[color-mix(in_oklab,currentColor_25%,transparent)] px-2 py-1 ${priorityColors[report.priority ?? 'medium']}`}><ReportIcon value={report.priority ?? 'medium'} />Priorità {priorityLabels[report.priority ?? 'medium'].toLowerCase()}</span></div></div>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground"><div className="flex min-w-0 flex-wrap gap-2"><span>{report.authorName}</span><span className="break-all">· {report.page_path}</span></div><time dateTime={report.created_at} className="ml-auto shrink-0 text-right">{formatReportDateTime(report.created_at)}</time></div>
     </button>)}
   </section>
-  {!listLoading ? <ReportPagination total={filtered.length} page={pagination.page} pages={pagination.pages} onChange={next => { pagination.setPage(next); listRef.current?.scrollTo({ top: 0 }); }} /> : null}
+  {!listLoading ? <ReportPagination total={listFeed.total} page={pagination.page} pages={pagination.pages} onChange={next => { pagination.setPage(next); listRef.current?.scrollTo({ top: 0 }); }} /> : null}
 </div>}
       </div>
       {modalOpen ? floatingControls : null}

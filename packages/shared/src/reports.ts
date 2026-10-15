@@ -15,9 +15,36 @@ export const reportContextSchema = z.object({
   viewport: z.object({ width: coordinate.positive(), height: coordinate.positive(), devicePixelRatio: z.number().positive().max(10) }),
   scroll: z.object({ x: coordinate, y: coordinate }),
 });
+export const reportPageSchema = z.object({
+  offset: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(100).optional(),
+  projectScope: z.boolean().optional(), selectionOnly: z.boolean().optional(), id: z.string().uuid().optional(), pagePath: z.string().max(8192).optional(),
+  search: z.string().max(10000).optional(), statuses: z.array(z.enum(['open','in_progress','validation','resolved'])).max(4).optional(),
+  priorities: z.array(reportPrioritySchema).max(3).optional(), environments: z.array(z.string().uuid()).optional(),
+  pages: z.array(z.string().max(8192)).optional(), users: z.array(z.string().max(100)).optional(),
+  sort: z.object({ field: z.enum(['status','priority','created_at','updated_at','body','environment','authorName']), direction: z.enum(['asc','desc']) }).optional(),
+});
+export type ReportPageQuery = z.infer<typeof reportPageSchema>;
+export type ReportPage = { reports: Report[]; total: number; projectTotal: number; pages: string[] };
+
+export const notificationPageSchema = z.object({
+  paginated: z.literal(true).optional(), mode: z.enum(['page','summary']).optional(),
+  offset: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(100).optional(),
+  projects: z.array(z.string().uuid()).optional(), environments: z.array(z.string().uuid()).optional(),
+  statuses: z.array(z.enum(['open','in_progress','validation','resolved'])).max(4).optional(),
+  reads: z.array(z.enum(['read','unread'])).max(2).optional(), pagePath: z.string().max(8192).optional(),
+  after: z.object({ createdAt: z.string().datetime({ offset: true }), id: z.string().uuid() }).optional(),
+});
+export type NotificationPageQuery = z.infer<typeof notificationPageSchema>;
+export type NotificationCursor = NonNullable<NotificationPageQuery['after']>;
+export type NotificationPage = {
+  items: ReportNotification[]; total: number; totalInScope: number; unread: number;
+  cursor: NotificationCursor | null; arrivalCount: number; latest: ReportNotification | null;
+  projects: { value: string; label: string }[]; environments: { value: string; label: string; project_id: string }[];
+};
+
 export const reportRequestSchema = z.object({
-  environmentId: z.string().uuid(), operation: z.enum(['list', 'thread', 'create', 'reply', 'status', 'priority', 'edit', 'delete', 'notifications', 'notification_read', 'notifications_read']),
-  payload: z.object({ id: z.string().uuid().optional(), pagePath: z.string().max(8192).optional(), body: z.string().trim().min(1).max(10000).optional(), status: z.enum(['open','in_progress','validation','resolved']).optional(), priority: reportPrioritySchema.optional(), context: reportContextSchema.optional(), replyId: z.string().uuid().optional(), attachments: z.array(z.string().uuid()).max(5).optional() }),
+  environmentId: z.string().uuid(), operation: z.enum(['list', 'page', 'pins', 'thread', 'create', 'reply', 'status', 'priority', 'edit', 'delete', 'notifications', 'notification_read', 'notifications_read']),
+  payload: reportPageSchema.merge(notificationPageSchema).extend({ id: z.string().uuid().optional(), pagePath: z.string().max(8192).optional(), body: z.string().trim().min(1).max(10000).optional(), status: z.enum(['open','in_progress','validation','resolved']).optional(), priority: reportPrioritySchema.optional(), context: reportContextSchema.optional(), replyId: z.string().uuid().optional(), attachments: z.array(z.string().uuid()).max(5).optional() }),
   screenshot: z.string().max(3500000).optional(),
 });
 export type Report = {
@@ -52,3 +79,7 @@ export const bulkReportRequestSchema = z.discriminatedUnion('operation', [
 ]);
 export type BulkReportRequest = z.infer<typeof bulkReportRequestSchema>;
 export type BulkReportResult = { succeeded: string[]; failed: string[]; storageWarnings: string[] };
+
+export type ReportPin = Pick<Report, 'id' | 'environment_id' | 'page_path' | 'status' | 'priority' | 'body' | 'authorName'> & { context: Pick<Report['context'], 'anchor' | 'scroll'> };
+
+export type ReportSelection = Pick<Report, 'id' | 'environment_id' | 'canEdit' | 'canChangeStatus'>;

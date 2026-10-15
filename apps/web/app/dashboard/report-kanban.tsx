@@ -17,16 +17,16 @@ const columns: { value: Status; label: string }[] = [
 ];
 const colors = { open: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200', in_progress: 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200', validation: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200', resolved: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' };
 
-const COLUMN_BATCH_SIZE = 20;
+type ColumnFeed = { total: number; loading: boolean; failed: boolean; loadMore: () => Promise<void>; refresh: () => void };
 
-function InfiniteColumn({ children, total, visible, onLoadMore }: {
-  children: React.ReactNode; total: number; visible: number; onLoadMore: () => void;
+function InfiniteColumn({ children, total, visible, loading, failed, onLoadMore }: {
+  children: React.ReactNode; total: number; visible: number; loading: boolean; failed: boolean; onLoadMore: () => void;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const sentinel = useRef<HTMLDivElement>(null);
   const hasMore = visible < total;
   useEffect(() => {
-    if (!hasMore || !root.current || !sentinel.current) return;
+    if (loading || failed || !hasMore || !root.current || !sentinel.current) return;
     let frame: number | null = null;
     const observer = new IntersectionObserver(entries => {
       if (entries.some(entry => entry.isIntersecting) && frame === null) {
@@ -35,18 +35,19 @@ function InfiniteColumn({ children, total, visible, onLoadMore }: {
     }, { root: root.current, rootMargin: '0px 0px 160px 0px' });
     observer.observe(sentinel.current);
     return () => { observer.disconnect(); if (frame !== null) cancelAnimationFrame(frame); };
-  }, [hasMore, visible, onLoadMore]);
+  }, [hasMore, visible, loading, failed, onLoadMore]);
   return <div ref={root} className="max-h-[65vh] min-h-40 space-y-3 overflow-y-auto p-3">
     {children}
-    {hasMore ? <div ref={sentinel} role="status" aria-label="Caricamento altre segnalazioni" className="space-y-3">
-      <div className="space-y-3 rounded-xl border bg-card p-4"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /><Skeleton className="h-10 w-full" /></div>
-      <Button variant="outline" className="w-full" onClick={onLoadMore}>Carica altre segnalazioni</Button>
+    {hasMore || loading || failed ? <div ref={sentinel} role="status" aria-label="Caricamento altre segnalazioni" className="space-y-3">
+      {!failed ? <div className="space-y-3 rounded-xl border bg-card p-4"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /><Skeleton className="h-10 w-full" /></div> : null}
+      <Button variant="outline" className="w-full" disabled={loading} onClick={onLoadMore}>{failed ? 'Riprova il caricamento' : 'Carica altre segnalazioni'}</Button>
     </div> : null}
   </div>;
 }
 
-export function ReportKanban({ reports, environments, busy, movingId, onOpen, onMove, onPriorityChange }: {
+export function ReportKanban({ reports, columns: feeds, environments, busy, movingId, onOpen, onMove, onPriorityChange }: {
   reports: Report[];
+  columns: Record<Status, ColumnFeed>;
   environments: { id: string; name: string }[];
   busy: boolean;
   movingId: string | null;
@@ -54,7 +55,6 @@ export function ReportKanban({ reports, environments, busy, movingId, onOpen, on
   onMove: (report: Report, status: Status) => void;
   onPriorityChange: (report: Report, priority: Report['priority']) => void;
 }) {
-  const [limits, setLimits] = useState<Record<Status, number>>({ open: COLUMN_BATCH_SIZE, in_progress: COLUMN_BATCH_SIZE, validation: COLUMN_BATCH_SIZE, resolved: COLUMN_BATCH_SIZE });
   const dragging = useRef<string | null>(null);
   const suppressClick = useRef(false);
   const clickResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -73,14 +73,14 @@ export function ReportKanban({ reports, environments, busy, movingId, onOpen, on
     <div className="grid grid-cols-4 items-start gap-4 overflow-x-auto pb-3" style={{ gridTemplateColumns: 'repeat(4, minmax(300px, 1fr))' }}>
       {columns.map(column => {
         const items = reports.filter(report => report.status === column.value);
-        return <section key={column.value} aria-label={`${column.label}: ${items.length} segnalazioni`} className={`min-w-0 rounded-xl border bg-muted/40 transition-colors ${target === column.value ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border'}`}
+        return <section key={column.value} aria-label={`${column.label}: ${feeds[column.value].total} segnalazioni`} className={`min-w-0 rounded-xl border bg-muted/40 transition-colors ${target === column.value ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border'}`}
           onDragOver={event => { if (!dragging.current || busy) return; event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setTarget(column.value); }}
           onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setTarget(null); }}
           onDrop={event => { event.preventDefault(); const report = reports.find(item => item.id === dragging.current); resetDrag(); if (report && report.canChangeStatus && !busy && report.status !== column.value) onMove(report, column.value); }}>
-          <header className={`flex items-center gap-2 rounded-t-xl border-b p-3 ${colors[column.value]}`}><h3 className="m-0 flex items-center gap-2 text-sm font-semibold leading-none [&>svg]:block [&>svg]:size-4"><ReportIcon value={column.value} /><span className="block leading-none">{column.label} - {items.length}</span></h3></header>
-          <InfiniteColumn total={items.length} visible={limits[column.value]} onLoadMore={() => setLimits(current => ({ ...current, [column.value]: current[column.value] + COLUMN_BATCH_SIZE }))}>
-            {!items.length ? <p className="py-8 text-center text-xs text-muted-foreground">Nessuna segnalazione</p> : null}
-            {items.slice(0, limits[column.value]).map(report => <Card key={report.id} aria-busy={movingId === report.id} size="sm" className={`cursor-pointer border shadow-none ring-0 transition-colors hover:border-primary/30 hover:bg-primary/5 ${draggedId === report.id ? 'opacity-40' : ''}`}
+          <header className={`flex items-center gap-2 rounded-t-xl border-b p-3 ${colors[column.value]}`}><h3 className="m-0 flex items-center gap-2 text-sm font-semibold leading-none [&>svg]:block [&>svg]:size-4"><ReportIcon value={column.value} /><span className="block leading-none">{column.label} - {feeds[column.value].total}</span></h3></header>
+          <InfiniteColumn total={feeds[column.value].total} visible={items.length} loading={feeds[column.value].loading} failed={feeds[column.value].failed} onLoadMore={() => { if (!busy) { if (feeds[column.value].failed && !items.length) feeds[column.value].refresh(); else void feeds[column.value].loadMore(); } }}>
+            {!items.length && !feeds[column.value].loading && !feeds[column.value].failed ? <p className="py-8 text-center text-xs text-muted-foreground">Nessuna segnalazione</p> : null}
+            {items.map(report => <Card key={report.id} aria-busy={movingId === report.id} size="sm" className={`cursor-pointer border shadow-none ring-0 transition-colors hover:border-primary/30 hover:bg-primary/5 ${draggedId === report.id ? 'opacity-40' : ''}`}
               onClick={event => { if (!busy && !suppressClick.current && !(event.target as HTMLElement).closest('button, input, a, [role="radiogroup"]')) onOpen(report); }}
               draggable={report.canChangeStatus && !busy}
               onDragStart={event => { if (busy || !report.canChangeStatus || (event.target as HTMLElement).closest('[role="radiogroup"]')) { event.preventDefault(); return; } if (clickResetTimer.current !== null) { clearTimeout(clickResetTimer.current); clickResetTimer.current = null; } dragging.current = report.id; suppressClick.current = true; setDraggedId(report.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', report.id); }}

@@ -18,7 +18,7 @@ declare item record;
 begin
   for item in select p.oid::regprocedure::text as signature from pg_proc p
     join pg_namespace n on n.oid=p.pronamespace
-    where n.nspname='public' and p.proname in ('require_reviewer_name','reviewer_identity','attachment_operation','notify_issue_reply','notification_operation','notify_issue_status','list_project_participants','widget_config','widget_authorize','start_widget_session','add_environment_widget','create_project_with_production','is_platform_admin','can_read_project','can_manage_project','add_project_owner','create_member_invite','accept_member_invite','create_guest_invite','revoke_project_invite','list_project_members','preview_guest_invite','start_guest_session','get_guest_session','create_member_handoff','create_guest_handoff','redeem_extension_handoff','extension_context','revoke_extension_session','report_actor','report_operation','manage_project_member','platform_delete_resource','create_environment_guest_invite','preview_guest_review','save_project_review_link','create_environment_review_link','regenerate_environment_review_link')
+    where n.nspname='public' and p.proname in ('require_reviewer_name','reviewer_identity','attachment_operation','notify_issue_reply','notification_operation','notification_page','notify_issue_status','list_project_participants','widget_config','widget_authorize','start_widget_session','add_environment_widget','create_project_with_production','is_platform_admin','can_read_project','can_manage_project','add_project_owner','create_member_invite','accept_member_invite','create_guest_invite','revoke_project_invite','list_project_members','preview_guest_invite','start_guest_session','get_guest_session','create_member_handoff','create_guest_handoff','redeem_extension_handoff','extension_context','revoke_extension_session','report_actor','report_operation','report_page','report_pins','report_text_sort','manage_project_member','platform_delete_resource','create_environment_guest_invite','preview_guest_review','save_project_review_link','create_environment_review_link','regenerate_environment_review_link')
   loop execute format('drop function if exists %s cascade',item.signature); end loop;
 end;
 $$;
@@ -842,3 +842,196 @@ values('attachments','attachments',false,2500000,null)
 on conflict(id) do update set public=false,file_size_limit=2500000,allowed_mime_types=null;
 
 commit;
+
+-- Incremental, non-destructive pagination API. Apply before deploying the clients.
+create index if not exists issues_environment_status_created_idx on public.issues(environment_id,status,created_at,id);
+-- Match the UI's case/accent insensitive numeric ordering without extra extensions.
+create or replace function public.report_text_sort(value text) returns text
+language sql immutable strict set search_path = '' as $$
+  select string_agg(case when part[1] ~ '^[0-9]+$'
+    then chr(1)||lpad(length(ltrim(part[1],'0'))::text,8,'0')||ltrim(part[1],'0')
+    else translate(lower(part[1]),'àáâäãåèéêëìíîïòóôöõùúûüçñ','aaaaaaeeeeiiiiooooouuuucn') end,'' order by ordinal)
+  from regexp_matches(value,'[0-9]+|[^0-9]+','g') with ordinality as pieces(part,ordinal);
+$$;
+revoke all on function public.report_text_sort(text) from public,anon,authenticated;
+create or replace function public.report_page(secret text, target uuid, payload jsonb default '{}'::jsonb) returns jsonb
+language plpgsql stable security definer set search_path = '' as $$
+declare a jsonb; project_scope boolean; page_size integer; page_offset integer; sort_field text; sort_direction text; result jsonb;
+begin
+  a := public.report_actor(secret,target);
+  project_scope := coalesce((payload->>'projectScope')::boolean,false);
+  if project_scope and (a->>'userId' is null or not coalesce((a->>'manager')::boolean,false)) then raise exception 'Not authorized' using errcode='42501'; end if;
+  page_size := coalesce((payload->>'limit')::integer,20);
+  page_offset := coalesce((payload->>'offset')::integer,0);
+  sort_field := coalesce(payload->'sort'->>'field','status');
+  sort_direction := coalesce(payload->'sort'->>'direction','asc');
+  if page_size not between 1 and 100 or page_offset < 0 or sort_direction not in ('asc','desc')
+    or sort_field not in ('status','priority','created_at','updated_at','body','environment','authorName') then
+    raise exception 'Invalid pagination' using errcode='22023'; end if;
+  with scoped as materialized (
+    select i.*, e.name environment_name, coalesce(g.display_name,u.email,'Utente') author_name,
+      case when i.author_id is not null then 'user:'||i.author_id::text else 'guest:'||i.guest_session_id::text end author_key,
+      coalesce(ug.display_name,uu.email) updated_name,
+      case when i.updated_by is not null then 'user:'||i.updated_by::text when i.updated_guest_session_id is not null then 'guest:'||i.updated_guest_session_id::text end updated_key
+    from public.issues i join public.environments e on e.id=i.environment_id
+      left join public.guest_sessions g on g.id=i.guest_session_id left join auth.users u on u.id=i.author_id
+      left join public.guest_sessions ug on ug.id=i.updated_guest_session_id left join auth.users uu on uu.id=i.updated_by
+    where (case when project_scope then i.project_id=(a->>'projectId')::uuid else i.environment_id=target end)
+      and (not(payload ? 'pagePath') or i.page_path=payload->>'pagePath')
+      and (coalesce(jsonb_array_length(payload->'environments'),0)=0 or payload->'environments' ? i.environment_id::text)
+  ), filtered as materialized (
+    select *, case status when 'open' then 0 when 'in_progress' then 1 when 'validation' then 2 else 3 end status_rank,
+      case priority when 'high' then 0 when 'medium' then 1 else 2 end priority_rank
+    from scoped i where
+      (not(payload ? 'id') or i.id=(payload->>'id')::uuid)
+      and (coalesce(jsonb_array_length(payload->'statuses'),0)=0 or payload->'statuses' ? i.status)
+      and (coalesce(jsonb_array_length(payload->'priorities'),0)=0 or payload->'priorities' ? i.priority)
+      and (coalesce(jsonb_array_length(payload->'pages'),0)=0 or payload->'pages' ? i.page_path)
+      and (coalesce(jsonb_array_length(payload->'users'),0)=0 or payload->'users' ? i.author_key or payload->'users' ? i.updated_key)
+      and (coalesce(payload->>'search','')='' or position(lower(payload->>'search') in lower(i.body||' '||i.page_path||case when project_scope then '' else ' '||i.author_name end))>0)
+  ), ranked as (
+    select *, row_number() over(order by
+      case when sort_field='status' then status_rank * case sort_direction when 'desc' then -1 else 1 end end,
+      case when sort_field='priority' then priority_rank * case sort_direction when 'desc' then -1 else 1 end end,
+      case when sort_field='created_at' and sort_direction='asc' then created_at end asc,
+      case when sort_field='created_at' and sort_direction='desc' then created_at end desc,
+      case when sort_field='updated_at' and sort_direction='asc' then updated_at end asc nulls last,
+      case when sort_field='updated_at' and sort_direction='desc' then updated_at end desc nulls last,
+      case when sort_direction='asc' then case sort_field when 'body' then public.report_text_sort(body) when 'authorName' then public.report_text_sort(author_name) when 'environment' then public.report_text_sort(environment_name) end end asc,
+      case when sort_direction='desc' then case sort_field when 'body' then public.report_text_sort(body) when 'authorName' then public.report_text_sort(author_name) when 'environment' then public.report_text_sort(environment_name) end end desc,
+      case when sort_field='environment' and sort_direction='asc' then public.report_text_sort(page_path) end asc,
+      case when sort_field='environment' and sort_direction='desc' then public.report_text_sort(page_path) end desc,
+      case when sort_field='status' then priority_rank end, created_at asc,id asc) position
+    from filtered
+  ), batch as (
+    select * from ranked order by position limit page_size offset page_offset
+  )
+  select jsonb_build_object('total',(select count(*) from filtered),
+    'projectTotal',(select count(*) from public.issues i where case when project_scope then i.project_id=(a->>'projectId')::uuid else i.environment_id=target end),
+    'pages',(select coalesce(jsonb_agg(p.page_path order by p.page_path),'[]'::jsonb) from (select distinct page_path from scoped) p),
+    'reports',case when coalesce((payload->>'selectionOnly')::boolean,false) then
+      coalesce((select jsonb_agg(jsonb_build_object('id',f.id,'environment_id',f.environment_id,
+        'canEdit',coalesce((a->>'manager')::boolean,false) or coalesce(f.author_id=(a->>'userId')::uuid,false),
+        'canChangeStatus',a->>'userId' is not null or a->>'guestId' is not null)) from filtered f),'[]'::jsonb)
+      else coalesce((select jsonb_agg((to_jsonb(b)-array['environment_name','author_name','author_key','updated_name','updated_key','status_rank','priority_rank','position']) ||
+      jsonb_build_object('authorName',b.author_name,'authorKey',b.author_key,'updatedByName',b.updated_name,'updatedByKey',b.updated_key,
+        'canEdit',coalesce((a->>'manager')::boolean,false) or coalesce(b.author_id=(a->>'userId')::uuid,false),
+        'canChangeStatus',a->>'userId' is not null or a->>'guestId' is not null,
+        'commentCount',(select count(*) from public.comments c where c.issue_id=b.id)) order by b.position) from batch b),'[]'::jsonb) end) into result;
+  return result;
+end;
+$$;
+revoke all on function public.report_page(text,uuid,jsonb) from public,anon,authenticated;
+grant execute on function public.report_page(text,uuid,jsonb) to anon,authenticated;
+
+-- Pin previews are lightweight metadata, independent of paginated full reports.
+create or replace function public.report_pins(secret text, target uuid, payload jsonb default '{}'::jsonb) returns jsonb
+language plpgsql stable security definer set search_path = '' as $$
+begin
+  perform public.report_actor(secret,target);
+  if coalesce(payload->>'pagePath','')='' then raise exception 'Page required' using errcode='22023'; end if;
+  return (select coalesce(jsonb_agg(jsonb_build_object('id',i.id,'environment_id',i.environment_id,'page_path',i.page_path,
+    'status',i.status,'priority',i.priority,'body',left(i.body,240),'authorName',coalesce(g.display_name,u.email,'Utente'),
+    'context',jsonb_build_object('anchor',i.context->'anchor','scroll',i.context->'scroll')) order by i.created_at,i.id),'[]'::jsonb)
+    from public.issues i left join public.guest_sessions g on g.id=i.guest_session_id left join auth.users u on u.id=i.author_id
+    where i.environment_id=target and i.page_path=payload->>'pagePath');
+end;
+$$;
+revoke all on function public.report_pins(text,uuid,jsonb) from public,anon,authenticated;
+grant execute on function public.report_pins(text,uuid,jsonb) to anon,authenticated;
+
+-- Incremental notification pagination; preserves all existing notifications and read flags.
+create index if not exists notifications_user_created_id on public.notifications(user_id,created_at desc,id desc);
+create index if not exists notifications_guest_created_id on public.notifications(guest_session_id,created_at desc,id desc);
+create or replace function public.notification_page(secret text, target uuid, payload jsonb default '{}'::jsonb) returns jsonb
+language plpgsql stable security definer set search_path='' as $$
+declare a jsonb; actor uuid; guest uuid; page_size integer; page_offset integer; summary boolean; result jsonb;
+begin
+  if target is null then
+    if secret is not null or not public.can_read_project(null) then raise exception 'Not authorized' using errcode='42501'; end if;
+    actor:=auth.uid();
+  else
+    a:=public.report_actor(secret,target); actor:=(a->>'userId')::uuid; guest:=(a->>'guestId')::uuid;
+  end if;
+  page_size:=coalesce((payload->>'limit')::integer,20); page_offset:=coalesce((payload->>'offset')::integer,0);
+  summary:=coalesce(payload->>'mode','page')='summary';
+  if page_size not between 1 and 100 or page_offset<0 or coalesce(payload->>'mode','page') not in ('page','summary') then
+    raise exception 'Invalid pagination' using errcode='22023'; end if;
+  with scoped as materialized (
+    select n.id,i.id issue_id,i.project_id,i.environment_id,p.name project_name,e.name environment_name,i.page_path,i.body,
+      n.kind,n.comment_id,c.body reply_body,n.previous_status,n.status,n.actor_name,n.created_at,n.read_at
+    from public.notifications n join public.issues i on i.id=n.issue_id
+    left join public.comments c on c.id=n.comment_id and c.issue_id=i.id
+    join public.projects p on p.id=i.project_id join public.environments e on e.id=i.environment_id
+    where ((actor is not null and n.user_id=actor) or (guest is not null and n.guest_session_id=guest))
+      and (target is null or i.environment_id=target)
+      and (not(payload ? 'pagePath') or i.page_path=payload->>'pagePath')
+  ), filtered as (
+    select * from scoped where
+      (coalesce(jsonb_array_length(payload->'projects'),0)=0 or payload->'projects' ? project_id::text)
+      and (coalesce(jsonb_array_length(payload->'environments'),0)=0 or payload->'environments' ? environment_id::text)
+      and (coalesce(jsonb_array_length(payload->'statuses'),0)=0 or payload->'statuses' ? status)
+      and (coalesce(jsonb_array_length(payload->'reads'),0)=0 or payload->'reads' ? case when read_at is null then 'unread' else 'read' end)
+  ), batch as (
+    select * from filtered where not summary order by created_at desc,id desc limit page_size offset page_offset
+  ), arrivals as (
+    select * from scoped where payload ? 'after' and read_at is null
+      and (created_at,id)>((payload->'after'->>'createdAt')::timestamptz,(payload->'after'->>'id')::uuid)
+  )
+  select jsonb_build_object('items',coalesce((select jsonb_agg(to_jsonb(b) order by b.created_at desc,b.id desc) from batch b),'[]'::jsonb),
+    'total',(select count(*) from filtered),'totalInScope',(select count(*) from scoped),
+    'unread',(select count(*) from scoped where read_at is null),
+    'cursor',(select jsonb_build_object('createdAt',created_at,'id',id) from scoped order by created_at desc,id desc limit 1),
+    'arrivalCount',(select count(*) from arrivals),
+    'latest',(select to_jsonb(n)||jsonb_build_object('body',left(n.body,120),'reply_body',left(n.reply_body,120)) from arrivals n order by created_at desc,id desc limit 1),
+    'projects',(select coalesce(jsonb_agg(to_jsonb(p) order by p.label),'[]'::jsonb) from (select distinct project_id value,project_name label from scoped) p),
+    'environments',(select coalesce(jsonb_agg(to_jsonb(e) order by e.label),'[]'::jsonb) from (select distinct environment_id value,project_id,project_name||' · '||environment_name label from scoped) e)) into result;
+  return result;
+end;
+$$;
+revoke all on function public.notification_page(text,uuid,jsonb) from public,anon,authenticated;
+grant execute on function public.notification_page(text,uuid,jsonb) to anon,authenticated;
+
+create or replace function public.notification_operation(secret text, target uuid, operation text, payload jsonb default '{}'::jsonb) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare a jsonb; actor uuid; guest uuid; result jsonb;
+begin
+  if target is null then
+    if secret is not null or not public.can_read_project(null) then raise exception 'Not authorized' using errcode='42501'; end if;
+    actor:=auth.uid();
+  else
+    a:=public.report_actor(secret,target);
+    actor:=(a->>'userId')::uuid; guest:=(a->>'guestId')::uuid;
+  end if;
+  if operation not in ('notifications','notification_read','notifications_read') or operation is null then
+    raise exception 'Invalid operation' using errcode='22023';
+  end if;
+  if operation='notification_read' and not (payload ? 'id') then
+    raise exception 'Notification required' using errcode='22023';
+  end if;
+  if operation in ('notification_read','notifications_read') then
+    update public.notifications n set read_at=coalesce(n.read_at,clock_timestamp())
+    from public.issues i where i.id=n.issue_id
+      and ((actor is not null and n.user_id=actor) or (guest is not null and n.guest_session_id=guest))
+      and (target is null or i.environment_id=target)
+      and (not(payload ? 'pagePath') or i.page_path=payload->>'pagePath')
+      and (operation='notifications_read' or n.id=(payload->>'id')::uuid);
+    if operation='notification_read' and not found then raise exception 'Notification unavailable' using errcode='42501'; end if;
+  end if;
+  if coalesce((payload->>'paginated')::boolean,false) then return public.notification_page(secret,target,payload); end if;
+  select coalesce(jsonb_agg(row_data order by row_data->>'created_at' desc,row_data->>'id'),'[]'::jsonb) into result from (
+    select jsonb_build_object('id',n.id,'issue_id',i.id,'project_id',i.project_id,'environment_id',i.environment_id,
+      'project_name',p.name,'environment_name',e.name,'page_path',i.page_path,'body',i.body,
+      'kind',n.kind,'comment_id',n.comment_id,'reply_body',c.body,'previous_status',n.previous_status,'status',n.status,'actor_name',n.actor_name,'created_at',n.created_at,'read_at',n.read_at) row_data
+    from public.notifications n join public.issues i on i.id=n.issue_id
+    left join public.comments c on c.id=n.comment_id and c.issue_id=i.id
+    join public.projects p on p.id=i.project_id join public.environments e on e.id=i.environment_id
+    where ((actor is not null and n.user_id=actor) or (guest is not null and n.guest_session_id=guest))
+      and (target is null or i.environment_id=target)
+      and (not(payload ? 'pagePath') or i.page_path=payload->>'pagePath')
+  ) rows;
+  return result;
+end;
+$$;
+revoke all on function public.notification_operation(text,uuid,text,jsonb) from public,anon,authenticated;
+grant execute on function public.notification_operation(text,uuid,text,jsonb) to anon,authenticated;

@@ -16,7 +16,7 @@ export async function POST(request: Request) {
       const page = getPageContext(payload.context.url);
       if (page.origin !== payload.context.origin || page.pagePath !== payload.context.pagePath) throw new Error();
     } catch { return Response.json({ error: 'Pagina non valida.' }, { status: 400 }); }
-  } else if (!['list', 'notifications', 'notifications_read'].includes(operation) && !payload.id) return Response.json({ error: 'Segnalazione richiesta.' }, { status: 400 });
+  } else if (!['list', 'page', 'pins', 'notifications', 'notifications_read'].includes(operation) && !payload.id) return Response.json({ error: 'Segnalazione richiesta.' }, { status: 400 });
   let image: Buffer | undefined;
   if (input.screenshot) {
     if (operation !== 'create' || !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(input.screenshot)) return Response.json({ error: 'Screenshot non valido.' }, { status: 400 });
@@ -25,7 +25,10 @@ export async function POST(request: Request) {
     try { storageClient(); } catch { return Response.json({ error: 'Configura SUPABASE_SECRET_KEY sul backend oppure rimuovi lo screenshot.' }, { status: 503 }); }
   }
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc(operation.startsWith('notification') ? 'notification_operation' : 'report_operation', { secret, target, operation, payload });
+  const { data, error } = operation === 'page'
+    ? await supabase.rpc('report_page', { secret, target, payload: { ...payload, projectScope: false } })
+    : operation === 'pins' ? await supabase.rpc('report_pins', { secret, target, payload })
+    : await supabase.rpc(operation.startsWith('notification') ? 'notification_operation' : 'report_operation', { secret, target, operation, payload });
   if (error) return Response.json({ error: error.message === 'REVIEWER_NAME_REQUIRED' ? 'Inserisci il tuo nome per intervenire sulla segnalazione.' : error.code === '42501' ? 'Accesso non consentito o revocato.' : 'Operazione non riuscita.' }, { status: error.code === '42501' ? 403 : 400 });
   let warning: string | undefined;
   if (image) {
