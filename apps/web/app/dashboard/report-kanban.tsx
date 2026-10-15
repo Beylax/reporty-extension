@@ -90,7 +90,7 @@ export function ReportKanban({ reports, columns: feeds, environments, busy, movi
                 {report.canChangeStatus ? <GripVertical aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" /> : null}
               </div></CardHeader>
               <CardContent className="space-y-5"><div className="space-y-1 text-xs text-muted-foreground"><p className="truncate" title={report.authorName}>{report.authorName}</p><p className="truncate" title={report.page_path}>{environments.find(item => item.id === report.environment_id)?.name} · {report.page_path}</p><time dateTime={report.created_at} className="block">{formatReportDateTime(report.created_at)}</time></div>
-                <div className="grid gap-2"><Label className="text-xs text-muted-foreground" htmlFor={`kanban-priority-${report.id}`}>Priorità</Label><RadioButtons compact id={`kanban-priority-${report.id}`} label="Priorità" value={report.priority ?? 'medium'} options={Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))} disabled={busy || !report.canChangeStatus} onValueChange={value => onPriorityChange(report, value as Report['priority'])} /></div>
+                <div className="grid gap-2"><Label className="text-xs text-muted-foreground" htmlFor={`kanban-priority-${report.id}`}>Priorità</Label><RadioButtons variant="standard" compact id={`kanban-priority-${report.id}`} label="Priorità" value={report.priority ?? 'medium'} options={Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))} disabled={busy || !report.canChangeStatus} onValueChange={value => onPriorityChange(report, value as Report['priority'])} /></div>
               </CardContent>
             </Card>)}
           </InfiniteColumn>

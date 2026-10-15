@@ -45,10 +45,10 @@ function SegmentShape({ first, last, tip, checked }: { first: boolean; last: boo
   </svg>;
 }
 
-export function RadioButtons({ id, label, value, options, onValueChange, disabled = false, compact = false }: {
+export function RadioButtons({ id, label, value, options, onValueChange, disabled = false, compact = false, variant = 'chevron' }: {
   id: string; label: string; value: string;
   options: { value: string; label: string }[];
-  onValueChange: (value: string) => void; disabled?: boolean; compact?: boolean;
+  onValueChange: (value: string) => void; disabled?: boolean; compact?: boolean; variant?: 'chevron' | 'standard';
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const selected = useRef<HTMLSpanElement>(null);
@@ -72,11 +72,15 @@ export function RadioButtons({ id, label, value, options, onValueChange, disable
   }, [value]);
 
   return <div ref={scroller} className="min-w-0 max-w-full overflow-x-auto overscroll-x-contain py-1">
-    <RadioGroup id={id} aria-label={label} value={value} disabled={disabled} onValueChange={onValueChange} className="relative flex w-full min-w-max flex-nowrap">
+    <RadioGroup id={id} aria-label={label} value={value} disabled={disabled} onValueChange={onValueChange} className={cn('relative flex w-full min-w-max flex-nowrap', variant === 'standard' && 'gap-2')}>
       {options.map((option, index) => {
         const first = index === 0;
         const last = index === options.length - 1;
         const checked = value === option.value;
+        if (variant === 'standard') return <Radio.Root key={option.value} ref={checked ? selected : undefined} value={option.value}
+          className={cn('relative inline-flex shrink-0 flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-lg border font-medium outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 motion-reduce:transition-none', compact ? 'h-8 px-3 text-xs' : 'min-h-10 px-4 py-2 text-sm', checked ? 'border-primary bg-primary/10 text-primary hover:bg-primary/15' : 'border-border bg-background text-foreground hover:border-primary hover:bg-muted')}>
+          {option.label}
+        </Radio.Root>;
         return <Radio.Root key={option.value} ref={checked ? selected : undefined} value={option.value}
           style={{ marginLeft: first ? 0 : -(tip + 1), paddingLeft: first ? (compact ? 12 : 16) : tip + (compact ? 10 : 14), paddingRight: last ? (compact ? 12 : 16) : tip + (compact ? 10 : 14) }}
           className={cn('group/segment pointer-events-none relative inline-flex shrink-0 flex-1 cursor-pointer items-center justify-center whitespace-nowrap border-0 font-medium outline-none transition-colors focus-visible:z-30 hover:z-20 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 motion-reduce:transition-none', compact ? 'h-8 text-xs' : 'min-h-10 py-2 text-sm', first && 'rounded-l-full', last && 'rounded-r-full', checked ? 'z-10 text-primary' : 'text-foreground')}>
