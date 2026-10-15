@@ -21,7 +21,7 @@
     "test:db": "node --test supabase/tests/*.test.mjs",
     "test:extension": "npm run build --workspace=@reporty/extension && node --test scripts/extension-lifecycle.test.mjs",
     "build:widget": "node scripts/build-widget.mjs",
-    "test:widget": "npm run build:widget && node --experimental-strip-types --test scripts/widget-loader.test.mjs scripts/widget-origin.test.mjs scripts/widget-installation.test.mjs scripts/capture-tab.test.mjs scripts/pin-preview.test.mjs"
+    "test:widget": "npm run build:widget && node --experimental-strip-types --test scripts/playground-bridge.test.mjs scripts/playground.test.mjs scripts/playground-capture.test.mjs scripts/widget-loader.test.mjs scripts/widget-origin.test.mjs scripts/widget-installation.test.mjs scripts/capture-tab.test.mjs scripts/pin-preview.test.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8"

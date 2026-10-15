@@ -56,7 +56,7 @@ export default async function Project({ params, searchParams }: {
         <Badge variant="secondary">Sviluppatore</Badge>
       </header>
       <Feedback message={message} />
-      <ProjectTabs key={`${report ?? "project"}:${tab ?? "reports"}:${expandedEnvironment ?? ""}`} initialTab={tab === "environments" || tab === "settings" ? tab : "reports"} reports={<ProjectReports initialReportId={report} environments={environments} participants={participants} />} environments={<>
+      <ProjectTabs projectName={project.name} playgroundEnvironments={environments.map(environment => { const widget = widgetsResult.data?.find(item => item.environment_id === environment.id); return { ...environment, publicKey: widget?.public_key ?? "", enabled: widget?.enabled === true }; })} key={`${report ?? "project"}:${tab ?? "reports"}:${expandedEnvironment ?? ""}`} initialTab={tab === "environments" || tab === "settings" ? tab : "reports"} reports={<ProjectReports initialReportId={report} environments={environments} participants={participants} />} environments={<>
       <section className="space-y-4" aria-labelledby="environments-title">
         <div><h2 id="environments-title" className="text-xl font-semibold">Ambienti</h2></div>
         {!environments.length ? <Card><CardContent className="py-6 text-muted-foreground">Nessun ambiente aggiunto.</CardContent></Card> : null}

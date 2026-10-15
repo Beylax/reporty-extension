@@ -80,7 +80,7 @@ function ExpandingPin({ children, anchorX, anchorY, ...props }: React.ButtonHTML
 
 type Draft = { id: string; context: ReportContext; screenshot?: string; body: string; priority: ReportPriority };
 
-export function ReviewOverlay({ site, environment, host, transport, logoUrl, onPositionChange, onHiddenChange }: { site: Site; environment: Environment; host: HTMLElement; onPositionChange: (position: Site['position']) => Promise<void>; onHiddenChange: (hidden: boolean) => Promise<void>; transport?: (body: Record<string, unknown>) => Promise<unknown>; logoUrl?: string }) {
+export function ReviewOverlay({ site, environment, host, transport, logoUrl, onPositionChange, onHiddenChange, captureScreenshot: captureOverride, requestedReport }: { site: Site; environment: Environment; host: HTMLElement; onPositionChange: (position: Site['position']) => Promise<void>; onHiddenChange: (hidden: boolean) => Promise<void>; transport?: (body: Record<string, unknown>) => Promise<unknown>; logoUrl?: string; captureScreenshot?: () => Promise<string>; requestedReport?: { id: string; requestId: string } }) {
   const rawMessage = async (body: Record<string, unknown>) => (transport ? await transport(body) : await extensionMessage(body)) as Awaited<ReturnType<typeof extensionMessage>>;
   const { ensureIdentity, nameDialog, nameDialogOpen } = useReviewerIdentity(rawMessage, environment.id);
   const message = async (body: Record<string, unknown>) => {
@@ -205,7 +205,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
   }
   async function captureScreenshot(context: ReportContext) {
     setCapturing(true);
-    try { return await captureHighlightedScreenshot(host, context, captureTab); } finally { setCapturing(false); }
+    try { return await captureHighlightedScreenshot(host, context, captureOverride ?? captureTab); } finally { setCapturing(false); }
   }
   const pinsRevision = useRef(0);
   async function refresh() {
@@ -282,6 +282,25 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
     setSelected(null); setComments([]); setImageUrl('');
     return () => { disposed = true; };
   }, [page.pagePath, environment.id]);
+  const handledRequest = useRef('');
+  useEffect(() => {
+    if (!requestedReport || busy || pinsLoading || handledRequest.current === requestedReport.requestId) return;
+    handledRequest.current = requestedReport.requestId;
+    const scope = notificationScope.current;
+    let disposed = false;
+    void (async () => {
+      try {
+        const listing = await fetchPage({ id: requestedReport.id, pagePath: page.pagePath, limit: 1 });
+        if (disposed || notificationScope.current !== scope) return;
+        const report = listing.reports[0];
+        if (!report || report.environment_id !== environment.id || report.page_path !== page.pagePath) throw new Error('Segnalazione non disponibile in questa pagina.');
+        if (report.status === 'resolved') setShowResolved(true);
+        setHighlighted(report.id);
+        await view(report);
+      } catch (error) { if (!disposed) setStatus(error instanceof Error ? error.message : 'Segnalazione non disponibile.'); }
+    })();
+    return () => { disposed = true; };
+  }, [requestedReport?.requestId, page.pagePath, environment.id, busy, pinsLoading]);
   useEffect(() => {
     const id = deepLink.current;
     if (!id || pinsLoading) return;
