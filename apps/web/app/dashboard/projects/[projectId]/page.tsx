@@ -22,12 +22,12 @@ import { ProjectTabs } from '../../project-tabs';
 
 export default async function Project({ params, searchParams }: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<{ message?: string; report?: string }>;
+  searchParams: Promise<{ message?: string; report?: string; tab?: string; environment?: string }>;
 }) {
   const { supabase } = await requireUser();
   const { projectId } = await params;
   if (!isUuid(projectId)) notFound();
-  const [projectResult, environmentsResult, permissionResult, linksResult, widgetsResult, participantsResult, { message, report }] = await Promise.all([
+  const [projectResult, environmentsResult, permissionResult, linksResult, widgetsResult, participantsResult, { message, report, tab, environment: expandedEnvironment }] = await Promise.all([
     supabase.from('projects').select('id, name').eq('id', projectId).maybeSingle(),
     supabase.from('environments').select('id, name, origin').eq('project_id', projectId).order('created_at'),
     supabase.rpc('can_manage_project', { target: projectId }),
@@ -56,20 +56,20 @@ export default async function Project({ params, searchParams }: {
         <Badge variant="secondary">Sviluppatore</Badge>
       </header>
       <Feedback message={message} />
-      <ProjectTabs key={report ?? "project"} reports={<ProjectReports initialReportId={report} environments={environments} participants={participants} />} environments={<>
+      <ProjectTabs key={`${report ?? "project"}:${tab ?? "reports"}:${expandedEnvironment ?? ""}`} initialTab={tab === "environments" || tab === "settings" ? tab : "reports"} reports={<ProjectReports initialReportId={report} environments={environments} participants={participants} />} environments={<>
       <section className="space-y-4" aria-labelledby="environments-title">
         <div><h2 id="environments-title" className="text-xl font-semibold">Ambienti</h2></div>
         {!environments.length ? <Card><CardContent className="py-6 text-muted-foreground">Nessun ambiente aggiunto.</CardContent></Card> : null}
-        {environments.map(environment => <AccordionSection key={environment.id} variant="card" title={<span className="min-w-0 space-y-1"><span className="block break-words text-base font-semibold">{environment.name}</span><span className="block break-all text-sm font-normal text-muted-foreground">{environment.origin}</span></span>} action={<a href={environment.origin} target="_blank" rel="noopener noreferrer" aria-label={`Apri sito ${environment.name}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>Apri sito ↗</a>}>
+        {environments.map(environment => <AccordionSection key={environment.id} defaultOpen={environment.id === expandedEnvironment} variant="card" title={<span className="min-w-0 space-y-1"><span className="block break-words text-base font-semibold">{environment.name}</span><span className="block break-all text-sm font-normal text-muted-foreground">{environment.origin}</span></span>} action={<a href={environment.origin} target="_blank" rel="noopener noreferrer" aria-label={`Apri sito ${environment.name}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>Apri sito ↗</a>}>
             {canManage ? <form action={saveEnvironment} className="flex flex-wrap items-end gap-3">
               <input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="environmentId" value={environment.id} />
               <div className="grid flex-1 gap-2"><Label htmlFor={`name-${environment.id}`}>Nome ambiente</Label><Input id={`name-${environment.id}`} name="name" defaultValue={environment.name} maxLength={80} required /></div>
               <div className="grid min-w-0 basis-60 flex-1 gap-2"><Label htmlFor={`origin-${environment.id}`}>Origine del sito</Label><Input id={`origin-${environment.id}`} name="origin" type="url" defaultValue={environment.origin} required /></div>
               <SubmitButton><Save className="size-4" aria-hidden="true" />Salva ambiente</SubmitButton>
             </form> : null}
-            <AccordionSection title="Link ospite e script di revisione">
-            {linksResult.data?.find(link => link.environment_id === environment.id) ? <ReviewLinkForm projectId={projectId} environmentId={environment.id} link={`${appOrigin()}/guest/${linksResult.data.find(link => link.environment_id === environment.id)!.token}`} /> : <FeedbackToast message="Link ospite non disponibile. Inizializza il database con supabase/initialize.sql secondo il README Supabase." />}
+            <AccordionSection title="Script di revisione e link di invito" defaultOpen={environment.id === expandedEnvironment}>
             {widgetsResult.data?.find(widget => widget.environment_id === environment.id) ? <EnvironmentWidget environmentId={environment.id} enabled={widgetsResult.data.find(widget => widget.environment_id === environment.id)!.enabled} publicKey={widgetsResult.data.find(widget => widget.environment_id === environment.id)!.public_key} origin={appOrigin()} environmentOrigin={environment.origin} /> : <FeedbackToast message="Applica supabase/widget.sql per attivare gli script per ambiente." />}
+            {linksResult.data?.find(link => link.environment_id === environment.id) ? <ReviewLinkForm projectId={projectId} environmentId={environment.id} link={`${appOrigin()}/guest/${linksResult.data.find(link => link.environment_id === environment.id)!.token}`} /> : <FeedbackToast message="Link ospite non disponibile. Inizializza il database con supabase/initialize.sql secondo il README Supabase." />}
             </AccordionSection>
             {canManage ? <ResourceDelete id={environment.id} kind="environment" name={environment.name} /> : null}
         </AccordionSection>)}

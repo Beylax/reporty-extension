@@ -42,18 +42,19 @@ export async function saveEnvironment(form: FormData) {
   const environmentId = field(form, 'environmentId');
   if (!isUuid(projectId) || (environmentId && !isUuid(environmentId))) redirect('/dashboard');
   const path = `/dashboard/projects/${projectId}`;
+  const environmentPath = `${path}?tab=environments${environmentId ? `&environment=${environmentId}` : ""}`;
   let name: string;
   let origin: string;
   try { name = validateName(field(form, 'name'), 80); }
-  catch { redirect(`${path}?message=invalid-name`); }
+  catch { redirect(`${environmentPath}&message=invalid-name`); }
   try { origin = normalizeOrigin(field(form, 'origin')); }
-  catch { redirect(`${path}?message=invalid-origin`); }
+  catch { redirect(`${environmentPath}&message=invalid-origin`); }
   const query = environmentId
     ? supabase.from('environments').update({ name, origin }).eq('id', environmentId).eq('project_id', projectId)
     : supabase.from('environments').insert({ project_id: projectId, name, origin });
   const { data, error } = await query.select('id').maybeSingle();
-  if (error || !data) redirect(`${path}?message=${error?.code === '23505' ? 'duplicate-origin' : 'save-error'}`);
+  if (error || !data) redirect(`${environmentPath}&message=${error?.code === '23505' ? 'duplicate-origin' : 'save-error'}`);
   revalidatePath('/dashboard');
   revalidatePath(path);
-  redirect(`${path}?message=saved`);
+  redirect(`${path}?tab=environments&environment=${data.id}&message=saved`);
 }
