@@ -13,6 +13,7 @@ export function verifyWidgetInstallation(environmentOrigin: string, publicKey: s
       clearInterval(timers.interval); clearTimeout(timers.timeout);
       window.removeEventListener('message', receive);
       signal.removeEventListener('abort', abort);
+      try { popup?.close(); } catch { /* Keep the verification result if the browser prevents closing. */ }
       if (error) reject(error); else resolve();
     }
     function abort() { finish(new DOMException('Verifica annullata.', 'AbortError')); }
@@ -22,15 +23,15 @@ export function verifyWidgetInstallation(environmentOrigin: string, publicKey: s
       finish();
     }
     function ping() {
-      if (popup?.closed) { finish(new Error('La scheda del sito è stata chiusa prima di completare la verifica.')); return; }
+      if (popup?.closed) { finish(new Error('La finestra del sito è stata chiusa prima di completare la verifica.')); return; }
       try { popup?.postMessage({ type: 'REPORTY_VERIFY_WIDGET', nonce }, origin); }
-      catch { finish(new Error('Il browser impedisce la comunicazione con la scheda del sito. Riprova.')); }
+      catch { finish(new Error('Il browser impedisce la comunicazione con la finestra del sito. Riprova.')); }
     }
     window.addEventListener('message', receive);
     signal.addEventListener('abort', abort, { once: true });
-    try { popup = window.open(origin, '_blank'); }
+    try { popup = window.open(origin, '_blank', 'popup=yes,width=720,height=640'); }
     catch { finish(new Error('Impossibile aprire il sito. Consenti i popup e riprova.')); return; }
-    if (!popup) { finish(new Error('Il browser ha bloccato la scheda di verifica. Consenti i popup e riprova.')); return; }
+    if (!popup) { finish(new Error('Il browser ha bloccato la finestra di verifica. Consenti i popup e riprova.')); return; }
     timers.interval = setInterval(ping, 500);
     timers.timeout = setTimeout(() => finish(new Error('Nessuna conferma ricevuta dal sito entro 15 secondi. Controlla lo snippet, il caricamento del sito e gli eventuali blocchi del browser, poi riprova.')), 15000);
     ping();

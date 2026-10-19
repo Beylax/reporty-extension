@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioButtons } from '@/components/ui/radio-buttons';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ReportCountBadge } from '@/components/report-count-badge';
 
 type Status = Report['status'];
 const columns: { value: Status; label: string }[] = [
@@ -78,7 +79,7 @@ export function ReportKanban({ reports, columns: feeds, environments, busy, movi
           onDragOver={event => { if (!dragging.current || busy) return; event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setTarget(column.value); }}
           onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setTarget(null); }}
           onDrop={event => { event.preventDefault(); const report = reports.find(item => item.id === dragging.current); resetDrag(); if (report && report.canChangeStatus && !busy && report.status !== column.value) onMove(report, column.value); }}>
-          <header className={`flex items-center gap-2 rounded-t-xl border-b p-3 ${colors[column.value]}`}><h3 className="m-0 flex items-center gap-2 text-sm font-semibold leading-none [&>svg]:block [&>svg]:size-4"><ReportIcon value={column.value} /><span className="block leading-none">{column.label} - {feeds[column.value].total}</span></h3></header>
+          <header className={`flex items-center gap-2 rounded-t-xl border-b p-3 ${colors[column.value]}`}><h3 className="m-0 flex items-center gap-2 text-sm font-semibold leading-none [&>svg]:block [&>svg]:size-4"><ReportIcon value={column.value} /><span className="block leading-none">{column.label}</span><ReportCountBadge count={feeds[column.value].total} label={`segnalazioni: ${column.label}`} /></h3></header>
           <InfiniteColumn total={feeds[column.value].total} visible={items.length} loading={feeds[column.value].loading} failed={feeds[column.value].failed} onLoadMore={() => { if (!busy) { if (feeds[column.value].failed && !items.length) feeds[column.value].refresh(); else void feeds[column.value].loadMore(); } }}>
             {!items.length && !feeds[column.value].loading && !feeds[column.value].failed ? <p className="py-8 text-center text-xs text-muted-foreground">Nessuna segnalazione</p> : null}
             {items.map(report => renderContextMenu(report, <Card key={report.id} aria-busy={movingId === report.id} size="sm" className={`cursor-pointer border shadow-none ring-0 transition-colors hover:border-primary/30 hover:bg-primary/5 ${draggedId === report.id ? 'opacity-40' : ''}`}

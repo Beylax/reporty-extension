@@ -5,10 +5,11 @@ import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { ReportCountBadge } from '@/components/report-count-badge';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 
-type Project = { id: string; name: string; environments: { id: string; name: string; origin: string }[] };
+type Project = { id: string; name: string; openReportCount: number; environments: { id: string; name: string; origin: string }[] };
 
 export function ProjectList({ projects }: { projects: Project[] }) {
   const [search, setSearch] = useState('');
@@ -28,7 +29,7 @@ export function ProjectList({ projects }: { projects: Project[] }) {
             <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-muted font-semibold">{project.name.slice(0, 1).toUpperCase()}</span>
             <div className="min-w-0"><h2 className="font-medium">{project.name}</h2><p className="mt-1 break-all text-sm text-muted-foreground">{project.environments.map(environment => environment.origin).join(' · ') || 'Nessun ambiente configurato'}</p></div>
           </div>
-          <div className="flex shrink-0 items-center gap-4"><Badge variant="secondary">{project.environments.length} ambienti</Badge><span aria-hidden="true" className="text-muted-foreground">→</span></div>
+          <div className="flex shrink-0 items-center gap-4"><ReportCountBadge count={project.openReportCount} label="segnalazioni non risolte" /><Badge variant="secondary">{project.environments.length} ambienti</Badge><span aria-hidden="true" className="text-muted-foreground">→</span></div>
         </Link>
       </li>)}</ul> : <div className="space-y-2 px-6 py-16 text-center"><h2 className="font-medium">{projects.length ? 'Nessun risultato' : 'Il tuo workspace è pronto'}</h2><p className="text-sm text-muted-foreground">{projects.length ? 'Prova un altro nome o dominio.' : 'Crea il primo progetto con il pulsante Nuovo progetto.'}</p></div>}
     </div>

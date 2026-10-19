@@ -5,10 +5,12 @@ import { verifyWidgetInstallation } from '../apps/web/lib/widget-installation.ts
 function harness(t, blocked = false) {
   let receive, poll, expire;
   const sent = [], removed = [];
-  const popup = { closed: false, postMessage: (data, origin) => sent.push({ data, origin }) };
+  const close = t.mock.fn();
+  const popup = { closed: false, close, postMessage: (data, origin) => sent.push({ data, origin }) };
+  const open = t.mock.fn(() => blocked ? null : popup);
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
   Object.defineProperty(globalThis, 'window', { configurable: true, value: {
-    open: () => blocked ? null : popup,
+    open,
     addEventListener: (_, callback) => { receive = callback; },
     removeEventListener: (_, callback) => { removed.push(callback); },
   } });
@@ -19,7 +21,7 @@ function harness(t, blocked = false) {
   const clearTimeout = t.mock.method(globalThis, 'clearTimeout', () => {});
   const controller = new AbortController();
   const result = verifyWidgetInstallation('https://site.example:8443', 'correct-key', controller.signal);
-  return { popup, sent, removed, clearInterval, clearTimeout, controller, result, poll: () => poll(), expire: () => expire(), reply: changes => receive({
+  return { popup, open, close, sent, removed, clearInterval, clearTimeout, controller, result, poll: () => poll(), expire: () => expire(), reply: changes => receive({
     source: popup, origin: 'https://site.example:8443',
     data: { type: 'REPORTY_WIDGET_VERIFIED', nonce: sent[0].data.nonce, key: 'correct-key' }, ...changes,
   }) };
@@ -30,6 +32,7 @@ test('verification waits for the exact window, origin including port, nonce and 
   let complete = false;
   h.result.then(() => { complete = true; });
   assert.equal(h.sent[0].origin, 'https://site.example:8443');
+  assert.deepEqual(h.open.mock.calls[0].arguments, ['https://site.example:8443', '_blank', 'popup=yes,width=720,height=640']);
   for (const change of [
     { source: {} }, { origin: 'https://site.example' }, { origin: 'https://foreign.example' },
     { data: { type: 'REPORTY_WIDGET_VERIFIED', nonce: 'other', key: 'correct-key' } },
@@ -38,17 +41,20 @@ test('verification waits for the exact window, origin including port, nonce and 
   ]) h.reply(change);
   await Promise.resolve();
   assert.equal(complete, false);
+  assert.equal(h.close.mock.callCount(), 0);
   h.reply({});
   await h.result;
   assert.equal(h.removed.length, 1);
   assert.equal(h.clearInterval.mock.callCount(), 1);
   assert.equal(h.clearTimeout.mock.callCount(), 1);
+  assert.equal(h.close.mock.callCount(), 1);
 });
 
 test('verification distinguishes a script for another environment', async t => {
   const h = harness(t);
   h.reply({ data: { type: 'REPORTY_WIDGET_VERIFIED', nonce: h.sent[0].data.nonce, key: 'wrong-key' } });
   await assert.rejects(h.result, /altro ambiente/);
+  assert.equal(h.close.mock.callCount(), 1);
   assert.equal(h.removed.length, 1);
 });
 
@@ -56,6 +62,7 @@ test('verification reports a timeout and removes its listener and timers', async
   const h = harness(t);
   h.expire();
   await assert.rejects(h.result, /15 secondi/);
+  assert.equal(h.close.mock.callCount(), 1);
   assert.equal(h.removed.length, 1);
 });
 
@@ -63,10 +70,11 @@ test('verification reports blocked popups', async t => {
   const h = harness(t, true);
   await assert.rejects(h.result, /bloccato/);
   assert.equal(h.sent.length, 0);
+  assert.equal(h.close.mock.callCount(), 0);
   assert.equal(h.removed.length, 1);
 });
 
-test('verification reports early closure of the site tab', async t => {
+test('verification reports early closure of the site window', async t => {
   const h = harness(t);
   h.popup.closed = true;
   h.poll();
@@ -78,5 +86,14 @@ test('leaving the environment cancels the pending verification', async t => {
   const h = harness(t);
   h.controller.abort();
   await assert.rejects(h.result, { name: 'AbortError' });
+  assert.equal(h.close.mock.callCount(), 1);
+  assert.equal(h.removed.length, 1);
+});
+
+test('a browser error while closing does not hide the verification result', async t => {
+  const h = harness(t);
+  h.popup.close = () => { throw new Error('Closing blocked'); };
+  h.reply({});
+  await h.result;
   assert.equal(h.removed.length, 1);
 });
