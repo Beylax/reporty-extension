@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { Eye, Pencil, Trash2, X } from 'lucide-react';
+import { Eye, EyeOff, Pencil, Trash2, X } from 'lucide-react';
 import { formatReportDateTime, priorityLabels, type AttachmentRequest, type Report, type ReportComment } from '@reporty/shared';
 import { ReplyAttachmentList, ReplyComposer } from '@reporty/shared/ui/reply-attachments';
 import { Button } from '@/components/ui/button';
@@ -46,14 +46,17 @@ export function PlaygroundReportDrawer({ id, environmentId, pagePath, onClose, o
   const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [transparent, setTransparent] = useState(false);
   const [body, setBody] = useState('');
   const [gallery, setGallery] = useState<{ url: string; loading: boolean } | null>(null);
   const toast = useToastManager();
   useEffect(() => {
     alive.current = true;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeButton.current?.focus();
-    return () => { alive.current = false; if (previous?.isConnected) previous.focus(); };
+    // Focusing an offscreen, animating drawer must not scroll its container
+    // to follow the button and visually cancel the slide-in movement.
+    closeButton.current?.focus({ preventScroll: true });
+    return () => { alive.current = false; if (previous?.isConnected) previous.focus({ preventScroll: true }); };
   }, []);
   useEffect(() => {
     let disposed = false;
@@ -112,9 +115,9 @@ export function PlaygroundReportDrawer({ id, environmentId, pagePath, onClose, o
       if (alive.current && screenshotRevision.current === revision) setGallery({ url: result.url, loading: false });
     } catch (error) { if (alive.current && screenshotRevision.current === revision) { setGallery(null); attachmentError(error instanceof Error ? error.message : 'Screenshot non disponibile.'); } }
   }
-  return <aside aria-labelledby={titleId} className="absolute inset-y-0 right-0 z-30 flex w-[min(440px,calc(100%_-_1rem))] animate-in slide-in-from-right-full flex-col border-l bg-background shadow-xl duration-300 ease-out motion-reduce:animate-none" onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented) { event.stopPropagation(); if (!busy) onClose(); } }}>
-    <header className="flex shrink-0 items-center justify-between gap-3 border-b p-4"><h2 id={titleId} className="text-lg font-semibold">Dettaglio segnalazione</h2><Button ref={closeButton} variant="outline" size="icon" aria-label="Chiudi dettaglio segnalazione" disabled={busy} onClick={onClose}><X aria-hidden="true" /></Button></header>
-    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+  return <aside aria-labelledby={titleId} className={`absolute inset-y-0 right-0 z-30 flex w-[min(440px,calc(100%_-_1rem))] animate-in slide-in-from-right-full flex-col border-l transition-[background-color,border-color,box-shadow] duration-300 ease-out motion-reduce:animate-none motion-reduce:transition-none ${transparent ? 'border-border/10 bg-background/5 shadow-none' : 'bg-background shadow-xl'}`} onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented) { event.stopPropagation(); if (!busy) onClose(); } }}>
+    <header className={`flex shrink-0 items-center justify-between gap-3 border-b p-4 transition-colors duration-200 motion-reduce:transition-none ${transparent ? 'border-border/10' : ''}`}><h2 id={titleId} className={`text-lg font-semibold transition-opacity duration-200 motion-reduce:transition-none ${transparent ? 'opacity-10' : ''}`}>Dettaglio segnalazione</h2><div className="flex shrink-0 gap-2"><Button variant={transparent ? 'secondary' : 'outline'} size="icon" className="bg-background" aria-label={transparent ? 'Ripristina opacità drawer' : 'Rendi drawer trasparente'} title={transparent ? 'Ripristina opacità drawer' : 'Rendi drawer trasparente'} aria-pressed={transparent} onClick={() => setTransparent(value => !value)}>{transparent ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}</Button><Button ref={closeButton} variant="outline" size="icon" className="bg-background" aria-label="Chiudi dettaglio segnalazione" disabled={busy} onClick={onClose}><X aria-hidden="true" /></Button></div></header>
+    <div className={`min-h-0 flex-1 space-y-4 overflow-y-auto p-4 transition-opacity duration-200 motion-reduce:transition-none ${transparent ? 'opacity-10' : ''}`}>
       {loading ? <DetailSkeleton /> : failed || !report ? <div className="space-y-3"><p className="text-sm text-muted-foreground">Il dettaglio della segnalazione non è disponibile.</p><Button variant="outline" onClick={() => { setLoading(true); setAttempt(value => value + 1); }}>Riprova</Button></div> : <>
         <div className="flex flex-wrap gap-2"><Badge className={statusColors[report.status]}><ReportIcon value={report.status} />{statuses[report.status]}</Badge><Badge className={priorityColors[report.priority ?? 'medium']}><ReportIcon value={report.priority ?? 'medium'} />{priorityLabels[report.priority ?? 'medium']}</Badge></div>
         <section className="space-y-3 rounded-xl border bg-muted/50 p-4"><h3 className="text-sm font-semibold">Descrizione</h3>{editing ? <form className="space-y-3" onSubmit={event => { event.preventDefault(); if (body.trim() && body.trim() !== report.body.trim()) void run(async () => { await write('edit', { body }); if (alive.current) setEditing(false); }); }}><Textarea aria-label="Modifica descrizione" value={body} onChange={event => setBody(event.target.value)} maxLength={10000} required disabled={busy} className="min-h-28" /><div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={busy} onClick={() => setEditing(false)}>Annulla</Button><Button disabled={busy || !body.trim() || body.trim() === report.body.trim()}>Salva testo</Button></div></form> : <><p className="whitespace-pre-wrap break-words leading-relaxed">{report.body}</p>{report.canEdit ? <div className="flex justify-end"><Button variant="outline" size="icon" aria-label="Modifica testo" disabled={busy} onClick={() => { setBody(report.body); setEditing(true); }}><Pencil aria-hidden="true" /></Button></div> : null}</>}
