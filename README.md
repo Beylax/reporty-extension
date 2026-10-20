@@ -173,7 +173,9 @@ Nella dashboard il polling delle segnalazioni aggiorna in background soltanto la
 
 La vista Lista/Kanban della pagina progetto viene ricordata nel browser per ciascun progetto per un anno, anche dopo un ricaricamento. Su mobile si usa sempre la lista senza sovrascrivere la preferenza desktop. In assenza di preferenza viene mostrata la Kanban.
 
-Le card Kanban non contengono controlli per la priorità, che resta modificabile nel dettaglio della segnalazione.
+Nella pagina del progetto, il titolo e il badge Sviluppatore sono visibili solo su mobile; su desktop il nome resta nella sidebar e il titolo è disponibile agli screen reader.
+
+Le card Kanban non contengono controlli per la priorità, che resta modificabile nel dettaglio della segnalazione. Autore e data di creazione sono in basso a sinistra sulla stessa riga, sotto ambiente e percorso della pagina.
 
 Con il tasto destro su una card Kanban o una riga della lista si apre il menu della segnalazione: dettaglio in modale, pagina originale in una nuova scheda, playground sulla pagina della segnalazione, con scorrimento al punto e pulsazione del pin, oppure eliminazione con conferma per chi ha il permesso. Il menu supporta anche la tastiera e la pressione prolungata nella lista mobile. Il dettaglio nel playground si apre nel drawer della dashboard; lo scorrimento e l’evidenziazione del pin richiedono il widget installato e abilitato nell’ambiente.
 

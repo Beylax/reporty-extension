@@ -38,7 +38,7 @@ function InfiniteColumn({ children, total, visible, loading, failed, onLoadMore 
   return <div ref={root} className="max-h-[65vh] min-h-40 space-y-3 overflow-y-auto p-3">
     {children}
     {hasMore || loading || failed ? <div ref={sentinel} role="status" aria-label="Caricamento altre segnalazioni" className="space-y-3">
-      {loading && !failed ? <div className="space-y-3 rounded-xl border bg-card p-4"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-3/4" /><div className="space-y-1"><Skeleton className="h-3 w-1/2" /><Skeleton className="h-3 w-3/4" /><Skeleton className="h-3 w-1/2" /></div></div> : null}
+      {loading && !failed ? <div className="space-y-3 rounded-xl border bg-card p-4"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-3/4" /><div className="space-y-1"><Skeleton className="h-3 w-3/4" /><div className="flex items-center gap-2"><Skeleton className="h-3 w-1/3" /><Skeleton className="h-3 w-1/2" /></div></div></div> : null}
       <Button variant="outline" className="w-full" disabled={loading} onClick={onLoadMore}>{failed ? 'Riprova il caricamento' : 'Carica altre segnalazioni'}</Button>
     </div> : null}
   </div>;
@@ -88,7 +88,7 @@ export function ReportKanban({ reports, columns: feeds, environments, busy, movi
                 <CardTitle className="min-w-0 flex-1"><Button variant="ghost" className="h-auto min-w-0 w-full justify-start whitespace-normal p-0 text-left hover:bg-transparent" disabled={busy} onClick={() => { if (!suppressClick.current) onOpen(report); }}><span className="line-clamp-4 min-w-0 break-words [overflow-wrap:anywhere]">{report.body}</span></Button></CardTitle>
                 {report.canChangeStatus ? <GripVertical aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" /> : null}
               </div></CardHeader>
-              <CardContent><div className="space-y-1 text-xs text-muted-foreground"><p className="truncate" title={report.authorName}>{report.authorName}</p><p className="truncate" title={report.page_path}>{environments.find(item => item.id === report.environment_id)?.name} · {report.page_path}</p><time dateTime={report.created_at} className="block">{formatReportDateTime(report.created_at)}</time></div></CardContent>
+              <CardContent><div className="space-y-1 text-xs text-muted-foreground"><p className="truncate" title={report.page_path}>{environments.find(item => item.id === report.environment_id)?.name} · {report.page_path}</p><div className="flex min-w-0 items-center gap-2"><p className="truncate" title={report.authorName}>{report.authorName}</p><span aria-hidden="true">·</span><time dateTime={report.created_at} className="shrink-0 whitespace-nowrap">{formatReportDateTime(report.created_at)}</time></div></div></CardContent>
             </Card>))}
           </InfiniteColumn>
         </section>;
