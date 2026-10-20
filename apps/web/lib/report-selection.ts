@@ -6,7 +6,8 @@ export function pageSelectionState(selected: ReportSelection[], page: ReportSele
   return { all: page.length > 0 && count === page.length, partial: count > 0 && count < page.length };
 }
 
-export function selectReportPage(selected: ReportSelection[], page: ReportSelection[], checked: boolean): ReportSelection[] {
+export function selectReportPage(selected: ReportSelection[], page: ReportSelection[], checked: boolean, allFilteredSelected = false): ReportSelection[] {
+  if (!checked && allFilteredSelected) return [];
   const pageIds = new Set(page.map(report => report.id));
   const otherPages = selected.filter(report => !pageIds.has(report.id));
   return checked ? [...otherPages, ...page] : otherPages;

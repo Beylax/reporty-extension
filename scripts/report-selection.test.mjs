@@ -17,6 +17,17 @@ test('deselecting a page preserves selections on other pages', () => {
   assert.deepEqual(pageSelectionState(selection, page), { all: false, partial: false });
 });
 
+test('unchecking a globally selected result clears all pages from any current page', () => {
+  const selection = [...page, report('other-page')];
+  assert.deepEqual(selectReportPage(selection, page, false, true), []);
+  assert.deepEqual(selectReportPage(selection, [selection[2]], false, true), []);
+});
+
+test('selecting a page still preserves the global selection', () => {
+  const selection = [...page, report('other-page')];
+  assert.deepEqual(new Set(selectReportPage(selection, page, true, true).map(item => item.id)), new Set(selection.map(item => item.id)));
+});
+
 test('the header reflects only the visible page, including partial and empty selections', () => {
   assert.deepEqual(pageSelectionState([report('other-page')], page), { all: false, partial: false });
   assert.deepEqual(pageSelectionState([page[1], report('other-page')], page), { all: false, partial: true });

@@ -1,8 +1,52 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { executeBulkReports } from '../apps/web/lib/bulk-reports.ts';
+import { applyBulkReportBatch } from '../apps/web/lib/bulk-report-update.ts';
 
 const target = id => ({ id, environmentId: 'environment-'+id });
+test('one apply updates both fields and reports only fully completed reports', async () => {
+  const requests = [];
+  const result = await applyBulkReportBatch(['one','two','denied'].map(target), { operation: 'update', status: 'validation', priority: 'high' }, async request => {
+    requests.push(request);
+    return { data: { succeeded: request.operation === 'status' ? ['one','two'] : ['one'], failed: request.operation === 'status' ? ['denied'] : ['two'], storageWarnings: [] } };
+  });
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].operation, 'status'); assert.equal(requests[0].value, 'validation');
+  assert.equal(requests[1].operation, 'priority'); assert.equal(requests[1].value, 'high');
+  assert.deepEqual(requests[1].targets.map(item => item.id), ['one','two']);
+  assert.deepEqual(result, { succeeded: ['one'], failed: ['two','denied'], storageWarnings: [] });
+});
+
+test('apply supports a single field and rejects empty updates without writes', async () => {
+  let writes = 0;
+  const mutate = async request => {
+    writes++;
+    assert.equal(request.operation, 'priority'); assert.equal(request.value, 'low');
+    return { data: { succeeded: ['one'], failed: [], storageWarnings: [] } };
+  };
+  await assert.rejects(applyBulkReportBatch([target('one')], { operation: 'update' }, mutate), /Scegli/);
+  assert.equal(writes, 0);
+  assert.deepEqual(await applyBulkReportBatch([target('one')], { operation: 'update', priority: 'low' }, mutate), { succeeded: ['one'], failed: [], storageWarnings: [] });
+  assert.equal(writes, 1);
+});
+
+test('a denied first change does not proceed to the second field and backend errors propagate', async () => {
+  let writes = 0;
+  const result = await applyBulkReportBatch([target('denied')], { operation: 'update', status: 'resolved', priority: 'high' }, async () => {
+    writes++;
+    return { data: { succeeded: [], failed: ['denied'], storageWarnings: [] } };
+  });
+  assert.equal(writes, 1); assert.deepEqual(result.failed, ['denied']);
+  await assert.rejects(applyBulkReportBatch([target('one')], { operation: 'update', status: 'resolved' }, async () => ({ error: 'Not authorized' })), /Not authorized/);
+});
+
+test('the unified apply path retains delete cleanup warnings', async () => {
+  const result = await applyBulkReportBatch([target('one')], { operation: 'delete' }, async request => {
+    assert.equal(request.operation, 'delete');
+    return { data: { succeeded: ['one'], failed: [], storageWarnings: ['one'] } };
+  });
+  assert.deepEqual(result, { succeeded: ['one'], failed: [], storageWarnings: ['one'] });
+});
 test('bulk changes authorize each target and continue after denied or failed operations', async () => {
   const calls=[];
   const result=await executeBulkReports({operation:'status',value:'validation',targets:['one','denied','network','four','five','six'].map(target)},async (item,payload)=>{

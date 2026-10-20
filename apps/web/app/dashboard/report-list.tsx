@@ -18,7 +18,7 @@ import { useEffect, useEffectEvent, useRef, useState, useOptimistic, useTransiti
 import { ReportContextMenu } from './report-context-menu';
 import { ReportKanban } from './report-kanban';
 import { useRouter } from 'next/navigation';
-import { type ReportSelection, type ReportSort, formatReportDateTime, priorityLabels, type BulkReportRequest, type ProjectParticipant, type Report, type ReportComment } from '@reporty/shared';
+import { type ReportSelection, type ReportSort, formatReportDateTime, priorityLabels, type ProjectParticipant, type Report, type ReportComment } from '@reporty/shared';
 import { NOTIFICATIONS_CHANGED, startNotificationPolling } from '@/lib/notification-polling';
 import { getReportPage, getReportSelection, getReportThread, mutateReport, mutateReportsBulk } from './report-actions';
 import { type ReportTableSort } from '@/lib/report-table-order';
@@ -37,6 +37,7 @@ import { useMobile } from '@/lib/use-mobile';
 import { Badge } from '@/components/ui/badge';
 import { ReportCountBadge } from '@/components/report-count-badge';
 import { pageSelectionState, selectReportPage } from '@/lib/report-selection';
+import { applyBulkReportBatch, type BulkReportAction, type BulkReportProgress } from '@/lib/bulk-report-update';
 import { saveReportView } from './report-view-actions';
 
 const statusColors = { open: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200', in_progress: 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200', validation: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200', resolved: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' };
@@ -45,7 +46,7 @@ const labels = { open: 'Aperta', in_progress: 'In lavorazione', validation: 'Val
 export function ReportList({ projectId, initialView, environments, participants, initialReportId }: { projectId: string; initialView: 'list' | 'kanban'; initialReportId?: string; participants: ProjectParticipant[]; environments: { id: string; name: string; origin: string }[] }) {
   const router = useRouter();
   const [bulkSelection, setBulkSelection] = useState<{ scope: string; targets: ReportSelection[] }>({ scope: '', targets: [] });
-  const [bulkProgress, setBulkProgress] = useState<{ completed: number; total: number; operation: BulkReportRequest['operation'] } | null>(null);
+  const [bulkProgress, setBulkProgress] = useState<BulkReportProgress | null>(null);
   const bulkLock = useRef(false);
   const [selectingAll, setSelectingAll] = useState(false);
   const selectionLock = useRef(false);
@@ -110,7 +111,7 @@ export function ReportList({ projectId, initialView, environments, participants,
     setBulkSelection(previous => ({ scope: bulkScope, targets: checked ? [...previous.targets.filter(item => item.id !== id), report] : previous.targets.filter(item => item.id !== id) }));
   }
   function selectPage(checked: boolean) {
-    setBulkSelection(previous => ({ scope: bulkScope, targets: selectReportPage(previous.scope === bulkScope ? previous.targets : [], reports, checked) }));
+    setBulkSelection(previous => ({ scope: bulkScope, targets: selectReportPage(previous.scope === bulkScope ? previous.targets : [], reports, checked, allFilteredSelected) }));
   }
   async function selectAll() {
     if (!environments[0] || selectionLock.current) return;
@@ -121,7 +122,8 @@ export function ReportList({ projectId, initialView, environments, participants,
     } catch { toast.add({ title: 'Selezione non riuscita', type: 'error' }); }
     finally { selectionLock.current = false; setSelectingAll(false); }
   }
-  async function applyBulk(operation: BulkReportRequest['operation'], value?: Report['status'] | Report['priority']) {
+  async function applyBulk(action: BulkReportAction) {
+    const operation = action.operation;
     if (view !== 'list' || bulkLock.current || bulkDisabled || !selectedReports.length) return;
     const targets = selectedReports.map(report => ({ id: report.id, environmentId: report.environment_id }));
     const succeeded = new Set<string>();
@@ -131,21 +133,20 @@ export function ReportList({ projectId, initialView, environments, participants,
     try {
       for (let start = 0; start < targets.length; start += 25) {
         const batch = targets.slice(start,start + 25);
-        const result = await mutateReportsBulk({ operation, ...(operation !== 'delete' ? { value } : {}), targets: batch });
-        if (result.error || !result.data) throw new Error(result.error ?? 'Risultato non disponibile.');
-        result.data.succeeded.forEach(id => succeeded.add(id));
-        storageWarnings += result.data.storageWarnings.length;
+        const result = await applyBulkReportBatch(batch, action, mutateReportsBulk);
+        result.succeeded.forEach(id => succeeded.add(id));
+        storageWarnings += result.storageWarnings.length;
         setBulkProgress({ completed: Math.min(start + batch.length, targets.length), total: targets.length, operation });
       }
       if (succeeded.size) toast.add({ title: `${succeeded.size} segnalazioni ${operation === 'delete' ? 'eliminate' : 'aggiornate'}`, type: 'success' });
       const failures = targets.length - succeeded.size;
-      if (failures) toast.add({ title: 'Azione completata solo in parte', description: `${failures} segnalazioni non aggiornate. Restano selezionate per riprovare.`, type: 'error' });
+      if (failures) toast.add({ title: 'Azione completata solo in parte', description: `${failures} segnalazioni non aggiornate completamente. Restano selezionate per riprovare.`, type: 'error' });
     } catch (error) {
-      toast.add({ title: 'Azione in blocco interrotta', description: `${succeeded.size} operazioni confermate su ${targets.length}. ${error instanceof Error ? error.message : 'Riprova.'} Verifica la lista prima di riprovare le altre.`, type: 'error' });
+      toast.add({ title: 'Azione in blocco interrotta', description: `${succeeded.size} segnalazioni completate su ${targets.length}. Alcune modifiche potrebbero essere già state salvate. ${error instanceof Error ? error.message : 'Riprova.'} Verifica la lista prima di riprovare le altre.`, type: 'error' });
     } finally {
       setBulkSelection(previous => ({ ...previous, targets: previous.targets.filter(item => !succeeded.has(item.id)) }));
       if (storageWarnings) toast.add({ title: 'Pulizia file incompleta', description: `${storageWarnings} segnalazioni eliminate, ma alcuni file non sono stati rimossi.`, type: 'error' });
-      if (operation === 'status' || operation === 'delete') window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
+      if (operation === 'delete' || action.status) window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
       router.refresh();
       bulkLock.current = false;
       setBulkProgress(null);
@@ -261,9 +262,9 @@ export function ReportList({ projectId, initialView, environments, participants,
     {mobile ? <div className="flex items-center gap-2"><ReportFilterPanel filters={filterGroups} disabled={Boolean(bulkProgress)} /><ReportListOrder value={listOrder} onChange={setListOrder} disabled={bulkDisabled} /></div> : <fieldset disabled={Boolean(bulkProgress)} className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">{filterGroups.map(group => <ReportFilter key={group.label} {...group} />)}{view === 'kanban' ? <ReportOrder value={kanbanOrder} onChange={setKanbanOrder} kanban /> : null}</fieldset>}
     {activeFilters.length ? <div className="flex flex-wrap gap-2" aria-label="Filtri attivi">{activeFilters.map(item => <FilterPill key={item.key} label={item.label} onRemove={() => { if (!bulkProgress) item.remove(); }}><ReportIcon value={item.key.replace(/^(status|priority)-/, "")} /></FilterPill>)}</div> : null}
 
-    <div className="space-y-5">{view === 'kanban' ? <ReportKanban renderContextMenu={reportContextMenu} key={JSON.stringify([search, priority, environment, page, users, order])} reports={filtered} columns={feed.columns} environments={environments} busy={busy || moving} movingId={movingId} onOpen={openReport} onMove={moveReport} /> : <><ReportBulkToolbar floatOnScroll={!mobile} count={bulkProgress?.total ?? selectedReports.length} disabled={bulkDisabled} pending={bulkProgress} canUpdate={selectedReports.every(report => report.canChangeStatus)} canDelete={selectedReports.every(report => report.canEdit)} onApply={applyBulk} />{pageSelectionStatus.all && !allFilteredSelected ? <Button variant="outline" disabled={bulkDisabled} onClick={() => void selectAll()}>Seleziona tutte le segnalazioni ({feed.total})</Button> : null}<div ref={listRef} aria-busy={feed.loading}>{feed.failed ? <Button variant="outline" onClick={feed.refresh}>Riprova il caricamento</Button> : null}{feed.loading ? <ReportListSkeleton mobile={mobile} /> : <>
+    <div className="space-y-5">{view === 'kanban' ? <ReportKanban renderContextMenu={reportContextMenu} key={JSON.stringify([search, priority, environment, page, users, order])} reports={filtered} columns={feed.columns} environments={environments} busy={busy || moving} movingId={movingId} onOpen={openReport} onMove={moveReport} /> : <><ReportBulkToolbar total={feed.total} showSelectAll={pageSelectionStatus.all && !allFilteredSelected} selectingAll={selectingAll} onSelectAll={() => void selectAll()} onDeselectAll={() => setBulkSelection({ scope: bulkScope, targets: [] })} floatOnScroll={!mobile} count={bulkProgress?.total ?? selectedReports.length} disabled={bulkDisabled} pending={bulkProgress} canUpdate={selectedReports.every(report => report.canChangeStatus)} canDelete={selectedReports.every(report => report.canEdit)} onApply={applyBulk} /><div ref={listRef} aria-busy={feed.loading}>{feed.failed ? <Button variant="outline" onClick={feed.refresh}>Riprova il caricamento</Button> : null}{feed.loading ? <ReportListSkeleton mobile={mobile} /> : <>
     {mobile ? <div className="space-y-3">
-      <label className="flex min-h-11 items-center gap-3 text-sm"><Checkbox aria-label={pageSelectionStatus.all ? 'Deseleziona le segnalazioni della pagina' : 'Seleziona le segnalazioni della pagina'} checked={pageSelectionStatus.all} indeterminate={pageSelectionStatus.partial} disabled={bulkDisabled || !filtered.length} onCheckedChange={checked => selectPage(Boolean(checked))} />Seleziona la pagina</label>
+      <label className="flex min-h-11 items-center gap-3 text-sm"><Checkbox aria-label={allFilteredSelected ? 'Deseleziona tutte le segnalazioni' : pageSelectionStatus.all ? 'Deseleziona le segnalazioni della pagina' : 'Seleziona le segnalazioni della pagina'} checked={pageSelectionStatus.all} indeterminate={pageSelectionStatus.partial} disabled={bulkDisabled || !filtered.length} onCheckedChange={checked => selectPage(Boolean(checked))} />Seleziona la pagina</label>
       {!filtered.length ? <p className="rounded-xl border bg-card p-6 text-center text-sm text-muted-foreground">Nessuna segnalazione trovata.</p> : null}
       <ul className="space-y-3" aria-label="Segnalazioni del progetto">{paginated.map(report => reportContextMenu(report, <li key={report.id} className={`space-y-3 rounded-xl border bg-card p-4 ${selectedIds.has(report.id) ? 'border-primary bg-primary/5' : ''}`}>
         <div className="flex items-start gap-3">
@@ -279,7 +280,7 @@ export function ReportList({ projectId, initialView, environments, participants,
         <caption className="sr-only">Segnalazioni del progetto. Apri una segnalazione dalla descrizione oppure selezionala per le azioni in blocco.</caption>
         <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
           <tr>
-            <th scope="col" className="w-12 px-4 py-3"><Checkbox aria-label={pageSelectionStatus.all ? "Deseleziona le segnalazioni della pagina" : "Seleziona le segnalazioni della pagina"} checked={pageSelectionStatus.all} indeterminate={pageSelectionStatus.partial} disabled={bulkDisabled || !filtered.length} onCheckedChange={checked => selectPage(Boolean(checked))} /></th>
+            <th scope="col" className="w-12 px-4 py-3"><Checkbox aria-label={allFilteredSelected ? "Deseleziona tutte le segnalazioni" : pageSelectionStatus.all ? "Deseleziona le segnalazioni della pagina" : "Seleziona le segnalazioni della pagina"} checked={pageSelectionStatus.all} indeterminate={pageSelectionStatus.partial} disabled={bulkDisabled || !filtered.length} onCheckedChange={checked => selectPage(Boolean(checked))} /></th>
             <ReportTableHeading field="body" label="Segnalazione" order={listOrder} disabled={bulkDisabled} onChange={setListOrder} />
             <ReportTableHeading field="status" label="Stato" order={listOrder} disabled={bulkDisabled} onChange={setListOrder} />
             <ReportTableHeading field="priority" label="Priorità" order={listOrder} disabled={bulkDisabled} onChange={setListOrder} />
