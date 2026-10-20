@@ -80,7 +80,7 @@ function ExpandingPin({ children, anchorX, anchorY, ...props }: React.ButtonHTML
 
 type Draft = { id: string; context: ReportContext; screenshot?: string; body: string; priority: ReportPriority };
 
-export function ReviewOverlay({ site, environment, host, transport, logoUrl, onPositionChange, onHiddenChange, captureScreenshot: captureOverride, requestedReport }: { site: Site; environment: Environment; host: HTMLElement; onPositionChange: (position: Site['position']) => Promise<void>; onHiddenChange: (hidden: boolean) => Promise<void>; transport?: (body: Record<string, unknown>) => Promise<unknown>; logoUrl?: string; captureScreenshot?: () => Promise<string>; requestedReport?: { id: string; requestId: string } }) {
+export function ReviewOverlay({ site, environment, host, transport, logoUrl, onPositionChange, onHiddenChange, captureScreenshot: captureOverride, requestedReport, onOpenReport, reportsRevision }: { site: Site; environment: Environment; host: HTMLElement; onPositionChange: (position: Site['position']) => Promise<void>; onHiddenChange: (hidden: boolean) => Promise<void>; transport?: (body: Record<string, unknown>) => Promise<unknown>; logoUrl?: string; captureScreenshot?: () => Promise<string>; requestedReport?: { id: string; requestId: string; focusOnly?: boolean }; onOpenReport?: (id: string) => boolean; reportsRevision?: number }) {
   const rawMessage = async (body: Record<string, unknown>) => (transport ? await transport(body) : await extensionMessage(body)) as Awaited<ReturnType<typeof extensionMessage>>;
   const { ensureIdentity, nameDialog, nameDialogOpen } = useReviewerIdentity(rawMessage, environment.id);
   const message = async (body: Record<string, unknown>) => {
@@ -134,11 +134,12 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
     if (notificationLock.current) return;
     notificationLock.current = true;
     const scope = notificationScope.current;
+    const external = Boolean(item && openReport && onOpenReport?.(item.issue_id));
     setNotificationReadingId(item && !openReport ? item.id : null);
     if (item && openReport) {
       setNotificationDetailLoading(true); setNotificationsOpen(false); setSettingsOpen(false);
       setSelected(null); setComments([]); setEdit(null); setImageUrl(''); setGalleryOpen(false);
-      setModalOpen(true);
+      setModalOpen(!external);
     }
     await run(async () => {
       try {
@@ -152,7 +153,9 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
           if (!report) throw new Error('Segnalazione non disponibile.');
           if (report.environment_id !== environment.id || report.page_path !== page.pagePath) throw new Error('Segnalazione non disponibile in questa pagina.');
           setReports(items => items.some(entry => entry.id === report.id) ? items.map(entry => entry.id === report.id ? { ...entry, ...report } : entry) : [...items, report]);
-          setSelected(report); setComments(thread.data.comments); setNotificationsOpen(false); setSettingsOpen(false); setEdit(null); setImageUrl('');
+          if (external) { setModalOpen(false); setSelected(null); focusReport(report); }
+          else { setSelected(report); setComments(thread.data.comments); }
+          setNotificationsOpen(false); setSettingsOpen(false); setEdit(null); setImageUrl('');
         } else setStatus(item ? 'Notifica segnata come letta.' : 'Notifiche della pagina segnate come lette.', 'success');
       } catch (error) {
         if (item && openReport && scope === notificationScope.current) setNotificationsOpen(true);
@@ -260,8 +263,24 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
       } finally { updateLock.current = false; }
     });
   }
+  function focusReport(report: Report | ReportPin) {
+    setDraft(null); setMode(null); setHover(null); setEdit(null); setGalleryOpen(false); setSettingsOpen(false); setNotificationsOpen(false);
+    if (report.status === 'resolved') setShowResolved(true);
+    setReports(items => items.some(item => item.id === report.id) ? items.map(item => item.id === report.id ? { ...item, ...report } : item) : [...items, report]);
+    const point = locate(report.context.anchor);
+    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth';
+    if (point) window.scrollBy({ top: point.y - innerHeight / 2, left: 0, behavior });
+    else window.scrollTo({ top: report.context.scroll.y, left: report.context.scroll.x, behavior });
+    setHighlighted(null);
+    requestAnimationFrame(() => setHighlighted(report.id));
+  }
   async function view(report: Report | ReportPin) {
     if (busy) return;
+    if (onOpenReport?.(report.id)) {
+      setModalOpen(false); setOpen(false); setSelected(null);
+      focusReport(report);
+      return;
+    }
     const scope = notificationScope.current;
     setSettingsOpen(false); setNotificationsOpen(false); setDraft(null); setEdit(null); setComments([]); setImageUrl(''); setOpen(false); setModalOpen(true);
     setSelected('project_id' in report ? report : null);
@@ -282,10 +301,12 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
     setSelected(null); setComments([]); setImageUrl('');
     return () => { disposed = true; };
   }, [page.pagePath, environment.id]);
+  useEffect(() => {
+    if (reportsRevision) void refresh().catch(error => setStatus(error instanceof Error ? error.message : 'Aggiornamento non riuscito.'));
+  }, [reportsRevision]);
   const handledRequest = useRef('');
   useEffect(() => {
     if (!requestedReport || busy || pinsLoading || handledRequest.current === requestedReport.requestId) return;
-    handledRequest.current = requestedReport.requestId;
     const scope = notificationScope.current;
     let disposed = false;
     void (async () => {
@@ -294,10 +315,11 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
         if (disposed || notificationScope.current !== scope) return;
         const report = listing.reports[0];
         if (!report || report.environment_id !== environment.id || report.page_path !== page.pagePath) throw new Error('Segnalazione non disponibile in questa pagina.');
+        handledRequest.current = requestedReport.requestId;
         if (report.status === 'resolved') setShowResolved(true);
-        setHighlighted(report.id);
-        await view(report);
-      } catch (error) { if (!disposed) setStatus(error instanceof Error ? error.message : 'Segnalazione non disponibile.'); }
+        if (requestedReport.focusOnly) { setModalOpen(false); setOpen(false); setSelected(null); focusReport(report); }
+        else await view(report);
+      } catch (error) { if (!disposed) { handledRequest.current = requestedReport.requestId; setStatus(error instanceof Error ? error.message : 'Segnalazione non disponibile.'); } }
     })();
     return () => { disposed = true; };
   }, [requestedReport?.requestId, page.pagePath, environment.id, busy, pinsLoading]);

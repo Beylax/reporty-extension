@@ -1,0 +1,131 @@
+'use client';
+
+import { useEffect, useId, useRef, useState } from 'react';
+import { Eye, Pencil, Trash2, X } from 'lucide-react';
+import { formatReportDateTime, priorityLabels, type AttachmentRequest, type Report, type ReportComment } from '@reporty/shared';
+import { ReplyAttachmentList, ReplyComposer } from '@reporty/shared/ui/reply-attachments';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { RadioButtons } from '@/components/ui/radio-buttons';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
+import { useToastManager } from '@/components/ui/toast';
+import { DeleteConfirm } from '@/components/delete-confirm';
+import { ReportIcon } from '@/components/report-icon';
+import { ScreenshotGallery } from '@/components/screenshot-gallery';
+import { NOTIFICATIONS_CHANGED } from '@/lib/notification-polling';
+import { getReportPage, getReportThread, mutateReport } from './report-actions';
+
+const statuses = { open: 'Aperta', in_progress: 'In lavorazione', validation: 'Validazione', resolved: 'Chiusa' };
+const statusColors = { open: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200', in_progress: 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200', validation: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200', resolved: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' };
+const priorityColors = { low: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200', medium: 'bg-amber-100 text-amber-800 dark:bg-orange-950 dark:text-orange-200', high: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200' };
+
+function DetailSkeleton() {
+  return <div role="status" aria-label="Caricamento dettaglio segnalazione" className="space-y-4">
+    <div className="flex gap-2"><Skeleton className="h-6 w-24 rounded-full" /><Skeleton className="h-6 w-28 rounded-full" /></div>
+    <div className="space-y-3 rounded-xl border p-4"><Skeleton className="h-4 w-24" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-2/3" /><Skeleton className="ml-auto size-8" /></div>
+    <div className="space-y-3 rounded-xl border p-4">{[0,1].map(index => <div key={index} className="space-y-2"><Skeleton className="h-4 w-16" /><Skeleton className="h-9 w-full" /></div>)}</div>
+    <div className="space-y-3 rounded-xl border p-4"><Skeleton className="h-5 w-20" /><Skeleton className="h-20 w-full" /><Skeleton className="h-24 w-full" /><Skeleton className="ml-auto h-8 w-24" /></div>
+    <div className="space-y-2 rounded-xl border p-4"><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-3/4" /></div>
+  </div>;
+}
+
+export function PlaygroundReportDrawer({ id, environmentId, pagePath, onClose, onChanged }: {
+  id: string; environmentId: string; pagePath: string; onClose: () => void; onChanged: () => void;
+}) {
+  const titleId = useId();
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const alive = useRef(true);
+  const lock = useRef(false);
+  const screenshotRevision = useRef(0);
+  const [report, setReport] = useState<Report | null>(null);
+  const [comments, setComments] = useState<ReportComment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [body, setBody] = useState('');
+  const [gallery, setGallery] = useState<{ url: string; loading: boolean } | null>(null);
+  const toast = useToastManager();
+  useEffect(() => {
+    alive.current = true;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButton.current?.focus();
+    return () => { alive.current = false; if (previous?.isConnected) previous.focus(); };
+  }, []);
+  useEffect(() => {
+    let disposed = false;
+    void Promise.all([
+      getReportPage(environmentId, { id, environments: [environmentId], pages: [pagePath], limit: 1 }),
+      getReportThread(environmentId, id),
+    ]).then(([listing, thread]) => {
+      if (disposed) return;
+      const item = listing.reports[0];
+      if (!item || item.environment_id !== environmentId || item.page_path !== pagePath || thread.error) throw new Error(thread.error ?? 'Segnalazione non disponibile in questa pagina.');
+      setReport(item); setComments(thread.data.comments); setFailed(false);
+    }).catch(error => {
+      if (disposed) return;
+      setFailed(true);
+      toast.add({ title: 'Dettaglio non disponibile', description: error instanceof Error ? error.message : 'Riprova.', type: 'error' });
+    }).finally(() => { if (!disposed) setLoading(false); });
+    return () => { disposed = true; };
+  }, [id, environmentId, pagePath, attempt, toast]);
+  async function reload() {
+    const [listing, thread] = await Promise.all([getReportPage(environmentId, { id, environments: [environmentId], pages: [pagePath], limit: 1 }), getReportThread(environmentId, id)]);
+    if (thread.error || !listing.reports[0]) throw new Error(thread.error ?? 'Segnalazione non disponibile.');
+    if (alive.current) { setReport(listing.reports[0]); setComments(thread.data.comments); }
+  }
+  async function write(operation: 'status' | 'priority' | 'edit' | 'reply' | 'delete', payload: { body?: string; status?: string; priority?: string; attachments?: string[]; replyId?: string }) {
+    const result = await mutateReport(environmentId, operation, { id, ...payload }, false);
+    if (result.error) throw new Error(result.error);
+    toast.add({ title: operation === 'delete' ? 'Segnalazione eliminata' : operation === 'reply' ? 'Risposta aggiunta' : 'Modifiche salvate', type: 'success' });
+    if (result.warning) toast.add({ title: result.warning, type: 'error' });
+    window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
+    onChanged();
+    if (operation === 'delete') { if (alive.current) onClose(); return; }
+    try { await reload(); }
+    catch { toast.add({ title: 'Modifica salvata; aggiornamento del dettaglio non riuscito.', type: 'error' }); }
+  }
+  async function run(work: () => Promise<void>) {
+    if (lock.current) return;
+    lock.current = true; setBusy(true);
+    try { await work(); }
+    catch (error) { toast.add({ title: 'Operazione non riuscita', description: error instanceof Error ? error.message : 'Riprova.', type: 'error' }); }
+    finally { lock.current = false; if (alive.current) setBusy(false); }
+  }
+  async function attachmentRequest(input: AttachmentRequest) {
+    const response = await fetch('/api/attachments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...input, environmentId, issueId: id }) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error ?? 'Allegato non disponibile.');
+    return result;
+  }
+  function attachmentError(message: string) { toast.add({ title: 'Operazione non riuscita', description: message, type: 'error' }); }
+  async function screenshot() {
+    const revision = ++screenshotRevision.current;
+    setGallery({ url: '', loading: true });
+    try {
+      const response = await fetch(`/api/reports/${id}/screenshot`);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Screenshot non disponibile.');
+      if (alive.current && screenshotRevision.current === revision) setGallery({ url: result.url, loading: false });
+    } catch (error) { if (alive.current && screenshotRevision.current === revision) { setGallery(null); attachmentError(error instanceof Error ? error.message : 'Screenshot non disponibile.'); } }
+  }
+  return <aside aria-labelledby={titleId} className="absolute inset-y-0 right-0 z-30 flex w-[min(440px,calc(100%_-_1rem))] shrink-0 animate-in slide-in-from-right-4 flex-col border-l bg-background shadow-xl duration-200 motion-reduce:animate-none xl:static xl:w-[440px] xl:shadow-none" onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented) { event.stopPropagation(); if (!busy) onClose(); } }}>
+    <header className="flex shrink-0 items-center justify-between gap-3 border-b p-4"><h2 id={titleId} className="text-lg font-semibold">Dettaglio segnalazione</h2><Button ref={closeButton} variant="outline" size="icon" aria-label="Chiudi dettaglio segnalazione" disabled={busy} onClick={onClose}><X aria-hidden="true" /></Button></header>
+    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+      {loading ? <DetailSkeleton /> : failed || !report ? <div className="space-y-3"><p className="text-sm text-muted-foreground">Il dettaglio della segnalazione non è disponibile.</p><Button variant="outline" onClick={() => { setLoading(true); setAttempt(value => value + 1); }}>Riprova</Button></div> : <>
+        <div className="flex flex-wrap gap-2"><Badge className={statusColors[report.status]}><ReportIcon value={report.status} />{statuses[report.status]}</Badge><Badge className={priorityColors[report.priority ?? 'medium']}><ReportIcon value={report.priority ?? 'medium'} />{priorityLabels[report.priority ?? 'medium']}</Badge></div>
+        <section className="space-y-3 rounded-xl border bg-muted/50 p-4"><h3 className="text-sm font-semibold">Descrizione</h3>{editing ? <form className="space-y-3" onSubmit={event => { event.preventDefault(); if (body.trim() && body.trim() !== report.body.trim()) void run(async () => { await write('edit', { body }); if (alive.current) setEditing(false); }); }}><Textarea aria-label="Modifica descrizione" value={body} onChange={event => setBody(event.target.value)} maxLength={10000} required disabled={busy} className="min-h-28" /><div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={busy} onClick={() => setEditing(false)}>Annulla</Button><Button disabled={busy || !body.trim() || body.trim() === report.body.trim()}>Salva testo</Button></div></form> : <><p className="whitespace-pre-wrap break-words leading-relaxed">{report.body}</p>{report.canEdit ? <div className="flex justify-end"><Button variant="outline" size="icon" aria-label="Modifica testo" disabled={busy} onClick={() => { setBody(report.body); setEditing(true); }}><Pencil aria-hidden="true" /></Button></div> : null}</>}
+          {report.screenshot_path ? <Button variant="outline" disabled={gallery?.loading} onClick={() => void screenshot()}><Eye aria-hidden="true" />Mostra screenshot</Button> : null}
+        </section>
+        {gallery ? <ScreenshotGallery autoOpen src={gallery.url} loading={gallery.loading} aspectRatio={`${report.context.viewport.width} / ${report.context.viewport.height}`} onClose={() => { screenshotRevision.current++; setGallery(null); }} /> : null}
+        <section className="space-y-4 rounded-xl border bg-muted/50 p-4"><div className="space-y-2"><Label htmlFor={`${titleId}-status`}>Stato</Label><RadioButtons id={`${titleId}-status`} label="Stato" value={report.status} options={Object.entries(statuses).map(([value, label]) => ({ value, label }))} disabled={busy || !report.canChangeStatus} onValueChange={value => { if (value !== report.status) void run(() => write('status', { status: value })); }} /></div><div className="space-y-2"><Label htmlFor={`${titleId}-priority`}>Priorità</Label><RadioButtons id={`${titleId}-priority`} label="Priorità" variant="standard" value={report.priority ?? 'medium'} options={(['high','medium','low'] as const).map(value => ({ value, label: priorityLabels[value] }))} disabled={busy || !report.canChangeStatus} onValueChange={value => { if (value !== (report.priority ?? 'medium')) void run(() => write('priority', { priority: value })); }} /></div></section>
+        <section className="space-y-4 rounded-xl border bg-muted/50 p-4"><h3 className="font-semibold">Risposte</h3>{comments.map(comment => <div key={comment.id} className="space-y-2 rounded-lg border bg-background p-3"><div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground"><span>{comment.authorName}</span><time dateTime={comment.created_at}>{formatReportDateTime(comment.created_at)}</time></div><p className="whitespace-pre-wrap break-words text-sm">{comment.body}</p><ReplyAttachmentList attachments={comment.attachments} requestFile={attachmentRequest} onError={attachmentError} /></div>)}<ReplyComposer disabled={busy} onBusyChange={setBusy} requestFile={attachmentRequest} onError={attachmentError} submit={async (body, attachments, replyId) => { await write('reply', { body, attachments, replyId }); }} /></section>
+        <footer className="space-y-1 rounded-xl border bg-muted/50 p-4 text-xs text-muted-foreground"><p>Segnalata da {report.authorName} · {formatReportDateTime(report.created_at)}</p><p>{report.updated_at ? `Ultima modifica: ${report.updatedByName ?? 'Utente'} · ${formatReportDateTime(report.updated_at)}` : 'Nessuna modifica registrata'}</p><p>Viewport originale: {report.context.viewport.width} × {report.context.viewport.height} · scroll {Math.round(report.context.scroll.y)} px</p></footer>
+        {report.canEdit ? <section aria-label="Zona pericolosa" className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4"><h3 className="text-sm font-semibold text-destructive">Zona pericolosa</h3><DeleteConfirm fullWidth disabled={busy} description="Eliminare questa segnalazione e tutte le sue risposte? Questa operazione è definitiva." onConfirm={() => run(() => write('delete', {}))}><Trash2 aria-hidden="true" />Elimina</DeleteConfirm></section> : null}
+      </>}
+    </div>
+  </aside>;
+}

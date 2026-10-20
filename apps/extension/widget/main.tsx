@@ -44,7 +44,9 @@ window.addEventListener('pagehide', event => { if (!event.persisted) playground?
 
 function Widget() {
   const [requestedReport, setRequestedReport] = useState<PlaygroundSelection>();
+  const [reportsRevision, setReportsRevision] = useState(0);
   useEffect(() => playground?.subscribeSelection(setRequestedReport), []);
+  useEffect(() => playground?.subscribeRefresh(() => setReportsRevision(value => value + 1)), []);
   const [config,setConfig]=useState<{enabled:boolean;environment:Environment}|null>(null);
   const [token,setToken]=useState(storedToken);
   const [position,setPosition]=useState(storedPosition);
@@ -105,7 +107,7 @@ function Widget() {
     return result;
   }
   if(!config?.enabled)return null;
-  if(token)return <ReviewOverlay host={host} site={{environmentId:config.environment.id,position,hidden}} onHiddenChange={changeHidden} onPositionChange={changePosition} environment={config.environment} transport={transport} logoUrl={`${api}/brand/reporty-symbol.png`} requestedReport={requestedReport} captureScreenshot={playground?.captureScreenshot} />;
+  if(token)return <ReviewOverlay host={host} site={{environmentId:config.environment.id,position,hidden}} onHiddenChange={changeHidden} onPositionChange={changePosition} environment={config.environment} transport={transport} logoUrl={`${api}/brand/reporty-symbol.png`} requestedReport={requestedReport} reportsRevision={reportsRevision} onOpenReport={playground?.openReport} captureScreenshot={playground?.captureScreenshot} />;
   const top = position.startsWith('top'), left = position.endsWith('left');
   return <div role={sessionStarting ? 'status' : undefined} aria-label={sessionStarting ? 'Caricamento pannello segnalazioni' : undefined} style={{ [top ? 'top' : 'bottom']: 24, [left ? 'left' : 'right']: 24 }} className="pointer-events-auto fixed flex items-center gap-1 rounded-full border bg-background p-1.5 shadow-xl">{sessionStarting ? <><Skeleton className="size-9 rounded-lg" /><Skeleton className="size-10 rounded-full" /></> : <Button size="icon" variant="ghost" aria-label="Riprova ad aprire le segnalazioni" onClick={() => setSessionAttempt(value => value + 1)}><Menu className="size-5" /></Button>}</div>;
 }

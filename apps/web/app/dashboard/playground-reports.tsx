@@ -105,14 +105,14 @@ export function PlaygroundReports({ environment, pagePath, onSelectReport, conne
         {priorities.map(priority => <FilterPill key={priority} label={`Priorità ${priorityLabels[priority as Report['priority']].toLowerCase()}`} onRemove={() => setPriorities(values => values.filter(value => value !== priority))}><ReportIcon value={priority} /></FilterPill>)}
       </div> : null}
     </div>
-    {!connected ? <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">Attendi il collegamento del widget per aprire una segnalazione nella pagina.</p> : null}
+    {!connected ? <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">Il dettaglio è disponibile. Per scorrere al pin nella pagina, attendi il collegamento del widget.</p> : null}
     <div className="min-h-0 flex-1 overflow-y-auto" aria-busy={feed.loading}>
       {feed.loading ? <PlaygroundReportsSkeleton /> : feed.failed ? <div className="space-y-3 rounded-xl border p-4">
         <p className="text-sm text-muted-foreground">Le segnalazioni della pagina non sono disponibili.</p>
         <Button variant="outline" size="sm" onClick={feed.refresh}>Riprova</Button>
       </div> : feed.reports.length ? <ul className="space-y-3">
         {feed.reports.map(report => <li key={report.id}>
-          <button type="button" disabled={!connected} onClick={() => onSelectReport(report.id)} aria-label={`Apri segnalazione: ${report.body}`} className="w-full space-y-3 rounded-xl border bg-card p-3 text-left transition-colors enabled:hover:border-primary/40 enabled:hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed motion-reduce:transition-none">
+          <button type="button" onClick={() => onSelectReport(report.id)} aria-label={`Apri segnalazione: ${report.body}`} className="w-full space-y-3 rounded-xl border bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
             <span className="flex flex-wrap gap-1.5">
               <Badge className={`border-[color-mix(in_oklab,currentColor_25%,transparent)] ${statusColors[report.status]}`}><ReportIcon value={report.status} />{statusLabels[report.status]}</Badge>
               <Badge className={`border-[color-mix(in_oklab,currentColor_25%,transparent)] ${priorityColors[report.priority ?? 'medium']}`}><ReportIcon value={report.priority ?? 'medium'} />{priorityLabels[report.priority ?? 'medium']}</Badge>

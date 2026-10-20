@@ -2,8 +2,9 @@
 
 import { useEffect, useEffectEvent, useId, useRef, useState } from 'react';
 import { Dialog } from '@base-ui/react/dialog';
+import { Menu } from '@base-ui/react/menu';
 import { Tabs } from '@base-ui/react/tabs';
-import { ExternalLink, Maximize2, MonitorPlay, PanelLeftClose, PanelLeftOpen, RotateCw, X } from 'lucide-react';
+import { ExternalLink, Maximize2, MonitorPlay, PanelLeftClose, PanelLeftOpen, Plus, RotateCw, X } from 'lucide-react';
 import { getPageContext } from '@reporty/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,12 +13,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { getReportPage } from './report-actions';
 import { PlaygroundReports } from './playground-reports';
 import { PlaygroundFrame } from './playground-frame';
+import { PlaygroundReportDrawer } from './playground-report-drawer';
 import type { PlaygroundReport } from './playground-trigger';
 import { isViewportDimension, playgroundUrl, viewportPresets, type PlaygroundEnvironment, type Viewport } from '@/lib/playground';
 
-type PageTab = { fitWidth: boolean; visited: boolean; id: string; src: string; url: string; viewport: Viewport; connected: boolean; reload: number; requestedReport?: { id: string; requestId: string } };
+type PageTab = { fitWidth: boolean; visited: boolean; id: string; src: string; url: string; viewport: Viewport; connected: boolean; reload: number; reportsRevision: number; selectedReport?: string; requestedReport?: { id: string; requestId: string } };
 function makeTab(url: string): PageTab {
-  return { fitWidth: false, visited: false, id: crypto.randomUUID(), src: url, url, viewport: { width: 1440, height: 900 }, connected: false, reload: 0 };
+  return { fitWidth: false, visited: false, id: crypto.randomUUID(), src: url, url, viewport: { width: 1440, height: 900 }, connected: false, reload: 0, reportsRevision: 0 };
 }
 
 export default function ProjectPlayground({ projectName, environments, initialEnvironmentId, initialReport, onClose }: { initialReport?: PlaygroundReport; initialEnvironmentId?: string; projectName: string; environments: PlaygroundEnvironment[]; onClose: () => void }) {
@@ -55,6 +57,7 @@ function EnvironmentPlayground({ projectName, initialReport, environment, fullsc
   const [sidebar, setSidebar] = useState<'open' | 'hidden'>('open');
   const sidebarId = useId();
   const [tabs, setTabs] = useState<PageTab[]>([]);
+  const [availablePages, setAvailablePages] = useState<string[]>([]);
   const [activeId, setActiveId] = useState('');
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -69,9 +72,15 @@ function EnvironmentPlayground({ projectName, initialReport, environment, fullsc
       const pages = result.pages.flatMap(path => { try { return [playgroundUrl(path, environment.origin)]; } catch { return []; } });
       const requestedUrl = initialReport ? new URL(playgroundUrl(initialReport.url, environment.origin)) : undefined;
       if (requestedUrl && initialReport) requestedUrl.searchParams.set('__reporty_issue', initialReport.id);
-      const next = [...new Set([...(requestedUrl ? [requestedUrl.href] : []), ...(pages.length ? pages : [environment.origin])])].map(makeTab);
-      next[0].visited = true;
-      setTabs(next); setActiveId(next[0].id); setFailed(false);
+      const choices = [...new Map([...(pages.length ? pages : [environment.origin]), ...(initialReport ? [playgroundUrl(initialReport.url, environment.origin)] : [])].map(url => [getPageContext(url).pagePath, url])).values()];
+      const first = makeTab(requestedUrl?.href ?? choices[0]);
+      first.visited = true;
+      if (initialReport) {
+        first.selectedReport = initialReport.id;
+        first.requestedReport = { id: initialReport.id, requestId: crypto.randomUUID() };
+      }
+      setAvailablePages(choices);
+      setTabs([first]); setActiveId(first.id); setFailed(false);
     }).catch(error => {
       if (disposed) return;
       setFailed(true);
@@ -81,6 +90,14 @@ function EnvironmentPlayground({ projectName, initialReport, environment, fullsc
   }, [environment.id, environment.origin, attempt, initialReport]);
   function update(id: string, change: Partial<PageTab>) { setTabs(items => items.map(item => item.id === id ? { ...item, ...change } : item)); }
   function activateTab(id: string) { setActiveId(id); setTabs(items => items.map(item => item.id === id && !item.visited ? { ...item, visited: true } : item)); }
+  function openPage(url: string) {
+    const existing = tabs.find(tab => getPageContext(tab.url).pagePath === getPageContext(url).pagePath);
+    if (existing) { activateTab(existing.id); return; }
+    const tab = makeTab(url);
+    tab.visited = true;
+    setTabs(items => [...items, tab]);
+    setActiveId(tab.id);
+  }
   function closeTab(id: string) {
     const index = tabs.findIndex(tab => tab.id === id), remaining = tabs.filter(tab => tab.id !== id);
     const nextId = activeId === id ? remaining[Math.min(index, remaining.length - 1)]?.id ?? '' : activeId;
@@ -89,25 +106,37 @@ function EnvironmentPlayground({ projectName, initialReport, environment, fullsc
   }
   return <div className="flex min-h-0 flex-1 flex-col">
     <PlaygroundHeader projectName={projectName} hidden={fullscreen}>
-      {loading ? <div role="status" aria-label="Caricamento pagine del playground" className="flex gap-2 overflow-hidden">{[0,1,2].map(i => <Skeleton key={i} className="h-9 w-40 shrink-0" />)}</div> : <Tabs.Root value={activeId} onValueChange={value => activateTab(String(value))}>
+      {loading ? <div role="status" aria-label="Caricamento pagine del playground" className="flex gap-2 overflow-hidden"><Skeleton className="h-9 w-40 shrink-0" /><Skeleton className="size-9 shrink-0" /></div> : <div className="flex min-w-0 items-center gap-2"><Tabs.Root value={activeId} onValueChange={value => activateTab(String(value))} className="min-w-0">
           <Tabs.List aria-label="Pagine del playground" className="flex items-center gap-1 overflow-x-auto">
             {tabs.map(tab => <div key={tab.id} className="flex shrink-0 items-center rounded-lg border bg-background">
               <Tabs.Tab value={tab.id} className="max-w-60 truncate rounded-l-lg px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring data-active:bg-primary/10 data-active:font-semibold data-active:text-primary" title={tab.url}>{getPageContext(tab.url).pagePath}</Tabs.Tab>
               <Button variant="ghost" size="icon-xs" aria-label={`Chiudi pagina ${getPageContext(tab.url).pagePath}`} onClick={() => closeTab(tab.id)}><X aria-hidden="true" /></Button>
             </div>)}
           </Tabs.List>
-        </Tabs.Root>}
+        </Tabs.Root>
+        <Menu.Root>
+          <Menu.Trigger render={<Button variant="outline" size="icon" className="shrink-0" />} aria-label="Apri una pagina dell’ambiente" title="Apri pagina" disabled={failed || !availablePages.length}><Plus aria-hidden="true" /></Menu.Trigger>
+          <Menu.Portal><Menu.Positioner sideOffset={8} align="start" className="z-[100]"><Menu.Popup aria-label="Pagine dell’ambiente" className="max-h-80 w-80 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg outline-none">
+            {availablePages.map(url => {
+              const path = getPageContext(url).pagePath;
+              const isOpen = tabs.some(tab => getPageContext(tab.url).pagePath === path);
+              return <Menu.Item key={url} onClick={() => openPage(url)} title={url} className="flex cursor-pointer items-center justify-between gap-3 rounded-md px-3 py-2 text-sm outline-none data-highlighted:bg-muted"><span className="min-w-0 truncate">{path}</span>{isOpen ? <span className="shrink-0 text-xs text-muted-foreground">Già aperta</span> : null}</Menu.Item>;
+            })}
+          </Menu.Popup></Menu.Positioner></Menu.Portal>
+        </Menu.Root>
+      </div>}
     </PlaygroundHeader>
     {(!environment.enabled || !environment.publicKey) && !fullscreen ? <p className="border-b bg-amber-50 px-4 py-2 text-sm text-amber-950 dark:bg-amber-950 dark:text-amber-100">Per usare pin, creazione e dettagli, installa lo script Reporty sul sito e abilitalo nella tab Ambienti.</p> : null}
     {loading ? <div role="status" aria-label="Caricamento playground" className="flex min-h-0 flex-1 gap-4 p-4"><div className="w-72 shrink-0 space-y-4"><Skeleton className="h-9 w-full" />{[0,1,2].map(i => <Skeleton key={i} className="h-28 w-full" />)}</div><Skeleton className="h-full flex-1" /></div> : <>
       {failed ? <div className="flex items-center gap-3 p-4"><p className="text-sm">Impossibile caricare le pagine.</p><Button variant="outline" onClick={() => { setLoading(true); setAttempt(value => value + 1); }}>Riprova</Button></div> : null}
       {active ? <ViewportToolbar key={active.id} tab={active} hidden={fullscreen} sidebar={sidebar} sidebarId={sidebarId} onSidebar={setSidebar} fullscreenTrigger={fullscreenTrigger} onFullscreen={onFullscreen} onFitWidth={() => update(active.id, { fitWidth: !active.fitWidth })} onViewport={viewport => update(active.id, { viewport, fitWidth: false })} onReload={() => update(active.id, { src: active.url, reload: active.reload + 1, connected: false })} /> : null}
-      <div className="flex min-h-0 flex-1 overflow-auto">
-        {active ? <aside id={sidebarId} inert={fullscreen || sidebar === 'hidden'} aria-hidden={fullscreen || sidebar === 'hidden'} className={`${fullscreen || sidebar === 'hidden' ? 'w-0 pointer-events-none opacity-0' : 'w-72 opacity-100 xl:w-80'} min-w-0 shrink-0 overflow-hidden transition-[width,opacity] duration-200 ease-in-out motion-reduce:transition-none`} aria-label="Segnalazioni della pagina attiva"><div className={`h-full w-72 overflow-y-auto border-r p-4 transition-transform duration-200 ease-in-out motion-reduce:transition-none ${fullscreen || sidebar === 'hidden' ? '-translate-x-3' : 'translate-x-0'} xl:w-80`}><PlaygroundReports key={`${environment.id}:${getPageContext(active.url).pagePath}`} environment={environment} pagePath={getPageContext(active.url).pagePath} connected={active.connected} onSelectReport={id => update(active.id, { requestedReport: { id, requestId: crypto.randomUUID() } })} /></div></aside> : null}
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        {active ? <aside id={sidebarId} inert={fullscreen || sidebar === 'hidden'} aria-hidden={fullscreen || sidebar === 'hidden'} className={`${fullscreen || sidebar === 'hidden' ? 'w-0 pointer-events-none opacity-0' : 'w-72 opacity-100 xl:w-80'} min-w-0 shrink-0 overflow-hidden transition-[width,opacity] duration-200 ease-in-out motion-reduce:transition-none`} aria-label="Segnalazioni della pagina attiva"><div className={`h-full w-72 overflow-y-auto border-r p-4 transition-transform duration-200 ease-in-out motion-reduce:transition-none ${fullscreen || sidebar === 'hidden' ? '-translate-x-3' : 'translate-x-0'} xl:w-80`}><PlaygroundReports key={`${environment.id}:${getPageContext(active.url).pagePath}`} environment={environment} pagePath={getPageContext(active.url).pagePath} connected={active.connected} onSelectReport={id => update(active.id, { selectedReport: id, requestedReport: { id, requestId: crypto.randomUUID() } })} /></div></aside> : null}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {tabs.filter(tab => tab.visited).map(tab => <PlaygroundFrame key={tab.id} environment={environment} url={tab.src} viewport={tab.viewport} active={tab.id === activeId} fitWidth={tab.fitWidth} fullscreen={fullscreen && tab.id === activeId} onExitFullscreen={onExitFullscreen} reload={tab.reload} requestedReport={tab.requestedReport} onPage={(url, connected) => setTabs(items => items.map(item => item.id === tab.id && (item.url !== url || item.connected !== connected) ? { ...item, url, connected, requestedReport: item.url !== url ? undefined : item.requestedReport } : item))} />)}
-          {!tabs.length ? <p className="p-6 text-sm text-muted-foreground">Nessuna pagina aperta. Riapri il playground per caricare nuovamente le pagine.</p> : null}
+          {tabs.filter(tab => tab.visited).map(tab => <PlaygroundFrame key={tab.id} environment={environment} url={tab.src} viewport={tab.viewport} active={tab.id === activeId} fitWidth={tab.fitWidth} fullscreen={fullscreen && tab.id === activeId} onExitFullscreen={onExitFullscreen} reload={tab.reload} requestedReport={tab.requestedReport} reportsRevision={tab.reportsRevision} onSelectReport={id => update(tab.id, { selectedReport: id })} onPage={(url, connected) => setTabs(items => items.map(item => item.id === tab.id && (item.url !== url || item.connected !== connected) ? { ...item, url, connected, selectedReport: item.url !== url ? undefined : item.selectedReport, requestedReport: item.url !== url ? undefined : item.requestedReport } : item))} />)}
+          {!tabs.length && !failed ? <p className="p-6 text-sm text-muted-foreground">Nessuna pagina aperta. Usa il pulsante + per aprire una pagina dell’ambiente.</p> : null}
         </div>
+        {active?.selectedReport ? <PlaygroundReportDrawer key={`${active.id}:${active.selectedReport}`} id={active.selectedReport} environmentId={environment.id} pagePath={getPageContext(active.url).pagePath} onClose={() => setTabs(items => items.map(item => item.id === active.id && item.selectedReport === active.selectedReport ? { ...item, selectedReport: undefined } : item))} onChanged={() => setTabs(items => items.map(item => item.id === active.id ? { ...item, reportsRevision: item.reportsRevision + 1 } : item))} /> : null}
       </div>
     </>}
   </div>;

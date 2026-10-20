@@ -9,11 +9,13 @@ import { useToastManager } from '@/components/ui/toast';
 import { capturePlaygroundFrame } from '@/lib/playground-capture';
 import { isPlaygroundMessage, playgroundFrameLayout, playgroundUrl, type PlaygroundEnvironment, type Viewport } from '@/lib/playground';
 
-export function PlaygroundFrame({ environment, url, viewport, active, reload, requestedReport, onPage, fitWidth, fullscreen, onExitFullscreen }: {
+export function PlaygroundFrame({ environment, url, viewport, active, reload, requestedReport, onPage, fitWidth, fullscreen, onExitFullscreen, onSelectReport, reportsRevision = 0 }: {
   fitWidth: boolean; fullscreen: boolean; onExitFullscreen: () => void;
   environment: PlaygroundEnvironment; url: string; viewport: Viewport; active: boolean; reload: number;
   requestedReport?: { id: string; requestId: string };
   onPage: (url: string, connected: boolean) => void;
+  onSelectReport: (id: string) => void;
+  reportsRevision?: number;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const stage = useRef<HTMLDivElement>(null);
@@ -30,6 +32,7 @@ export function PlaygroundFrame({ environment, url, viewport, active, reload, re
   const generation = useRef(0);
   const toast = useToastManager();
   const notifyPage = useEffectEvent(onPage);
+  const selectReport = useEffectEvent(onSelectReport);
   const layout = playgroundFrameLayout(viewport, available, fitWidth || fullscreen);
   const scale = layout.scale;
   const post = useCallback((data: Record<string, unknown>) => {
@@ -63,7 +66,7 @@ export function PlaygroundFrame({ environment, url, viewport, active, reload, re
     let lastSeen = Date.now();
     const lifetime = generation;
     function connect() {
-      post({ type: 'REPORTY_PLAYGROUND_CONNECT', key: environment.publicKey });
+      post({ type: 'REPORTY_PLAYGROUND_CONNECT', key: environment.publicKey, externalDetails: true });
       if (lastSeen && Date.now() - lastSeen > 6000) {
         setConnected(false);
         notifyPage(currentUrl.current, false);
@@ -94,6 +97,7 @@ export function PlaygroundFrame({ environment, url, viewport, active, reload, re
           return { requestId: data.requestId, url: currentUrl.current };
         });
       }
+      if (data.type === 'REPORTY_PLAYGROUND_OPEN_REPORT' && active && data.key === environment.publicKey && data.url === currentUrl.current && isUuid(data.id)) selectReport(data.id);
     }
     window.addEventListener('message', receive);
     const timer = setInterval(connect, 1000);
@@ -103,9 +107,12 @@ export function PlaygroundFrame({ environment, url, viewport, active, reload, re
   useEffect(() => {
     if (active && connected && requestedReport && sentSelection.current !== requestedReport.requestId) {
       sentSelection.current = requestedReport.requestId;
-      post({ type: 'REPORTY_PLAYGROUND_SELECT', id: requestedReport.id });
+      post({ type: 'REPORTY_PLAYGROUND_SELECT', id: requestedReport.id, focusOnly: true });
     }
   }, [active, connected, requestedReport, post]);
+  useEffect(() => {
+    if (active && connected && reportsRevision) post({ type: 'REPORTY_PLAYGROUND_REFRESH' });
+  }, [active, connected, reportsRevision, post]);
   useEffect(() => {
     if (!capture) return;
     const timer = setTimeout(() => cancelFromEffect('Tempo per la condivisione scaduto. Riprova.'), 115000);
@@ -132,7 +139,7 @@ export function PlaygroundFrame({ environment, url, viewport, active, reload, re
       toast.add({ title: 'Acquisizione non riuscita', description: message, type: 'error' });
     } finally { captureLock.current = false; setCapturing(false); setCapture(null); }
   }
-  const reset = () => { generation.current++; setLoadedRevision(reload); setConnected(false); cancelCapture('La pagina è stata ricaricata.'); onPage(currentUrl.current, false); post({ type: 'REPORTY_PLAYGROUND_CONNECT', key: environment.publicKey }); };
+  const reset = () => { generation.current++; sentSelection.current = ''; setLoadedRevision(reload); setConnected(false); cancelCapture('La pagina è stata ricaricata.'); onPage(currentUrl.current, false); post({ type: 'REPORTY_PLAYGROUND_CONNECT', key: environment.publicKey, externalDetails: true }); };
   return <div className={`relative min-h-0 min-w-0 flex-1 flex-col ${active ? 'flex' : 'hidden'}`}>
     <div className={`${fullscreen ? 'hidden' : 'flex'} flex-wrap items-center justify-between gap-2 border-b bg-background px-4 py-2 text-xs text-muted-foreground`}>
       <span>{connected ? 'Widget collegato' : 'In attesa del widget: verifica script, attivazione e permesso di incorporamento del sito.'}</span>

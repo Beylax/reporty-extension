@@ -51,6 +51,47 @@ test('selection requires established nonce, enabled widget and valid report id',
   assert.notEqual(selected[0].requestId, selected[1].requestId);
 });
 
+test('external details require an explicit handshake and transmit only a report reference', t => {
+  const s = setup(t);
+  s.bridge.setEnabled(true);
+  assert.equal(s.bridge.openReport(id), false);
+  s.connect();
+  assert.equal(s.bridge.openReport(id), false);
+  s.connect({ externalDetails: true });
+  assert.equal(s.bridge.openReport('invalid'), false);
+  assert.equal(s.bridge.openReport(id), true);
+  assert.deepEqual(s.sent.at(-1), { origin: api, message: { type: 'REPORTY_PLAYGROUND_OPEN_REPORT', nonce, key, id, url: s.target.location.href } });
+  s.bridge.setEnabled(false);
+  assert.equal(s.bridge.openReport(id), false);
+  s.bridge.setEnabled(true);
+  s.connect({ externalDetails: false });
+  assert.equal(s.bridge.openReport(id), false);
+  s.bridge.dispose();
+  assert.equal(s.bridge.openReport(id), false);
+});
+
+test('focus-only selections and refreshes keep the same trusted channel checks', t => {
+  const s = setup(t), selected = [];
+  let refreshes = 0;
+  s.bridge.subscribeSelection(value => selected.push(value));
+  const unsubscribe = s.bridge.subscribeRefresh(() => refreshes++);
+  s.bridge.setEnabled(true); s.connect({ externalDetails: true });
+  const focus = { type: 'REPORTY_PLAYGROUND_SELECT', nonce, id, focusOnly: true };
+  s.emit(focus, { source: {} }); s.emit(focus, { origin: 'https://evil.example' }); s.emit({ ...focus, nonce: id });
+  assert.equal(selected.length, 0);
+  s.emit(focus);
+  assert.equal(selected[0].focusOnly, true);
+  const refresh = { type: 'REPORTY_PLAYGROUND_REFRESH', nonce };
+  s.emit(refresh, { source: {} }); s.emit(refresh, { origin: 'https://evil.example' }); s.emit({ ...refresh, nonce: id });
+  assert.equal(refreshes, 0);
+  s.emit(refresh);
+  assert.equal(refreshes, 1);
+  s.bridge.setEnabled(false); s.emit(refresh);
+  assert.equal(refreshes, 1);
+  s.bridge.setEnabled(true); unsubscribe(); s.emit(refresh);
+  assert.equal(refreshes, 1);
+});
+
 test('capture matches request and nonce, validates image and refuses stale navigation', async t => {
   const s = setup(t);
   await assert.rejects(s.bridge.captureScreenshot(), /Collegamento/);
