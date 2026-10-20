@@ -2,12 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { GripVertical } from 'lucide-react';
-import { formatReportDateTime, priorityLabels, type Report } from '@reporty/shared';
+import { formatReportDateTime, type Report } from '@reporty/shared';
 import { ReportIcon } from '@/components/report-icon';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { RadioButtons } from '@/components/ui/radio-buttons';
-import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ReportCountBadge } from '@/components/report-count-badge';
 
@@ -40,13 +38,13 @@ function InfiniteColumn({ children, total, visible, loading, failed, onLoadMore 
   return <div ref={root} className="max-h-[65vh] min-h-40 space-y-3 overflow-y-auto p-3">
     {children}
     {hasMore || loading || failed ? <div ref={sentinel} role="status" aria-label="Caricamento altre segnalazioni" className="space-y-3">
-      {loading && !failed ? <div className="space-y-3 rounded-xl border bg-card p-4"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /><Skeleton className="h-10 w-full" /></div> : null}
+      {loading && !failed ? <div className="space-y-3 rounded-xl border bg-card p-4"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-3/4" /><div className="space-y-1"><Skeleton className="h-3 w-1/2" /><Skeleton className="h-3 w-3/4" /><Skeleton className="h-3 w-1/2" /></div></div> : null}
       <Button variant="outline" className="w-full" disabled={loading} onClick={onLoadMore}>{failed ? 'Riprova il caricamento' : 'Carica altre segnalazioni'}</Button>
     </div> : null}
   </div>;
 }
 
-export function ReportKanban({ reports, columns: feeds, environments, busy, movingId, onOpen, onMove, onPriorityChange, renderContextMenu }: {
+export function ReportKanban({ reports, columns: feeds, environments, busy, movingId, onOpen, onMove, renderContextMenu }: {
   renderContextMenu: (report: Report, card: React.ReactElement) => React.ReactNode;
   reports: Report[];
   columns: Record<Status, ColumnFeed>;
@@ -55,7 +53,6 @@ export function ReportKanban({ reports, columns: feeds, environments, busy, movi
   movingId: string | null;
   onOpen: (report: Report) => void;
   onMove: (report: Report, status: Status) => void;
-  onPriorityChange: (report: Report, priority: Report['priority']) => void;
 }) {
   const dragging = useRef<string | null>(null);
   const suppressClick = useRef(false);
@@ -71,7 +68,7 @@ export function ReportKanban({ reports, columns: feeds, environments, busy, movi
     clickResetTimer.current = setTimeout(() => { suppressClick.current = false; clickResetTimer.current = null; }, 0);
   }
   return <div className="space-y-3">
-    <p className="text-xs text-muted-foreground">Trascina una card in un’altra colonna per cambiarne lo stato. Usa il menu nella card per cambiare la priorità.</p>
+    <p className="text-xs text-muted-foreground">Trascina una card in un’altra colonna per cambiarne lo stato.</p>
     <div className="grid grid-cols-4 items-start gap-4 overflow-x-auto pb-3" style={{ gridTemplateColumns: 'repeat(4, minmax(300px, 1fr))' }}>
       {columns.map(column => {
         const items = reports.filter(report => report.status === column.value);
@@ -83,17 +80,15 @@ export function ReportKanban({ reports, columns: feeds, environments, busy, movi
           <InfiniteColumn total={feeds[column.value].total} visible={items.length} loading={feeds[column.value].loading} failed={feeds[column.value].failed} onLoadMore={() => { if (!busy) { if (feeds[column.value].failed && !items.length) feeds[column.value].refresh(); else void feeds[column.value].loadMore(); } }}>
             {!items.length && !feeds[column.value].loading && !feeds[column.value].failed ? <p className="py-8 text-center text-xs text-muted-foreground">Nessuna segnalazione</p> : null}
             {items.map(report => renderContextMenu(report, <Card key={report.id} aria-busy={movingId === report.id} size="sm" className={`cursor-pointer border shadow-none ring-0 transition-colors hover:border-primary/30 hover:bg-primary/5 ${draggedId === report.id ? 'opacity-40' : ''}`}
-              onClick={event => { if (!busy && !suppressClick.current && !(event.target as HTMLElement).closest('button, input, a, [role="radiogroup"]')) onOpen(report); }}
+              onClick={event => { if (!busy && !suppressClick.current && !(event.target as HTMLElement).closest('button, input, a')) onOpen(report); }}
               draggable={report.canChangeStatus && !busy}
-              onDragStart={event => { if (busy || !report.canChangeStatus || (event.target as HTMLElement).closest('[role="radiogroup"]')) { event.preventDefault(); return; } if (clickResetTimer.current !== null) { clearTimeout(clickResetTimer.current); clickResetTimer.current = null; } dragging.current = report.id; suppressClick.current = true; setDraggedId(report.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', report.id); }}
+              onDragStart={event => { if (busy || !report.canChangeStatus) { event.preventDefault(); return; } if (clickResetTimer.current !== null) { clearTimeout(clickResetTimer.current); clickResetTimer.current = null; } dragging.current = report.id; suppressClick.current = true; setDraggedId(report.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', report.id); }}
               onDragEnd={resetDrag}>
               <CardHeader className="min-w-0 gap-2"><div className="flex min-w-0 items-start gap-2">
                 <CardTitle className="min-w-0 flex-1"><Button variant="ghost" className="h-auto min-w-0 w-full justify-start whitespace-normal p-0 text-left hover:bg-transparent" disabled={busy} onClick={() => { if (!suppressClick.current) onOpen(report); }}><span className="line-clamp-4 min-w-0 break-words [overflow-wrap:anywhere]">{report.body}</span></Button></CardTitle>
                 {report.canChangeStatus ? <GripVertical aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" /> : null}
               </div></CardHeader>
-              <CardContent className="space-y-5"><div className="space-y-1 text-xs text-muted-foreground"><p className="truncate" title={report.authorName}>{report.authorName}</p><p className="truncate" title={report.page_path}>{environments.find(item => item.id === report.environment_id)?.name} · {report.page_path}</p><time dateTime={report.created_at} className="block">{formatReportDateTime(report.created_at)}</time></div>
-                <div className="grid gap-2"><Label className="text-xs text-muted-foreground" htmlFor={`kanban-priority-${report.id}`}>Priorità</Label><RadioButtons variant="standard" compact id={`kanban-priority-${report.id}`} label="Priorità" value={report.priority ?? 'medium'} options={Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))} disabled={busy || !report.canChangeStatus} onValueChange={value => onPriorityChange(report, value as Report['priority'])} /></div>
-              </CardContent>
+              <CardContent><div className="space-y-1 text-xs text-muted-foreground"><p className="truncate" title={report.authorName}>{report.authorName}</p><p className="truncate" title={report.page_path}>{environments.find(item => item.id === report.environment_id)?.name} · {report.page_path}</p><time dateTime={report.created_at} className="block">{formatReportDateTime(report.created_at)}</time></div></CardContent>
             </Card>))}
           </InfiniteColumn>
         </section>;
