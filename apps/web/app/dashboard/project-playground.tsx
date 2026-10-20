@@ -4,8 +4,9 @@ import { useEffect, useEffectEvent, useId, useRef, useState } from 'react';
 import { Dialog } from '@base-ui/react/dialog';
 import { Menu } from '@base-ui/react/menu';
 import { Tabs } from '@base-ui/react/tabs';
-import { ExternalLink, Maximize2, MonitorPlay, PanelLeftClose, PanelLeftOpen, Plus, RotateCw, X } from 'lucide-react';
+import { ExternalLink, Maximize2, MonitorPlay, MoveHorizontal, PanelLeftClose, PanelLeftOpen, Plus, RotateCw, SlidersHorizontal, X } from 'lucide-react';
 import { getPageContext } from '@reporty/shared';
+import { TooltipButton } from '@reporty/shared/ui/tooltip-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToastManager } from '@/components/ui/toast';
@@ -108,14 +109,14 @@ function EnvironmentPlayground({ projectName, initialReport, environment, fullsc
     <PlaygroundHeader projectName={projectName} hidden={fullscreen}>
       {loading ? <div role="status" aria-label="Caricamento pagine del playground" className="flex gap-2 overflow-hidden"><Skeleton className="h-7 w-32 shrink-0" /><Skeleton className="size-7 shrink-0" /></div> : <div className="flex min-w-0 items-center gap-2"><Tabs.Root value={activeId} onValueChange={value => activateTab(String(value))} className="min-w-0">
           <Tabs.List aria-label="Pagine del playground" className="flex items-center gap-1 overflow-x-auto">
-            {tabs.map(tab => <div key={tab.id} className="flex shrink-0 items-center rounded-lg border bg-background">
-              <Tabs.Tab value={tab.id} className="h-7 max-w-52 truncate rounded-l-lg px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring data-active:bg-primary/10 data-active:font-semibold data-active:text-primary" title={tab.url}>{getPageContext(tab.url).pagePath}</Tabs.Tab>
+            {tabs.map(tab => <div key={tab.id} className="flex shrink-0 items-center rounded-lg border bg-background transition-colors duration-150 hover:border-primary/40 hover:bg-primary/5 focus-within:border-primary/40 motion-reduce:transition-none">
+              <Tabs.Tab value={tab.id} className="h-7 max-w-52 truncate rounded-l-lg px-2 text-xs outline-none transition-colors duration-150 hover:bg-primary/10 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring data-active:bg-primary/10 data-active:font-semibold data-active:text-primary data-active:hover:bg-primary/15 motion-reduce:transition-none" title={tab.url}>{getPageContext(tab.url).pagePath}</Tabs.Tab>
               <Button variant="ghost" size="icon-xs" aria-label={`Chiudi pagina ${getPageContext(tab.url).pagePath}`} onClick={() => closeTab(tab.id)}><X aria-hidden="true" /></Button>
             </div>)}
           </Tabs.List>
         </Tabs.Root>
         <Menu.Root>
-          <Menu.Trigger render={<Button variant="outline" size="icon-sm" className="shrink-0" />} aria-label="Apri una pagina dell’ambiente" title="Apri pagina" disabled={failed || !availablePages.length}><Plus aria-hidden="true" /></Menu.Trigger>
+          <TooltipButton label="Apri una pagina dell’ambiente" size="icon-sm" className="shrink-0" disabled={failed || !availablePages.length} render={<Menu.Trigger />}><Plus aria-hidden="true" /></TooltipButton>
           <Menu.Portal><Menu.Positioner sideOffset={8} align="start" className="z-[100]"><Menu.Popup aria-label="Pagine dell’ambiente" className="max-h-80 w-80 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg outline-none">
             {availablePages.map(url => {
               const path = getPageContext(url).pagePath;
@@ -136,27 +137,36 @@ function EnvironmentPlayground({ projectName, initialReport, environment, fullsc
           {tabs.filter(tab => tab.visited).map(tab => <PlaygroundFrame key={tab.id} environment={environment} url={tab.src} viewport={tab.viewport} active={tab.id === activeId} fitWidth={tab.fitWidth} fullscreen={fullscreen && tab.id === activeId} onExitFullscreen={onExitFullscreen} reload={tab.reload} requestedReport={tab.requestedReport} reportsRevision={tab.reportsRevision} onSelectReport={id => update(tab.id, { selectedReport: id })} onPage={(url, connected) => setTabs(items => items.map(item => item.id === tab.id && (item.url !== url || item.connected !== connected) ? { ...item, url, connected, selectedReport: item.url !== url ? undefined : item.selectedReport, requestedReport: item.url !== url ? undefined : item.requestedReport } : item))} />)}
           {!tabs.length && !failed ? <p className="p-6 text-sm text-muted-foreground">Nessuna pagina aperta. Usa il pulsante + per aprire una pagina dell’ambiente.</p> : null}
         </div>
-        {active?.selectedReport ? <PlaygroundReportDrawer key={`${active.id}:${active.selectedReport}`} id={active.selectedReport} environmentId={environment.id} pagePath={getPageContext(active.url).pagePath} onClose={() => setTabs(items => items.map(item => item.id === active.id && item.selectedReport === active.selectedReport ? { ...item, selectedReport: undefined } : item))} onChanged={() => setTabs(items => items.map(item => item.id === active.id ? { ...item, reportsRevision: item.reportsRevision + 1 } : item))} /> : null}
+        {active?.selectedReport ? <PlaygroundReportDrawer key={`${active.id}:${active.selectedReport}`} id={active.selectedReport} environmentId={environment.id} pagePath={getPageContext(active.url).pagePath} onViewport={viewport => update(active.id, { viewport, fitWidth: false })} onClose={() => setTabs(items => items.map(item => item.id === active.id && item.selectedReport === active.selectedReport ? { ...item, selectedReport: undefined } : item))} onChanged={() => setTabs(items => items.map(item => item.id === active.id ? { ...item, reportsRevision: item.reportsRevision + 1 } : item))} /> : null}
       </div>
     </>}
   </div>;
 }
 
 function ViewportToolbar({ tab, onViewport, onReload, hidden, sidebar, sidebarId, onSidebar, fullscreenTrigger, onFullscreen, onFitWidth }: { tab: PageTab; onViewport: (viewport: Viewport) => void; onReload: () => void; hidden: boolean; sidebar: 'open' | 'hidden'; sidebarId: string; onSidebar: (value: 'open' | 'hidden') => void; fullscreenTrigger: React.RefObject<HTMLButtonElement | null>; onFullscreen: () => void; onFitWidth: () => void }) {
-  const [width, setWidth] = useState(String(tab.viewport.width)), [height, setHeight] = useState(String(tab.viewport.height));
+  const [customOpen, setCustomOpen] = useState(false);
+  const customId = useId();
+  const widthInput = useRef<HTMLInputElement>(null);
+  const [draft, setDraft] = useState<{ viewport: Viewport; width: string; height: string } | null>(null);
+  const width = draft?.viewport === tab.viewport ? draft.width : String(tab.viewport.width);
+  const height = draft?.viewport === tab.viewport ? draft.height : String(tab.viewport.height);
   const toast = useToastManager();
+  useEffect(() => { if (customOpen) widthInput.current?.focus(); }, [customOpen]);
   function apply(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!isViewportDimension(Number(width)) || !isViewportDimension(Number(height))) { toast.add({ title: 'Dimensioni non valide', description: 'Inserisci valori interi da 240 a 3840 pixel.', type: 'error' }); return; }
     onViewport({ width: Number(width), height: Number(height) });
   }
   return <div className={`${hidden ? 'hidden' : 'flex'} shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2`}>
-      <Button variant="outline" size="icon" aria-controls={sidebarId} aria-expanded={sidebar !== 'hidden'} aria-label={sidebar === 'hidden' ? 'Apri sidebar' : 'Nascondi sidebar'} title={sidebar === 'hidden' ? 'Apri sidebar' : 'Nascondi sidebar'} onClick={() => onSidebar(sidebar === 'hidden' ? 'open' : 'hidden')}>{sidebar === 'hidden' ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}</Button>
-    <Button variant="outline" size="icon" aria-label="Ricarica pagina" onClick={onReload}><RotateCw aria-hidden="true" /></Button>
+      <TooltipButton aria-controls={sidebarId} aria-expanded={sidebar !== 'hidden'} label={sidebar === 'hidden' ? 'Apri sidebar' : 'Nascondi sidebar'} onClick={() => onSidebar(sidebar === 'hidden' ? 'open' : 'hidden')}>{sidebar === 'hidden' ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}</TooltipButton>
+    <TooltipButton label="Ricarica pagina" onClick={onReload}><RotateCw aria-hidden="true" /></TooltipButton>
     <a href={tab.url} target="_blank" rel="noopener noreferrer" className="mr-auto flex min-w-0 max-w-72 items-center gap-1 rounded-sm text-xs text-muted-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring"><span className="truncate">{tab.url}</span><ExternalLink className="size-3 shrink-0" aria-hidden="true" /><span className="sr-only">Apri pagina in una nuova scheda</span></a>
-    <div role="group" aria-label="Preset viewport" className="flex gap-1">{viewportPresets.map(preset => <Button key={preset.label} variant={!tab.fitWidth && tab.viewport.width === preset.width && tab.viewport.height === preset.height ? 'secondary' : 'ghost'} size="sm" aria-pressed={!tab.fitWidth && tab.viewport.width === preset.width && tab.viewport.height === preset.height} onClick={() => { setWidth(String(preset.width)); setHeight(String(preset.height)); onViewport({ width: preset.width, height: preset.height }); }}>{preset.label}</Button>)}</div>
-    <Button variant={tab.fitWidth ? 'secondary' : 'outline'} size="sm" aria-pressed={tab.fitWidth} onClick={onFitWidth}>Adatta alla larghezza</Button>
-    <Button ref={fullscreenTrigger} variant="outline" size="sm" onClick={onFullscreen}><Maximize2 aria-hidden="true" />Schermo intero</Button>
-    <form onSubmit={apply} className="flex items-center gap-2"><Input aria-label="Larghezza viewport in pixel" className="w-20" type="number" min={240} max={3840} step={1} value={width} onChange={event => setWidth(event.target.value)} required /><span aria-hidden="true">×</span><Input aria-label="Altezza viewport in pixel" className="w-20" type="number" min={240} max={3840} step={1} value={height} onChange={event => setHeight(event.target.value)} required /><Button type="submit" variant="outline" size="sm">Applica</Button></form>
+    <div role="group" aria-label="Preset viewport" className="flex gap-1">{viewportPresets.map(preset => <Button key={preset.label} variant={!tab.fitWidth && tab.viewport.width === preset.width && tab.viewport.height === preset.height ? 'secondary' : 'ghost'} size="sm" aria-pressed={!tab.fitWidth && tab.viewport.width === preset.width && tab.viewport.height === preset.height} onClick={() => onViewport({ width: preset.width, height: preset.height })}>{preset.label}</Button>)}</div>
+    {customOpen ? <form id={customId} onSubmit={apply} aria-label="Dimensioni personalizzate" className="flex items-center gap-2"><Input ref={widthInput} aria-label="Larghezza viewport in pixel" className="w-20" type="number" min={240} max={3840} step={1} value={width} onChange={event => setDraft({ viewport: tab.viewport, width: event.target.value, height })} required /><span aria-hidden="true">×</span><Input aria-label="Altezza viewport in pixel" className="w-20" type="number" min={240} max={3840} step={1} value={height} onChange={event => setDraft({ viewport: tab.viewport, width, height: event.target.value })} required /><Button type="submit" variant="outline" size="sm">Applica</Button></form> : null}
+    <div className="ml-auto flex shrink-0 items-center gap-2">
+      <TooltipButton label={customOpen ? 'Chiudi dimensioni personalizzate' : 'Dimensioni personalizzate'} aria-expanded={customOpen} aria-controls={customOpen ? customId : undefined} variant={customOpen ? 'secondary' : 'outline'} onClick={() => setCustomOpen(value => !value)}>{customOpen ? <X aria-hidden="true" /> : <SlidersHorizontal aria-hidden="true" />}</TooltipButton>
+      <TooltipButton variant={tab.fitWidth ? 'secondary' : 'outline'} label="Adatta alla larghezza" aria-pressed={tab.fitWidth} onClick={onFitWidth}><MoveHorizontal aria-hidden="true" /></TooltipButton>
+      <TooltipButton ref={fullscreenTrigger} label="Schermo intero" onClick={onFullscreen}><Maximize2 aria-hidden="true" /></TooltipButton>
+    </div>
   </div>;
 }

@@ -13,14 +13,14 @@ import { DashboardSidebar } from './sidebar';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { email, supabase } = await requireUser();
-  const projects = await supabase.from('projects').select('id,name,open_reports:issues!issues_project_id_fkey(count)').in('open_reports.status', ['open', 'in_progress', 'validation']).order('name');
+  const projects = await supabase.from('projects').select('id,name').order('name');
   if (projects.error) throw new Error('Impossibile caricare la navigazione.');
   return (
     <div className="min-h-screen md:grid md:grid-cols-[248px_minmax(0,1fr)]">
       <DashboardSidebar>
         <div className="flex h-full min-h-0 flex-col gap-3 p-5">
           <div className="flex items-center justify-between gap-2"><Link href="/dashboard" className="min-w-0"><BrandLogo /></Link><div className="flex shrink-0 items-center gap-1"><Button variant="outline" size="icon" nativeButton={false} render={<Link href="/dashboard/audit" prefetch={false} />} aria-label="Apri audit Supabase" title="Audit Supabase"><Activity className="size-4" aria-hidden="true" /></Button><Notifications /><ThemeSwitch /></div></div>
-          <DashboardNav projects={(projects.data ?? []).map(project => ({ id: project.id, name: project.name, openReportCount: project.open_reports[0]?.count ?? 0 }))} />
+          <DashboardNav projects={projects.data ?? []} />
           <Link href="/dashboard/new" className={buttonVariants({ className: 'w-full justify-start gap-2' })}><Plus className="size-4" aria-hidden="true" />Nuovo progetto</Link>
           <div className="mt-auto flex min-w-0 items-center gap-2 border-t pt-4">
             <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground" title={email}>{email}</p>

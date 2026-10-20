@@ -302,7 +302,7 @@ export function ReportList({ projectId, initialView, environments, participants,
         </thead>
         <tbody className="divide-y">
           {!filtered.length ? <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">Nessuna segnalazione trovata.</td></tr> : null}
-          {paginated.map(report => reportContextMenu(report, <tr key={report.id} className={`align-top transition-colors hover:bg-primary/5 motion-reduce:transition-none ${selectedIds.has(report.id) ? 'bg-primary/5' : ''}`}>
+          {paginated.map(report => reportContextMenu(report, <tr key={report.id} className={`[&>td]:align-middle transition-colors hover:bg-primary/5 motion-reduce:transition-none ${selectedIds.has(report.id) ? 'bg-primary/5' : ''}`}>
             <td className="px-4 py-4"><Checkbox aria-label={`Seleziona segnalazione: ${report.body.slice(0,100)}`} checked={selectedIds.has(report.id)} disabled={bulkDisabled} onCheckedChange={checked => selectReport(report.id,Boolean(checked))} /></td>
             <td className="min-w-64 max-w-md px-4 py-4"><button type="button" disabled={bulkDisabled} onClick={() => openReport(report)} className="block w-full rounded-sm text-left font-medium hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"><span className="line-clamp-3 break-words">{report.body}</span></button></td>
             <td className="px-4 py-4"><Badge className={`whitespace-nowrap border-[color-mix(in_oklab,currentColor_25%,transparent)] ${statusColors[report.status]}`}><ReportIcon value={report.status} />{labels[report.status]}</Badge></td>
