@@ -45,11 +45,11 @@ export default function ProjectPlayground({ projectName, environments, initialEn
 }
 
 function PlaygroundHeader({ projectName, hidden, children }: { projectName: string; hidden: boolean; children?: React.ReactNode }) {
-  return <header className={`${hidden ? 'hidden' : 'flex'} shrink-0 items-center gap-3 border-b px-4 py-3`}>
-    <MonitorPlay className="size-5 shrink-0 text-primary" aria-hidden="true" />
-    <Dialog.Title className="min-w-0 max-w-64 shrink truncate font-semibold" title={`Playground · ${projectName}`}>Playground · {projectName}</Dialog.Title>
+  return <header className={`${hidden ? 'hidden' : 'flex'} shrink-0 items-center gap-2 border-b px-3 py-1.5`}>
+    <MonitorPlay className="size-4 shrink-0 text-primary" aria-hidden="true" />
+    <Dialog.Title className="min-w-0 max-w-56 shrink truncate text-sm font-semibold" title={`Playground · ${projectName}`}>Playground · {projectName}</Dialog.Title>
     <div className="min-w-0 flex-1">{children}</div>
-    <Dialog.Close render={<Button variant="outline" size="icon" className="shrink-0" aria-label="Chiudi playground" />}><X aria-hidden="true" /></Dialog.Close>
+    <Dialog.Close render={<Button variant="outline" size="icon-sm" className="shrink-0" aria-label="Chiudi playground" />}><X aria-hidden="true" /></Dialog.Close>
   </header>;
 }
 
@@ -106,16 +106,16 @@ function EnvironmentPlayground({ projectName, initialReport, environment, fullsc
   }
   return <div className="flex min-h-0 flex-1 flex-col">
     <PlaygroundHeader projectName={projectName} hidden={fullscreen}>
-      {loading ? <div role="status" aria-label="Caricamento pagine del playground" className="flex gap-2 overflow-hidden"><Skeleton className="h-9 w-40 shrink-0" /><Skeleton className="size-9 shrink-0" /></div> : <div className="flex min-w-0 items-center gap-2"><Tabs.Root value={activeId} onValueChange={value => activateTab(String(value))} className="min-w-0">
+      {loading ? <div role="status" aria-label="Caricamento pagine del playground" className="flex gap-2 overflow-hidden"><Skeleton className="h-7 w-32 shrink-0" /><Skeleton className="size-7 shrink-0" /></div> : <div className="flex min-w-0 items-center gap-2"><Tabs.Root value={activeId} onValueChange={value => activateTab(String(value))} className="min-w-0">
           <Tabs.List aria-label="Pagine del playground" className="flex items-center gap-1 overflow-x-auto">
             {tabs.map(tab => <div key={tab.id} className="flex shrink-0 items-center rounded-lg border bg-background">
-              <Tabs.Tab value={tab.id} className="max-w-60 truncate rounded-l-lg px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring data-active:bg-primary/10 data-active:font-semibold data-active:text-primary" title={tab.url}>{getPageContext(tab.url).pagePath}</Tabs.Tab>
+              <Tabs.Tab value={tab.id} className="h-7 max-w-52 truncate rounded-l-lg px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring data-active:bg-primary/10 data-active:font-semibold data-active:text-primary" title={tab.url}>{getPageContext(tab.url).pagePath}</Tabs.Tab>
               <Button variant="ghost" size="icon-xs" aria-label={`Chiudi pagina ${getPageContext(tab.url).pagePath}`} onClick={() => closeTab(tab.id)}><X aria-hidden="true" /></Button>
             </div>)}
           </Tabs.List>
         </Tabs.Root>
         <Menu.Root>
-          <Menu.Trigger render={<Button variant="outline" size="icon" className="shrink-0" />} aria-label="Apri una pagina dell’ambiente" title="Apri pagina" disabled={failed || !availablePages.length}><Plus aria-hidden="true" /></Menu.Trigger>
+          <Menu.Trigger render={<Button variant="outline" size="icon-sm" className="shrink-0" />} aria-label="Apri una pagina dell’ambiente" title="Apri pagina" disabled={failed || !availablePages.length}><Plus aria-hidden="true" /></Menu.Trigger>
           <Menu.Portal><Menu.Positioner sideOffset={8} align="start" className="z-[100]"><Menu.Popup aria-label="Pagine dell’ambiente" className="max-h-80 w-80 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg outline-none">
             {availablePages.map(url => {
               const path = getPageContext(url).pagePath;
