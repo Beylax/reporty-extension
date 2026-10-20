@@ -29,7 +29,7 @@ export default async function Project({ params, searchParams }: {
   const { projectId } = await params;
   if (!isUuid(projectId)) notFound();
   const [projectResult, environmentsResult, permissionResult, linksResult, widgetsResult, participantsResult, { message, report, tab, environment: expandedEnvironment }] = await Promise.all([
-    supabase.from('projects').select('id, name').eq('id', projectId).maybeSingle(),
+    supabase.from('projects').select('id, name, reports:issues!issues_project_id_fkey(count)').eq('id', projectId).maybeSingle(),
     supabase.from('environments').select('id, name, origin').eq('project_id', projectId).order('created_at'),
     supabase.rpc('can_manage_project', { target: projectId }),
     supabase.from('environment_review_links').select('environment_id,token,environments!inner(project_id)').eq('environments.project_id', projectId),
@@ -57,9 +57,8 @@ export default async function Project({ params, searchParams }: {
         <Badge variant="secondary" className="md:hidden">Sviluppatore</Badge>
       </header>
       <Feedback message={message} />
-      <ProjectTabs projectName={project.name} playgroundEnvironments={environments.map(environment => { const widget = widgetsResult.data?.find(item => item.environment_id === environment.id); return { ...environment, publicKey: widget?.public_key ?? "", enabled: widget?.enabled === true }; })} key={`${report ?? "project"}:${tab ?? "reports"}:${expandedEnvironment ?? ""}`} initialTab={tab === "environments" || tab === "settings" ? tab : "reports"} reports={<ProjectReports projectId={projectId} initialReportId={report} environments={environments} participants={participants} />} environments={<>
-      <section className="space-y-4" aria-labelledby="environments-title">
-        <div><h2 id="environments-title" className="text-xl font-semibold">Ambienti</h2></div>
+      <ProjectTabs initialReportCount={project.reports[0]?.count ?? 0} projectName={project.name} playgroundEnvironments={environments.map(environment => { const widget = widgetsResult.data?.find(item => item.environment_id === environment.id); return { ...environment, publicKey: widget?.public_key ?? "", enabled: widget?.enabled === true }; })} key={`${projectId}:${report ?? "project"}:${tab ?? "reports"}:${expandedEnvironment ?? ""}`} initialTab={tab === "environments" || tab === "settings" ? tab : "reports"} reports={<ProjectReports projectId={projectId} initialReportId={report} environments={environments} participants={participants} />} environments={<>
+      <section className="space-y-4" aria-label="Ambienti">
         {!environments.length ? <Card><CardContent className="py-6 text-muted-foreground">Nessun ambiente aggiunto.</CardContent></Card> : null}
         {environments.map(environment => <AccordionSection key={environment.id} defaultOpen={environment.id === expandedEnvironment} variant="card" title={<span className="min-w-0 space-y-1"><span className="block break-words text-base font-semibold">{environment.name}</span><span className="block break-all text-sm font-normal text-muted-foreground">{environment.origin}</span></span>} action={<div className="flex flex-col items-end gap-2 lg:flex-row"><EnvironmentPlaygroundTrigger environmentId={environment.id} environmentName={environment.name} /><a href={environment.origin} target="_blank" rel="noopener noreferrer" aria-label={`Apri sito ${environment.name}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>Apri sito ↗</a></div>}>
             {canManage ? <form action={saveEnvironment} className="flex flex-wrap items-end gap-3">

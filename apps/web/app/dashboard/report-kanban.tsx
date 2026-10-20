@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { GripVertical } from 'lucide-react';
-import { formatReportDateTime, type Report } from '@reporty/shared';
+import { formatReportDateTime, priorityLabels, type Report } from '@reporty/shared';
 import { ReportIcon } from '@/components/report-icon';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ReportCountBadge } from '@/components/report-count-badge';
@@ -15,6 +16,7 @@ const columns: { value: Status; label: string }[] = [
   { value: 'validation', label: 'Validazione' }, { value: 'resolved', label: 'Chiusa' },
 ];
 const colors = { open: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200', in_progress: 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200', validation: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200', resolved: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' };
+const priorityColors = { low: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200', medium: 'bg-amber-100 text-amber-800 dark:bg-orange-950 dark:text-orange-200', high: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200' };
 
 type ColumnFeed = { total: number; loading: boolean; failed: boolean; loadMore: () => Promise<void>; refresh: () => void };
 
@@ -38,7 +40,7 @@ function InfiniteColumn({ children, total, visible, loading, failed, onLoadMore 
   return <div ref={root} className="max-h-[65vh] min-h-40 space-y-3 overflow-y-auto p-3">
     {children}
     {hasMore || loading || failed ? <div ref={sentinel} role="status" aria-label="Caricamento altre segnalazioni" className="space-y-3">
-      {loading && !failed ? <div className="space-y-3 rounded-xl border bg-card p-4"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-3/4" /><div className="space-y-1"><Skeleton className="h-3 w-3/4" /><div className="flex items-center gap-2"><Skeleton className="h-3 w-1/3" /><Skeleton className="h-3 w-1/2" /></div></div></div> : null}
+      {loading && !failed ? <div className="space-y-3 rounded-xl border bg-card p-4"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-5 w-16 rounded-full" /><div className="space-y-1"><Skeleton className="h-3 w-3/4" /><div className="flex items-center gap-2"><Skeleton className="h-3 w-1/3" /><Skeleton className="h-3 w-1/2" /></div></div></div> : null}
       <Button variant="outline" className="w-full" disabled={loading} onClick={onLoadMore}>{failed ? 'Riprova il caricamento' : 'Carica altre segnalazioni'}</Button>
     </div> : null}
   </div>;
@@ -68,7 +70,6 @@ export function ReportKanban({ reports, columns: feeds, environments, busy, movi
     clickResetTimer.current = setTimeout(() => { suppressClick.current = false; clickResetTimer.current = null; }, 0);
   }
   return <div className="space-y-3">
-    <p className="text-xs text-muted-foreground">Trascina una card in un’altra colonna per cambiarne lo stato.</p>
     <div className="grid grid-cols-4 items-start gap-4 overflow-x-auto pb-3" style={{ gridTemplateColumns: 'repeat(4, minmax(300px, 1fr))' }}>
       {columns.map(column => {
         const items = reports.filter(report => report.status === column.value);
@@ -87,7 +88,7 @@ export function ReportKanban({ reports, columns: feeds, environments, busy, movi
               <CardHeader className="min-w-0 gap-2"><div className="flex min-w-0 items-start gap-2">
                 <CardTitle className="min-w-0 flex-1"><Button variant="ghost" className="h-auto min-w-0 w-full justify-start whitespace-normal p-0 text-left hover:bg-transparent" disabled={busy} onClick={() => { if (!suppressClick.current) onOpen(report); }}><span className="line-clamp-4 min-w-0 break-words [overflow-wrap:anywhere]">{report.body}</span></Button></CardTitle>
                 {report.canChangeStatus ? <GripVertical aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" /> : null}
-              </div></CardHeader>
+              </div><Badge aria-label={`Priorità: ${priorityLabels[report.priority ?? 'medium']}`} className={`border-[color-mix(in_oklab,currentColor_25%,transparent)] ${priorityColors[report.priority ?? 'medium']}`}><ReportIcon value={report.priority ?? 'medium'} />{priorityLabels[report.priority ?? 'medium']}</Badge></CardHeader>
               <CardContent><div className="space-y-1 text-xs text-muted-foreground"><p className="truncate" title={report.page_path}>{environments.find(item => item.id === report.environment_id)?.name} · {report.page_path}</p><div className="flex min-w-0 items-center gap-2"><p className="truncate" title={report.authorName}>{report.authorName}</p><span aria-hidden="true">·</span><time dateTime={report.created_at} className="shrink-0 whitespace-nowrap">{formatReportDateTime(report.created_at)}</time></div></div></CardContent>
             </Card>))}
           </InfiniteColumn>

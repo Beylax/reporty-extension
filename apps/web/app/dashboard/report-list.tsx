@@ -2,7 +2,7 @@
 import { useDebouncedValue } from '@reporty/shared/ui/use-debounced-value';
 import { ReplyComposer, ReplyAttachmentList } from '@reporty/shared/ui/reply-attachments';
 import type { AttachmentRequest } from '@reporty/shared';
-import { ReportPagination, REPORT_PAGE_SIZE } from '@/components/report-pagination';
+import { ReportPageRange, ReportPagination, REPORT_PAGE_SIZE } from '@/components/report-pagination';
 import { FilterPill } from '@/components/filter-pill';
 import { ReportOrder } from '@/components/report-order';
 import { ReportIcon } from '@/components/report-icon';
@@ -19,6 +19,7 @@ import { ReportContextMenu } from './report-context-menu';
 import { PlaygroundContext } from './playground-trigger';
 import { TooltipButton } from '@reporty/shared/ui/tooltip-button';
 import { ReportKanban } from './report-kanban';
+import { ProjectReportCountContext } from './project-tabs';
 import { useRouter } from 'next/navigation';
 import { type ReportSelection, type ReportSort, formatReportDateTime, priorityLabels, type ProjectParticipant, type Report, type ReportComment } from '@reporty/shared';
 import { NOTIFICATIONS_CHANGED, startNotificationPolling } from '@/lib/notification-polling';
@@ -29,6 +30,7 @@ import { ReportBulkToolbar } from './report-bulk-toolbar';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogTitle, DialogDescription, DialogClose } from '@/components/ui/dialog';
 import { Eye, Pencil, ExternalLink, MonitorPlay, X, List, Columns3, Trash2 } from 'lucide-react';
@@ -37,7 +39,6 @@ import { ReportFilterPanel, type ReportFilterGroup } from './report-filter-panel
 import { ReportListOrder } from './report-list-order';
 import { useMobile } from '@/lib/use-mobile';
 import { Badge } from '@/components/ui/badge';
-import { ReportCountBadge } from '@/components/report-count-badge';
 import { pageSelectionState, selectReportPage } from '@/lib/report-selection';
 import { applyBulkReportBatch, type BulkReportAction, type BulkReportProgress } from '@/lib/bulk-report-update';
 import { saveReportView } from './report-view-actions';
@@ -88,6 +89,10 @@ export function ReportList({ projectId, initialView, environments, participants,
   const [pageSelection, setPageSelection] = useState({ key: filterKey, page: 1 });
   const pageNumber = pageSelection.key === filterKey ? pageSelection.page : 1;
   const feed = useProjectReports(environments[0]?.id, { offset: (pageNumber - 1) * REPORT_PAGE_SIZE, limit: REPORT_PAGE_SIZE, search, statuses: view === 'list' ? filter as Report['status'][] : [], priorities: priority as Report['priority'][], environments: environment, pages: page, users, sort: order }, view, environments, message => toast.add({ title: 'Caricamento non riuscito', description: message, type: 'error' }));
+  const updateProjectReportCount = useContext(ProjectReportCountContext);
+  useEffect(() => {
+    if (!feed.loading && !feed.failed) updateProjectReportCount?.(feed.projectTotal);
+  }, [feed.loading, feed.failed, feed.projectTotal, updateProjectReportCount]);
   const reports = feed.reports;
   const [displayReports, updateOptimisticStatus] = useOptimistic(reports, (items, change: { id: string; status?: Report['status']; priority?: Report['priority'] }) => items.map(item => item.id === change.id ? { ...item, ...change } : item));
   const current = displayReports.find(report => report.id === selected?.id) ?? selected;
@@ -259,10 +264,12 @@ export function ReportList({ projectId, initialView, environments, participants,
       });
     } finally { deleteLock.current = false; }
   }
-  return <section className="space-y-5" aria-labelledby="reports-title">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="reports-title" className="m-0 flex items-center gap-2 text-xl font-semibold leading-none"><span className="block leading-none">Segnalazioni</span><ReportCountBadge count={feed.projectTotal} /></h2><div role="group" aria-label="Modalità di visualizzazione" className="hidden gap-1 rounded-lg border bg-background p-1 md:inline-flex"><Button variant={view === 'list' ? 'default' : 'ghost'} aria-pressed={view === 'list'} disabled={bulkDisabled || savingView} onClick={() => setView('list')}><List className="size-4" />Lista</Button><Button variant={view === 'kanban' ? 'default' : 'ghost'} aria-pressed={view === 'kanban'} disabled={bulkDisabled || savingView} onClick={() => setView('kanban')}><Columns3 className="size-4" />Kanban</Button></div></div>
-    <div><Input disabled={Boolean(bulkProgress)} aria-label="Cerca segnalazioni" className="w-full" placeholder="Cerca commento o pagina…" value={searchInput} onChange={event => setSearch(event.target.value)} /></div>
-    {mobile ? <div className="flex items-center gap-2"><ReportFilterPanel filters={filterGroups} disabled={Boolean(bulkProgress)} /><ReportListOrder value={listOrder} onChange={setListOrder} disabled={bulkDisabled} /></div> : <fieldset disabled={Boolean(bulkProgress)} className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">{filterGroups.map(group => <ReportFilter key={group.label} {...group} />)}{view === 'kanban' ? <ReportOrder value={kanbanOrder} onChange={setKanbanOrder} kanban /> : null}</fieldset>}
+  return <section className="space-y-5" aria-label="Segnalazioni">
+    <div className="flex items-center gap-3"><div className="min-w-0 flex-1"><Input disabled={Boolean(bulkProgress)} aria-label="Cerca segnalazioni" className="w-full" placeholder="Cerca commento o pagina…" value={searchInput} onChange={event => setSearch(event.target.value)} /></div><div role="group" aria-label="Modalità di visualizzazione" className="hidden shrink-0 gap-1 rounded-lg border bg-background p-1 md:inline-flex"><Button variant={view === 'list' ? 'default' : 'ghost'} aria-pressed={view === 'list'} disabled={bulkDisabled || savingView} onClick={() => setView('list')}><List className="size-4" />Lista</Button><Button variant={view === 'kanban' ? 'default' : 'ghost'} aria-pressed={view === 'kanban'} disabled={bulkDisabled || savingView} onClick={() => setView('kanban')}><Columns3 className="size-4" />Kanban</Button></div></div>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 md:flex-nowrap">
+      {mobile ? <div className="flex min-w-0 flex-1 items-center gap-2"><ReportFilterPanel filters={filterGroups} disabled={Boolean(bulkProgress)} /><ReportListOrder value={listOrder} onChange={setListOrder} disabled={bulkDisabled} /></div> : <fieldset disabled={Boolean(bulkProgress)} className="flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-x-auto pb-1">{filterGroups.map(group => <ReportFilter key={group.label} {...group} />)}{view === 'kanban' ? <ReportOrder value={kanbanOrder} onChange={setKanbanOrder} kanban /> : null}</fieldset>}
+      {view === 'list' ? <div className="ml-auto shrink-0">{feed.loading ? <Skeleton className="h-4 w-44" aria-label="Caricamento conteggio segnalazioni" /> : !feed.failed && feed.total > 0 ? <p className="whitespace-nowrap text-xs text-muted-foreground"><ReportPageRange total={feed.total} page={pagination.page} /></p> : null}</div> : null}
+    </div>
     {activeFilters.length ? <div className="flex flex-wrap gap-2" aria-label="Filtri attivi">{activeFilters.map(item => <FilterPill key={item.key} label={item.label} onRemove={() => { if (!bulkProgress) item.remove(); }}><ReportIcon value={item.key.replace(/^(status|priority)-/, "")} /></FilterPill>)}</div> : null}
 
     <div className="space-y-5">{view === 'kanban' ? <ReportKanban renderContextMenu={reportContextMenu} key={JSON.stringify([search, priority, environment, page, users, order])} reports={filtered} columns={feed.columns} environments={environments} busy={busy || moving} movingId={movingId} onOpen={openReport} onMove={moveReport} /> : <><ReportBulkToolbar total={feed.total} showSelectAll={pageSelectionStatus.all && !allFilteredSelected} selectingAll={selectingAll} onSelectAll={() => void selectAll()} onDeselectAll={() => setBulkSelection({ scope: bulkScope, targets: [] })} floatOnScroll={!mobile} count={bulkProgress?.total ?? selectedReports.length} disabled={bulkDisabled} pending={bulkProgress} canUpdate={selectedReports.every(report => report.canChangeStatus)} canDelete={selectedReports.every(report => report.canEdit)} onApply={applyBulk} /><div ref={listRef} aria-busy={feed.loading}>{feed.failed ? <Button variant="outline" onClick={feed.refresh}>Riprova il caricamento</Button> : null}{feed.loading ? <ReportListSkeleton mobile={mobile} /> : <>

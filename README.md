@@ -42,7 +42,7 @@ Il monorepo usa un solo `package-lock.json` nella root.
 - L’evidenziazione del pin dura 2,4 secondi: sfondo e centro lampeggiano insieme ogni 100 ms con maggiore contrasto. Con movimento ridotto l’evidenziazione resta statica.
 - Nelle card della lista estensione/widget, su mobile (larghezza inferiore a 640 px) le pillole di stato e priorità sono una sotto l’altra, sotto la descrizione; su desktop sono una accanto all’altra, a destra della descrizione.
 - Lista e Kanban della dashboard aggiornano automaticamente le segnalazioni ogni 10 secondi e al ritorno sulla scheda, mantenendo filtri, ordinamento e vista. Il controllo si sospende nelle schede nascoste; gli aggiornamenti attendono la fine delle operazioni in corso.
-- Elenco progetti e sidebar mostrano un badge con il numero di segnalazioni non risolte (Aperta, In lavorazione e Validazione), nascondendolo quando è zero. Nel dettaglio progetto lo stesso badge mostra il totale delle segnalazioni e i conteggi delle colonne Kanban, con colori coerenti con ciascuna colonna.
+- Elenco progetti e sidebar mostrano un badge con il numero di segnalazioni non risolte (Aperta, In lavorazione e Validazione), nascondendolo quando è zero. Nel dettaglio progetto i trigger delle tab mostrano il totale delle segnalazioni del progetto (indipendente dai filtri) e il numero di ambienti, anche quando sono zero. Il totale delle segnalazioni segue gli aggiornamenti della lista e della Kanban. Le colonne Kanban mantengono i propri conteggi, con colori coerenti con ciascuna colonna.
 - In modalità Lista, il riquadro delle azioni in blocco mostra il numero di segnalazioni selezionate, incluse quelle nelle altre pagine.
 - Identità pagina: ambiente e percorso; query e URL completo rimangono contesto. I percorsi dei router hash sono distinti.
 - Nessun SDK nel sito e nessun ripristino dello stato React nell'MVP. Screenshot e contesto documentano lo stato originale; elementi non più trovati devono essere segnalati come tali.
@@ -175,7 +175,11 @@ La vista Lista/Kanban della pagina progetto viene ricordata nel browser per cias
 
 Nella pagina del progetto, il titolo e il badge Sviluppatore sono visibili solo su mobile; su desktop il nome resta nella sidebar e il titolo è disponibile agli screen reader.
 
-Le card Kanban non contengono controlli per la priorità, che resta modificabile nel dettaglio della segnalazione. Autore e data di creazione sono in basso a sinistra sulla stessa riga, sotto ambiente e percorso della pagina.
+La tab Ambienti mostra direttamente le card, senza ripetere il titolo della tab nel contenuto. Anche la tab Segnalazioni non ripete titolo e conteggio totale; su desktop il selettore Lista/Kanban si trova accanto alla barra di ricerca.
+
+In modalità Lista, l’intervallo e il totale dei risultati (per esempio “1–20 di 83 segnalazioni”) compaiono sia alla fine della riga dei filtri sia nella paginazione in fondo alla lista.
+
+Le card Kanban mostrano la pillola della priorità, con icona e colore, tra la descrizione e la riga con ambiente e percorso della pagina. La priorità resta modificabile nel dettaglio della segnalazione. Autore e data di creazione sono in basso a sinistra sulla stessa riga, sotto ambiente e percorso della pagina.
 
 Con il tasto destro su una card Kanban o una riga della lista si apre il menu della segnalazione: dettaglio in modale, pagina originale in una nuova scheda, playground sulla pagina della segnalazione, con scorrimento al punto e pulsazione del pin, oppure eliminazione con conferma per chi ha il permesso. Il menu supporta anche la tastiera e la pressione prolungata nella lista mobile. Il dettaglio nel playground si apre nel drawer della dashboard; lo scorrimento e l’evidenziazione del pin richiedono il widget installato e abilitato nell’ambiente.
 
