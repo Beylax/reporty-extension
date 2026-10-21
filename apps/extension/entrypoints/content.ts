@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client';
 import type { Site, Environment } from '@/lib/session';
 import { ReviewOverlay } from '@/components/review-overlay';
 import css from '@/entrypoints/popup/style.css?inline';
+import { isPageActive, subscribePageActivity } from '@reporty/shared';
 
 export default defineContentScript({
   matches: [], registration: 'runtime',
@@ -21,6 +22,7 @@ export default defineContentScript({
     const root = createRoot(mount);
     let disposed = false;
     let refreshVersion = 0;
+    let pending = false;
     function renderReview(data: { site: Site; environment: Environment } | null) {
       root.render(data ? React.createElement(ToastProvider, { children: React.createElement(ReviewOverlay, {
         ...data, host,
@@ -38,7 +40,7 @@ export default defineContentScript({
     }
     async function refresh() {
       await themeReady;
-      if (disposed) return;
+      if (disposed || !isPageActive()) return;
       const version = ++refreshVersion;
       try {
         const response = await browser.runtime.sendMessage({ type: 'REPORTY_PAGE' });
@@ -48,14 +50,20 @@ export default defineContentScript({
       } catch { if (!disposed && version === refreshVersion) root.render(null); }
     }
     const themeReady = initializeTheme(host);
-    void refresh();
-    const timer = setInterval(() => void refresh(), 30000);
+    async function update() {
+      if (disposed || pending || !isPageActive()) return;
+      pending = true;
+      try { await refresh(); } finally { pending = false; }
+    }
+    void update();
+    const timer = setInterval(() => void update(), 30000);
+    const stopActivity = subscribePageActivity(() => { void update(); });
     const listener = (message: { type?: string }, _sender: unknown, sendResponse: (response: { ok: boolean }) => void) => {
       if (message.type !== 'REPORTY_REFRESH') return;
-      void refresh().then(() => sendResponse({ ok: true }), () => sendResponse({ ok: false }));
+      void update().then(() => sendResponse({ ok: true }), () => sendResponse({ ok: false }));
       return true;
     };
     browser.runtime.onMessage.addListener(listener);
-    ctx.onInvalidated(() => { disposed = true; clearInterval(timer); browser.runtime.onMessage.removeListener(listener); root.unmount(); void themeReady.then(cleanup => cleanup()); host.remove(); });
+    ctx.onInvalidated(() => { disposed = true; clearInterval(timer); stopActivity(); browser.runtime.onMessage.removeListener(listener); root.unmount(); void themeReady.then(cleanup => cleanup()); host.remove(); });
   },
 });

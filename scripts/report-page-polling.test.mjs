@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { stripTypeScriptTypes } from 'node:module';
+import { isPageActive, whenPageActive } from '../packages/shared/src/page-activity.ts';
 
 // Execute the real hook with a small hook host; no browser or server is needed.
 const source = stripTypeScriptTypes(await readFile(new URL('../packages/shared/ui/use-report-page.tsx',import.meta.url),'utf8'))
   .replace(/import .* from 'react';/, 'const { useCallback, useEffect, useEffectEvent, useRef, useState } = hooks;')
+  .replace("import { isPageActive, whenPageActive } from '../src/page-activity';", 'const { isPageActive, whenPageActive } = activity;')
   .replace('export function useReportPage','function useReportPage');
-const createHook = new Function('hooks',source+'\nreturn useReportPage;');
+const createHook = new Function('hooks','activity',source+'\nreturn useReportPage;');
 const debounceSource = stripTypeScriptTypes(await readFile(new URL('../packages/shared/ui/use-debounced-value.tsx',import.meta.url),'utf8'))
   .replace(/import .* from 'react';/, 'const { useEffect, useState } = hooks;')
   .replace('export function useDebouncedValue','function useDebouncedValue');
@@ -15,6 +17,9 @@ const flush = () => new Promise(resolve => setTimeout(resolve,0));
 const deferred = () => { let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject}; };
 const page = (offset=0,length=20,total=100) => ({reports:Array.from({length},(_,index)=>({id:String(offset+index)})),total,projectTotal:total,pages:['/']});
 function host(load,{infinite=false}={}) {
+  const document = Object.assign(new EventTarget(), { visibilityState: 'visible', focused: true, hasFocus() { return this.focused; } });
+  const window = new EventTarget();
+  let enabled = true;
   const slots=[]; let updates=0,index=0,dirty=false,effects=[],query={offset:0,limit:20},value;
   const errors=[];
   const hooks={
@@ -24,13 +29,30 @@ function host(load,{infinite=false}={}) {
     useCallback(callback){return callback;},
     useEffectEvent(callback){const latest=hooks.useRef(callback);latest.current=callback;return (...args)=>latest.current(...args);},
   };
-  const useHook=createHook(hooks);
+  const useHook=createHook(hooks,{isPageActive:()=>isPageActive(document),whenPageActive:read=>whenPageActive(read,document,window)});
   return {
     get value(){return value;},get updates(){return updates;},errors,
-    render(next=query){query=next;do{dirty=false;index=0;effects=[];value=useHook(query,load,{infinite,scope:'env',onError:error=>errors.push(error)});effects.forEach(effect=>effect());}while(dirty);return value;},
+    render(next=query){query=next;do{dirty=false;index=0;effects=[];value=useHook(query,load,{enabled,infinite,scope:'env',onError:error=>errors.push(error)});effects.forEach(effect=>effect());}while(dirty);return value;},
+    setEnabled(value){enabled=value;},
+    focus(value){document.focused=value;window.dispatchEvent(new Event(value?'focus':'blur'));},
     close(){for(const slot of slots)slot?.cleanup?.();},
   };
 }
+
+test('queued reads wait for focus and hidden Reporty suspends reads until enabled again', async () => {
+  let calls=0;
+  const h=host(async()=>{calls++;return page();});
+  try {
+    h.focus(false);h.render();await flush();assert.equal(calls,0);
+    h.focus(true);await flush();h.render();assert.equal(calls,1);
+    h.focus(false);await h.value.poll();assert.equal(calls,1);
+    h.value.refresh();h.render();await flush();assert.equal(calls,1);
+    h.setEnabled(false);h.render();h.focus(true);await flush();assert.equal(calls,1);
+    await h.value.poll();assert.equal(calls,1);
+    h.setEnabled(true);h.render();await flush();h.render();assert.equal(calls,2);
+    h.focus(false);h.focus(true);await flush();assert.equal(calls,2);
+  } finally {h.close();}
+});
 
 test('search waits for a pause in typing, including clearing, and cancels on unmount',t=>{
   t.mock.timers.enable({apis:['setTimeout']});

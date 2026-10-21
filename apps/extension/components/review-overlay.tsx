@@ -26,6 +26,8 @@ import { LoadingImage } from '@/components/loading-image';
 import { ScreenshotGallery } from '@/components/screenshot-gallery';
 import type { ReportSort, ReportNotification } from '@reporty/shared';
 import { useReportPage } from '@reporty/shared/ui/use-report-page';
+import { usePageActive } from '@reporty/shared/ui/use-page-active';
+import { isPageActive } from '@reporty/shared';
 import type { NotificationPage, ReportPage, ReportPageQuery, ReportPin } from '@reporty/shared';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, Bell, Settings, Menu, X, Crosshair, Eye, EyeOff, MapPin, Pencil, Plus, Target, Trash2 } from 'lucide-react';
@@ -103,6 +105,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
   const [showResolved, setShowResolved] = useState(false);
   const [pinsVisible, setPinsVisible] = useState(true);
   const hideReporty = site.hidden === true;
+  const pageActive = usePageActive();
   const [controlsRevealed, setControlsRevealed] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -117,7 +120,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
   const notificationFeed = useNotificationFeed({ pagePath: page.pagePath, statuses: notificationStatuses as ReportNotification['status'][], reads: notificationReads as ('read' | 'unread')[] }, async query => {
     const result = await message({ type: 'REPORTY_REPORT', operation: 'notifications', payload: query });
     return result.data as NotificationPage;
-  }, { scope: environment.id + ':' + page.pagePath, enabled: modalOpen && notificationsOpen, onArrival: data => {
+  }, { scope: environment.id + ':' + page.pagePath, enabled: modalOpen && notificationsOpen, pollingEnabled: !hideReporty, onArrival: data => {
     const item = data.latest;
     if (item) setStatus(data.arrivalCount === 1 ? `${notificationSummary(item)} · ${(item.reply_body ?? item.body).slice(0,120)}` : `${data.arrivalCount} nuove notifiche per questa pagina.`, 'success');
   }, onError: text => setStatus(text) });
@@ -193,7 +196,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
     const result = await message({ type: 'REPORTY_REPORT', operation: 'page', payload: query });
     return result.data;
   }
-  const listFeed = useReportPage({ pagePath: page.pagePath, offset: (pageNumber - 1) * REPORT_PAGE_SIZE, limit: REPORT_PAGE_SIZE, search, statuses: statuses as Report['status'][], priorities: priorities as ReportPriority[], sort: order }, fetchPage, { scope: environment.id, onError: message => setStatus(message) });
+  const listFeed = useReportPage({ pagePath: page.pagePath, offset: (pageNumber - 1) * REPORT_PAGE_SIZE, limit: REPORT_PAGE_SIZE, search, statuses: statuses as Report['status'][], priorities: priorities as ReportPriority[], sort: order }, fetchPage, { scope: environment.id, enabled: !hideReporty, onError: message => setStatus(message) });
   const listLoading = listFeed.loading;
   const pagination = { page: pageNumber, pages: Math.max(1, Math.ceil(listFeed.total / REPORT_PAGE_SIZE)), setPage: (next: number) => setPageSelection({ key: filterKey, page: next }) };
   if (!listFeed.loading && !listFeed.failed && pageNumber > pagination.pages) setPageSelection({ key: filterKey, page: pagination.pages });
@@ -213,6 +216,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
   }
   const pinsRevision = useRef(0);
   async function refresh() {
+    if (hideReporty || !isPageActive()) return reports;
     const revision = ++pinsRevision.current;
     const scope = notificationScope.current;
     setPinsLoading(true);
@@ -296,18 +300,19 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
     });
   }
   useEffect(() => {
+    setSelected(null); setComments([]); setImageUrl('');
+  }, [page.pagePath, environment.id]);
+  useEffect(() => {
+    if (hideReporty || !pageActive) return;
     let disposed = false;
     setPinsLoading(true);
     void refresh().catch(error => { if (!disposed) setStatus(error.message); }).finally(() => { if (!disposed) setPinsLoading(false); });
-    setSelected(null); setComments([]); setImageUrl('');
     return () => { disposed = true; };
-  }, [page.pagePath, environment.id]);
-  useEffect(() => {
-    if (reportsRevision) void refresh().catch(error => setStatus(error instanceof Error ? error.message : 'Aggiornamento non riuscito.'));
-  }, [reportsRevision]);
+  }, [page.pagePath, environment.id, pageActive, hideReporty, reportsRevision]);
   const handledRequest = useRef('');
   useEffect(() => {
-    if (!requestedReport || busy || pinsLoading || handledRequest.current === requestedReport.requestId) return;
+    // A selection from the playground is an explicit user read, independent of pin polling.
+    if (!requestedReport || busy || handledRequest.current === requestedReport.requestId) return;
     const scope = notificationScope.current;
     let disposed = false;
     void (async () => {
@@ -323,7 +328,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
       } catch (error) { if (!disposed) { handledRequest.current = requestedReport.requestId; setStatus(error instanceof Error ? error.message : 'Segnalazione non disponibile.'); } }
     })();
     return () => { disposed = true; };
-  }, [requestedReport?.requestId, page.pagePath, environment.id, busy, pinsLoading]);
+  }, [requestedReport?.requestId, page.pagePath, environment.id, busy]);
   useEffect(() => {
     const id = deepLink.current;
     if (!id || pinsLoading) return;

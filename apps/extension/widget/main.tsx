@@ -11,6 +11,8 @@ import { isOpenerPosition } from '@/lib/opener-position';
 import type { Site, Environment } from '@/lib/session';
 import css from '@/entrypoints/popup/style.css?inline';
 import { createPlaygroundBridge, type PlaygroundSelection } from '@/lib/playground-bridge';
+import { isPageActive } from '@reporty/shared';
+import { usePageActive } from '@reporty/shared/ui/use-page-active';
 
 const script=document.currentScript as HTMLScriptElement | null;
 const key=script?.dataset.reporty;
@@ -43,6 +45,7 @@ const playground = key && api ? createPlaygroundBridge(api, key) : null;
 window.addEventListener('pagehide', event => { if (!event.persisted) playground?.dispose(); });
 
 function Widget() {
+  const pageActive = usePageActive();
   const [requestedReport, setRequestedReport] = useState<PlaygroundSelection>();
   const [reportsRevision, setReportsRevision] = useState(0);
   useEffect(() => playground?.subscribeSelection(setRequestedReport), []);
@@ -69,19 +72,23 @@ function Widget() {
     return () => playground?.setEnabled(false);
   }, [config?.enabled]);
   useEffect(()=>{
-    let disposed=false;
+    if (!pageActive) return;
+    let disposed=false, pending=false;
+    const controller = new AbortController();
     async function refresh() {
+      if (disposed || pending || !isPageActive()) return;
+      pending = true;
       try {
-        const response=await fetch(`${api}/api/widget?key=${key}`,{credentials:'omit',cache:'no-store'});
+        const response=await fetch(`${api}/api/widget?key=${key}`,{credentials:'omit',cache:'no-store',signal:controller.signal});
         if(!response.ok) { if(!disposed)setConfig(null); return; }
         const result=await response.json();if(!disposed){host.dataset.enabled=String(result.enabled);setConfig(document.getElementById('reporty-overlay') ? null : result);}
-      }catch{if(!disposed)setConfig(null);}
+      }catch{if(!disposed)setConfig(null);}finally{pending=false;}
     }
     void refresh();const timer=setInterval(()=>void refresh(),10000);
-    return()=>{disposed=true;clearInterval(timer);};
-  },[]);
+    return()=>{disposed=true;controller.abort();clearInterval(timer);};
+  },[pageActive]);
   useEffect(() => {
-    if (!config?.enabled || token) return;
+    if (!pageActive || !config?.enabled || token) return;
     let disposed = false;
     const controller = new AbortController();
     setSessionStarting(true);
@@ -96,7 +103,7 @@ function Widget() {
       } finally { if (!disposed) setSessionStarting(false); }
     })();
     return () => { disposed = true; controller.abort(); };
-  }, [config?.enabled, token, sessionAttempt]);
+  }, [config?.enabled, token, sessionAttempt, pageActive]);
   async function transport(message:Record<string,unknown>) {
     const response=await fetch(`${api}/api/widget`,{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({...message,action:message.type==='REPORTY_IDENTITY'?'identity':message.type==='REPORTY_SCREENSHOT'?'screenshot':message.type==='REPORTY_ATTACHMENT'?'attachment':'reports'})});
     const result=await response.json();

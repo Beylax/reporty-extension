@@ -5,7 +5,7 @@ export function startNotificationPolling(refresh: () => Promise<void>, page: Doc
   let disposed = false;
   let pending = false;
   const update = () => {
-    if (disposed || pending || page.visibilityState !== 'visible') return;
+    if (disposed || pending || page.visibilityState !== 'visible' || !page.hasFocus()) return;
     pending = true;
     void refresh().finally(() => { pending = false; });
   };

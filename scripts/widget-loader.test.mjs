@@ -11,6 +11,7 @@ test('loader downloads the panel only after enabling its environment', async () 
   const requests = [];
   vm.runInNewContext(source, {
     document: {
+      visibilityState: 'visible', hasFocus: () => true, addEventListener() {},
       currentScript: { dataset: { reporty: 'environment-key' }, src: 'https://reporty.example/widget/reporty.js' },
       createElement: () => ({ dataset: {} }),
       head: { append: script => appended.push(script) },
@@ -41,8 +42,8 @@ test('installation handshake works while disabled and replies only to the dashbo
   const opener = { postMessage: (data, origin) => replies.push({ data, origin }) };
   const nonce = '12345678-1234-1234-1234-123456789abc';
   vm.runInNewContext(source, {
-    document: { currentScript: { dataset: { reporty: 'environment-key' }, src: 'https://reporty.example/widget/reporty.js' } },
-    window: { opener, addEventListener: (name, callback) => { assert.equal(name, 'message'); receive = callback; } },
+    document: { visibilityState: 'visible', hasFocus: () => true, addEventListener() {}, currentScript: { dataset: { reporty: 'environment-key' }, src: 'https://reporty.example/widget/reporty.js' } },
+    window: { opener, addEventListener: (name, callback) => { if (name === 'message') receive = callback; } },
     URL, encodeURIComponent,
     fetch: async () => ({ ok: true, json: async () => ({ enabled: false }) }),
     setInterval() {},
@@ -61,4 +62,24 @@ test('installation handshake works while disabled and replies only to the dashbo
   assert.equal(replies[0].data.nonce, nonce);
   assert.equal(replies[0].data.key, 'environment-key');
   assert.deepEqual(Object.keys(replies[0].data).sort(), ['key', 'nonce', 'type']);
+});
+
+test('loader skips configuration calls without focus and resumes when the page returns', async () => {
+  let focused = false, poll, calls = 0;
+  const listeners = {};
+  const document = {
+    visibilityState: 'visible', hasFocus: () => focused,
+    currentScript: { dataset: { reporty: 'environment-key' }, src: 'https://reporty.example/widget/reporty.js' },
+    addEventListener: (name, callback) => { listeners[name] = callback; },
+  };
+  vm.runInNewContext(source, {
+    document, window: { addEventListener: (name, callback) => { listeners[name] = callback; } }, URL, encodeURIComponent,
+    fetch: async () => { calls++; return { ok: true, json: async () => ({ enabled: false }) }; },
+    setInterval: callback => { poll = callback; },
+  });
+  await poll(); assert.equal(calls, 0);
+  focused = true; await listeners.focus(); assert.equal(calls, 1);
+  document.visibilityState = 'hidden'; await poll(); assert.equal(calls, 1);
+  document.visibilityState = 'visible'; await listeners.visibilitychange(); assert.equal(calls, 2);
+  focused = false; await poll(); assert.equal(calls, 2);
 });

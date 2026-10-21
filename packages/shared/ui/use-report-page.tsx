@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 import type { Report, ReportPage, ReportPageQuery } from '../src/reports';
+import { isPageActive, whenPageActive } from '../src/page-activity';
 
 const empty: ReportPage = { reports: [], total: 0, projectTotal: 0, pages: [] };
 /** One request per page; stale requests cannot update a different filter or scope. */
@@ -24,8 +25,9 @@ export function useReportPage(query: ReportPageQuery, load: (query: ReportPageQu
     const parsed = JSON.parse(key)[1] as ReportPageQuery;
     const previous = cache.current.key === key ? cache.current.data : empty;
     setState({ key, data: previous, loading: true, failed: false });
+    let stopWaiting: (() => void) | undefined;
     // Collapse changes to multiple filters in the same render.
-    const timer = setTimeout(() => {
+    const timer = setTimeout(() => { stopWaiting = whenPageActive(() => {
       const size = parsed.limit ?? 20;
       const batches = infinite ? Math.max(1, Math.ceil(previous.reports.length / size)) : 1;
       void Promise.all(Array.from({ length: batches }, (_, index) => fetchPage({ ...parsed, offset: (parsed.offset ?? 0) + index * size }))).then(results => {
@@ -34,11 +36,11 @@ export function useReportPage(query: ReportPageQuery, load: (query: ReportPageQu
       }).catch(error => {
         if (!disposed && request === version.current) { setState({ key, data: previous, loading: false, failed: true }); onError(error instanceof Error ? error.message : 'Segnalazioni non disponibili.'); }
       }).finally(() => { if (request === version.current) pending.current = false; });
-    }, 0);
-    return () => { disposed = true; clearTimeout(timer); version.current++; };
+    }); }, 0);
+    return () => { disposed = true; clearTimeout(timer); stopWaiting?.(); version.current++; };
   }, [key, enabled, revision, refreshKey, infinite]);
   const loadMore = useCallback(async () => {
-    if (!infinite || !enabled || pending.current || state.key !== key || state.data.reports.length >= state.data.total) return;
+    if (!isPageActive() || !infinite || !enabled || pending.current || state.key !== key || state.data.reports.length >= state.data.total) return;
     // A user request takes precedence over an in-flight background update.
     const request = ++version.current;
     pending.current = true;
@@ -55,7 +57,7 @@ export function useReportPage(query: ReportPageQuery, load: (query: ReportPageQu
     } finally { if (request === version.current) pending.current = false; }
   }, [enabled, infinite, key, state, load, query, options]);
   async function poll(stageCommit?: (apply: () => void) => void) {
-    if (!enabled || pending.current || polling.current || state.key !== key) return false;
+    if (!isPageActive() || !enabled || pending.current || polling.current || state.key !== key) return false;
     const request = version.current;
     const previous = cache.current.key === key ? cache.current.data : state.data;
     polling.current = true;

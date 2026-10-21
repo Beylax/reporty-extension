@@ -4,7 +4,7 @@ import { NOTIFICATIONS_CHANGED, startNotificationPolling } from '../apps/web/lib
 
 const flush = async () => { await Promise.resolve(); await Promise.resolve(); };
 function surfaces() {
-  return { page: Object.assign(new EventTarget(), { visibilityState: 'visible' }), view: new EventTarget() };
+  return { page: Object.assign(new EventTarget(), { visibilityState: 'visible', focused: true, hasFocus() { return this.focused; } }), view: new EventTarget() };
 }
 
 test('notification polling continues without reloading, pauses hidden tabs and resumes on focus', async t => {
@@ -34,6 +34,26 @@ test('notification polling continues without reloading, pauses hidden tabs and r
   view.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
   page.dispatchEvent(new Event('visibilitychange'));
   assert.equal(calls, 6);
+});
+
+test('a visible page in an unfocused window makes no requests, including change events', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const { page, view } = surfaces();
+  page.focused = false;
+  let calls = 0;
+  const stop = startNotificationPolling(async () => { calls++; }, page, view);
+  t.mock.timers.tick(30000);
+  view.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
+  page.dispatchEvent(new Event('visibilitychange'));
+  assert.equal(calls, 0);
+  page.focused = true;
+  view.dispatchEvent(new Event('focus')); await flush();
+  assert.equal(calls, 1);
+  page.focused = false;
+  t.mock.timers.tick(30000);
+  view.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
+  assert.equal(calls, 1);
+  stop();
 });
 
 test('slow notification requests do not overlap and the following poll fetches new data', async t => {
