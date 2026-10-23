@@ -46,6 +46,7 @@ export function createCaptureSession() {
     async capture<T>(draw: (video: HTMLVideoElement) => T): Promise<T> {
       if (busy) throw new Error('Una cattura è già in corso. Completa o annulla la condivisione aperta.');
       busy = true;
+      let drawing = false;
       try {
         if (!active()) {
           stop();
@@ -75,9 +76,12 @@ export function createCaptureSession() {
         await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
         if (generation !== version || !video) throw new Error('Condivisione interrotta. Ripeti la cattura.');
         validate();
+        drawing = true;
         return draw(video);
       } catch (error) {
-        stop();
+        // An invalid crop or cancelled preview must not revoke an approved source.
+        // Permission, source validation and stream setup failures still end sharing.
+        if (!drawing) stop();
         throw error;
       } finally {
         busy = false;

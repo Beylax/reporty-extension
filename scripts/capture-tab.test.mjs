@@ -52,6 +52,16 @@ test('rejects a different tab and stops its tracks', async () => {
   assert.equal(state.configs.at(-1).handle, '');
 });
 
+test('every reused capture still validates that the shared source is the current tab', async () => {
+  const state = setup();
+  await captureTab();
+  state.tracks[0].getCaptureHandle = () => ({ handle: 'different-source' });
+  await assert.rejects(captureTab(), /scheda corrente/);
+  assert.equal(state.requests, 1);
+  assert.equal(state.draws, 1);
+  assert.equal(state.tracks[0].readyState, 'ended');
+});
+
 test('permission cancellation propagates and clears the capture handle', async () => {
   const state = setup({ denied: true });
   await assert.rejects(captureTab(), { name: 'NotAllowedError' });
@@ -66,6 +76,18 @@ test('browser stop ends sharing and the next screenshot asks for consent again',
   assert.equal(state.configs.at(-1).handle, '');
   await captureTab();
   assert.equal(state.requests, 2);
+  stopTabCapture();
+});
+
+test('a rendering error does not require the user to share the tab again', async () => {
+  const state = setup();
+  const createElement = document.createElement;
+  document.createElement = tag => tag === 'canvas' ? { getContext: () => null } : createElement(tag);
+  await assert.rejects(captureTab(), /Acquisizione immagine non disponibile/);
+  assert.equal(state.tracks[0].readyState, 'live');
+  document.createElement = createElement;
+  assert.equal(await captureTab(), 'data:image/jpeg;base64,frame1');
+  assert.equal(state.requests, 1);
   stopTabCapture();
 });
 

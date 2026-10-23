@@ -20,7 +20,7 @@ function setup({ wrongTab = false, denied = false } = {}) {
   const frame = { isConnected: true, clientWidth: 1440, clientHeight: 900, getBoundingClientRect: () => ({ left: 400, top: 100, right: 1120, bottom: 550, width: 720, height: 450 }) };
   return { frame, configs, get stopped() { return stopped; }, get requested() { return requested; }, get drawn() { return drawn; } };
 }
-test('capture starts in the click handler, crops the scaled iframe and reuses sharing until the playground closes', async () => {
+test('capture starts in the click handler, crops the scaled iframe and reuses sharing until explicitly stopped', async () => {
   const state = setup();
   const capture = capturePlaygroundFrame(state.frame, () => true);
   assert.equal(state.requested, true);
@@ -34,12 +34,17 @@ test('capture starts in the click handler, crops the scaled iframe and reuses sh
   assert.equal(state.stopped, true);
   assert.equal(state.configs.at(-1).handle, '');
 });
-test('wrong tab and navigation races reject images while cleaning capture tracks', async () => {
+test('wrong tabs stop sharing, while invalidated captures keep the validated source available', async () => {
   for (const wrongTab of [true, false]) {
     const state = setup({wrongTab});
     await assert.rejects(capturePlaygroundFrame(state.frame, () => false), wrongTab ? /scheda corrente/ : /pagina è cambiata/);
-    assert.equal(state.stopped, true);
-    assert.equal(state.configs.at(-1).handle, '');
+    assert.equal(state.stopped, wrongTab);
+    assert.equal(hasPlaygroundCapture(), !wrongTab);
+    if (wrongTab) assert.equal(state.configs.at(-1).handle, '');
+    else {
+      navigator.mediaDevices.getDisplayMedia = async () => { throw new Error('Must reuse approved sharing'); };
+      assert.equal(await capturePlaygroundFrame(state.frame, () => true), 'data:image/jpeg;base64,frame');
+    }
   }
 });
 test('cancelled browser permission cleans the capture handle', async () => {
@@ -66,6 +71,7 @@ test('detached or clipped frames cannot produce a misleading screenshot', async 
     if (detached) state.frame.isConnected = false;
     else state.frame.getBoundingClientRect = () => ({left:-10,top:100,right:710,bottom:550,width:720,height:450});
     await assert.rejects(capturePlaygroundFrame(state.frame, () => true), detached ? /pagina è cambiata/ : /interamente visibile/);
-    assert.equal(state.stopped, true);
+    assert.equal(state.stopped, false);
+    assert.equal(hasPlaygroundCapture(), true);
   }
 });

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from './button';
-import { Input } from './input';
+import { FilePickerButton } from './file-picker-button';
 import { Textarea } from './textarea';
 import { Skeleton } from './skeleton';
 import { Download, Eye, Paperclip, Send, X } from 'lucide-react';
@@ -68,13 +68,12 @@ export function ReplyComposer({ requestFile, submit, onError, onBusyChange, disa
   }}>
     <label htmlFor={labelId} className="text-sm font-medium">Aggiungi una risposta</label>
     <Textarea id={labelId} required maxLength={10000} disabled={busy} value={body} onChange={event => setBody(event.target.value)} className="min-h-24 w-full rounded-lg border bg-background p-3 text-sm focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50" />
-    <label className="grid gap-1 text-sm"><span className="flex items-center gap-2"><Paperclip className="size-4" aria-hidden="true" />Allega file</span><Input type="file" multiple disabled={busy || files.length >= MAX_REPLY_ATTACHMENTS} className="h-auto min-w-0 max-w-full rounded-lg border bg-background p-2 text-sm" onChange={event => {
-      const chosen = Array.from(event.target.files ?? []); event.target.value = '';
+    <FilePickerButton disabled={busy || files.length >= MAX_REPLY_ATTACHMENTS} description="Massimo 5 file, fino a 2,5 MB ciascuno. Il testo è obbligatorio." onSelect={chosen => {
       if (files.length + chosen.length > MAX_REPLY_ATTACHMENTS) { onError('Puoi allegare al massimo 5 file per risposta.'); return; }
       if (chosen.some(file => !file.size || file.size > MAX_ATTACHMENT_BYTES || file.name.length > 255)) { onError('Ogni file deve avere un nome entro 255 caratteri, non essere vuoto e pesare al massimo 2,5 MB.'); return; }
       setFiles(previous => [...previous,...chosen.map(file => ({ id:crypto.randomUUID(),file,uploaded:false }))]);
-    }} /><span className="text-xs text-muted-foreground">Massimo 5 file, fino a 2,5 MB ciascuno. Il testo è obbligatorio.</span></label>
-    {files.length ? <div className="flex flex-wrap gap-2" aria-label="Allegati da inviare">{files.map(item => <span key={item.id} className={pill}><Paperclip className="size-4 shrink-0" aria-hidden="true" /><span className="truncate" title={item.file.name}>{item.file.name}</span><span className="shrink-0 text-xs text-muted-foreground">{fileLabel(item.file.size)}</span><Button type="button" variant="ghost" size="icon" disabled={busy} aria-label={`Rimuovi ${item.file.name}`} className="size-5 shrink-0 rounded-full" onClick={() => {
+    }}>Allega file ({files.length}/{MAX_REPLY_ATTACHMENTS})</FilePickerButton>
+    {files.length ? <ul className="grid min-w-0 gap-2" aria-label="Allegati da inviare">{files.map(item => <li key={item.id} className="flex min-w-0 items-center gap-2 rounded-lg border bg-muted/30 p-2 text-xs"><Paperclip className="size-4 shrink-0" aria-hidden="true" /><span className="min-w-0 flex-1 truncate" title={item.file.name}>{item.file.name}</span><span className="shrink-0 text-muted-foreground">{fileLabel(item.file.size)}</span><Button type="button" variant="ghost" size="icon-xs" disabled={busy} aria-label={`Rimuovi ${item.file.name}`} onClick={() => {
       if (lock.current) return;
       lock.current = true; setRemoving(true); setProgress(files.length); onBusyChange?.(true);
       void (async () => {
@@ -85,8 +84,8 @@ export function ReplyComposer({ requestFile, submit, onError, onBusyChange, disa
         } catch (error) { onError(errorText(error)); }
         finally { lock.current = false; setRemoving(false); setProgress(null); onBusyChange?.(false); }
       })();
-    }}><X className="size-4" /></Button></span>)}</div> : null}
-    {progress !== null ? <div role="status" className="space-y-2"><p className="text-xs text-muted-foreground">{removing ? 'Rimozione allegato…' : progress < files.length ? `Caricamento allegato ${progress + 1} di ${files.length}…` : 'Invio risposta…'}</p><div className="flex flex-wrap gap-2" aria-hidden="true">{files.map(item => <Skeleton key={item.id} className="h-8 w-32 rounded-full" />)}</div></div> : null}
+    }}><X className="size-4" aria-hidden="true" /></Button></li>)}</ul> : null}
+    {progress !== null ? <div role="status" className="space-y-2"><p className="text-xs text-muted-foreground">{removing ? 'Rimozione allegato…' : progress < files.length ? `Caricamento allegato ${progress + 1} di ${files.length}…` : 'Invio risposta…'}</p><div className="grid min-w-0 gap-2" aria-hidden="true">{files.map(item => <div key={item.id} className="flex items-center gap-2 rounded-lg border p-2"><Skeleton className="size-4 shrink-0" /><Skeleton className="h-3 flex-1" /><Skeleton className="h-3 w-12" /></div>)}</div></div> : null}
     <Button type="submit" className={button} disabled={busy || !body.trim()}><Send className="size-4" aria-hidden="true" />Invia risposta</Button>
   </form>;
 }

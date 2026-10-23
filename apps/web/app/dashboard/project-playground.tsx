@@ -14,7 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { getReportPage } from './report-actions';
 import { PlaygroundReports } from './playground-reports';
 import { PlaygroundFrame } from './playground-frame';
-import { stopPlaygroundCapture } from '@/lib/playground-capture';
+import { StopScreenshotSharing } from './screenshot-sharing';
 import { PlaygroundReportDrawer } from './playground-report-drawer';
 import type { PlaygroundReport } from './playground-trigger';
 import { isViewportDimension, playgroundUrl, viewportPresets, type PlaygroundEnvironment, type Viewport } from '@/lib/playground';
@@ -25,7 +25,6 @@ function makeTab(url: string): PageTab {
 }
 
 export default function ProjectPlayground({ projectName, environments, initialEnvironmentId, initialReport, onClose }: { initialReport?: PlaygroundReport; initialEnvironmentId?: string; projectName: string; environments: PlaygroundEnvironment[]; onClose: () => void }) {
-  useEffect(() => () => stopPlaygroundCapture(), []);
   const [open, setOpen] = useState(false);
   const opened = useRef(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -39,7 +38,7 @@ export default function ProjectPlayground({ projectName, environments, initialEn
     const frame = requestAnimationFrame(() => { opened.current = true; setOpen(true); });
     return () => cancelAnimationFrame(frame);
   }, []);
-  return <Dialog.Root open={open} onOpenChange={(value, details) => { if (!value && fullscreen) { details.cancel(); exitFullscreen(); } else { if (!value) stopPlaygroundCapture(); setOpen(value); } }} onOpenChangeComplete={value => { if (!value && opened.current) onClose(); }}>
+  return <Dialog.Root open={open} onOpenChange={(value, details) => { if (!value && fullscreen) { details.cancel(); exitFullscreen(); } else setOpen(value); }} onOpenChangeComplete={value => { if (!value && opened.current) onClose(); }}>
     <Dialog.Portal><Dialog.Backdrop className="fixed inset-0 z-50 bg-black/40 transition-opacity duration-200 ease-out data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 motion-reduce:transition-none" /><Dialog.Popup className="fixed inset-0 z-50 flex h-dvh min-h-0 flex-col bg-background text-foreground outline-none transition-[opacity,scale,translate] duration-200 ease-out data-[starting-style]:translate-y-3 data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0 data-[ending-style]:translate-y-3 data-[ending-style]:scale-[0.98] data-[ending-style]:opacity-0 motion-reduce:transition-none motion-reduce:transform-none">
       <Dialog.Description className="sr-only">Sfoglia le pagine del progetto, modifica la viewport e gestisci le segnalazioni con il widget Reporty installato sul sito.</Dialog.Description>
       {environment ? <EnvironmentPlayground projectName={projectName} initialReport={environment.id === initialEnvironmentId ? initialReport : undefined} key={environment.id} environment={environment} fullscreen={fullscreen} fullscreenTrigger={fullscreenTrigger} onFullscreen={() => setFullscreen(true)} onExitFullscreen={exitFullscreen} /> : <><PlaygroundHeader projectName={projectName} hidden={fullscreen} /><p className="p-6 text-muted-foreground">Aggiungi un ambiente per aprire il playground.</p></>}
@@ -52,6 +51,7 @@ function PlaygroundHeader({ projectName, hidden, children }: { projectName: stri
     <MonitorPlay className="size-4 shrink-0 text-primary" aria-hidden="true" />
     <Dialog.Title className="min-w-0 max-w-56 shrink truncate text-sm font-semibold" title={`Playground · ${projectName}`}>Playground · {projectName}</Dialog.Title>
     <div className="min-w-0 flex-1">{children}</div>
+    <StopScreenshotSharing compact />
     <Dialog.Close render={<Button variant="outline" size="icon-sm" className="shrink-0" aria-label="Chiudi playground" />}><X aria-hidden="true" /></Dialog.Close>
   </header>;
 }

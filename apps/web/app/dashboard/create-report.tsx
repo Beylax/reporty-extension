@@ -5,6 +5,7 @@ import { Plus, Trash2, X } from 'lucide-react';
 import { getPageContext, MAX_REPORT_SCREENSHOTS, priorityLabels, reportRequestSchema, type AttachmentRequest, type AttachmentResponse, type ReportPriority } from '@reporty/shared';
 import { uploadReportFile } from '@reporty/shared/report-file-upload';
 import { ReportAttachmentPicker, type DraftReportFile, type ReportFileProgress } from '@reporty/shared/ui/report-attachments';
+import { FilePickerButton } from '@reporty/shared/ui/file-picker-button';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -112,9 +113,7 @@ function CreateReportForm({ environments, onCreated, onClose }: { environments: 
       <div className="grid gap-2"><Label htmlFor="new-report-url">URL della pagina</Label><Input id="new-report-url" required type="url" maxLength={8192} disabled={locked || draft.saved} value={draft.url} onChange={event => setDraft({ ...draft, url: event.target.value })} aria-describedby="new-report-url-help" /><p id="new-report-url-help" className="break-all text-xs text-muted-foreground">Deve appartenere a {environment.origin}.</p></div>
       <div className="grid gap-2"><Label htmlFor="new-report-body">Descrizione</Label><Textarea id="new-report-body" required maxLength={10000} rows={4} disabled={locked || draft.saved} value={draft.body} onChange={event => setDraft({ ...draft, body: event.target.value })} /></div>
       <div className="grid min-w-0 gap-2"><Label htmlFor="new-report-priority">Priorità</Label><RadioButtons id="new-report-priority" label="Priorità" variant="standard" value={draft.priority} disabled={locked || draft.saved} onValueChange={priority => setDraft({ ...draft, priority: priority as ReportPriority })} options={Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))} /></div>
-      <section className="grid min-w-0 gap-3" aria-label="Screenshot da allegare"><Label htmlFor="new-report-screenshots">Aggiungi screenshot</Label><Input id="new-report-screenshots" type="file" accept="image/jpeg,image/png,image/webp" multiple className="h-auto min-w-0 max-w-full p-2" disabled={locked || draft.saved || draft.screenshots.length >= MAX_REPORT_SCREENSHOTS} onChange={async event => {
-        const files = Array.from(event.target.files ?? []); event.target.value = '';
-        if (!files.length) return;
+      <section className="grid min-w-0 gap-3" aria-label="Screenshot da allegare"><FilePickerButton accept="image/jpeg,image/png,image/webp" description="Massimo 5 screenshot JPG, PNG o WebP, fino a 5 MB ciascuno." disabled={locked || draft.saved || draft.screenshots.length >= MAX_REPORT_SCREENSHOTS} onSelect={async files => {
         if (draft.screenshots.length + files.length > MAX_REPORT_SCREENSHOTS) { error('Puoi allegare al massimo 5 screenshot.'); return; }
         setReadingImages(true);
         try {
@@ -123,7 +122,7 @@ function CreateReportForm({ environments, onCreated, onClose }: { environments: 
           if (alive.current) setDraft(current => ({ ...current, screenshots: [...current.screenshots, ...images] }));
         } catch (cause) { if (alive.current) error(cause instanceof Error ? cause.message : 'Impossibile leggere l’immagine.'); }
         finally { if (alive.current) setReadingImages(false); }
-      }} /><p className="text-xs text-muted-foreground">Massimo 5 screenshot JPG, PNG o WebP, fino a 5 MB ciascuno.</p>
+      }}>Aggiungi screenshot ({draft.screenshots.length}/{MAX_REPORT_SCREENSHOTS})</FilePickerButton>
         {readingImages ? <div role="status" aria-label="Preparazione screenshot" className="grid grid-cols-2 gap-3"><Skeleton className="aspect-video w-full rounded-lg" /><Skeleton className="aspect-video w-full rounded-lg" /></div> : null}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{draft.screenshots.map((image, index) => <div key={image.id} className="relative min-w-0"><button type="button" className="block w-full overflow-hidden rounded-lg border focus-visible:outline-2 focus-visible:outline-ring" aria-label={`Rivedi screenshot ${index + 1}`} onClick={() => setGallery(image)}>
           {/* eslint-disable-next-line @next/next/no-img-element -- local screenshot previews */}
