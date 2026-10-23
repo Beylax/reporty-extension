@@ -1,0 +1,3 @@
+import { BrandLogo } from '@/components/brand-logo';
+import { Skeleton } from '@/components/ui/skeleton';
+export default function Loading() { return <main className="mx-auto w-full max-w-xl px-6 py-16" role="status" aria-label="Caricamento autorizzazione MCP"><BrandLogo className="mb-8" /><div className="space-y-6 rounded-xl border p-6"><div className="space-y-3"><Skeleton className="h-7 w-4/5" /><Skeleton className="h-4 w-full" /></div><Skeleton className="h-32 w-full" /><div className="space-y-2"><Skeleton className="h-4 w-40" /><Skeleton className="h-10 w-full" /></div><div className="flex gap-3"><Skeleton className="h-9 w-44" /><Skeleton className="h-9 w-20" /></div></div></main>; }

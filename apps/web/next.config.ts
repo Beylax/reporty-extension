@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   async headers() {
-    return ['/invite/:path*', '/guest/:path*', '/extension/:path*', '/api/extension/:path*'].map(source => ({
+    return ['/invite/:path*', '/guest/:path*', '/extension/:path*', '/api/extension/:path*', '/oauth/:path*', '/api/mcp'].map(source => ({
       source,
       headers: [
         { key: 'Referrer-Policy', value: 'no-referrer' },

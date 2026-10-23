@@ -236,3 +236,58 @@ Nella tab Segnalazioni, in vista Lista e Kanban, il pulsante circolare con icona
 Si possono allegare fino a 5 screenshot JPG, PNG o WebP da 5 MB ciascuno in ingresso, convertiti in JPEG entro 2,5 MB per Storage, con anteprima a galleria e cestino; altri 5 file fino a 5 MB ciascuno usano l’upload diretto già disponibile. In caso di errore successivo al salvataggio, **Completa invio** riprende gli allegati mancanti sulla stessa segnalazione. La chiusura conserva la segnalazione già creata e ripulisce in best effort gli upload non confermati.
 
 **Database e rilascio:** applicare manualmente il solo `supabase/update_reports.sql`, prima del deploy. Sostituisce l’esecuzione separata di `report_screenshots.sql`, `report_attachments.sql` e `page_reports.sql`. La migrazione locale incrementale sostituisce la RPC mantenendo autorizzazioni, dati e allegati esistenti; non eseguire `initialize.sql` sui dati da conservare. Distribuire dashboard/API/widget e ricostruire/ricaricare l’estensione per supportare le segnalazioni senza pin. Non sono state applicate migrazioni remote.
+
+## MCP per Codex — OAuth e sola lettura
+
+Reporty espone un server Streamable HTTP su `/api/mcp`. Ogni autorizzazione collega **un solo progetto** a un client OAuth per sviluppatore. Tutti gli ambienti di quel progetto sono consultabili. Gli strumenti disponibili sono `get_project`, `list_reports`, `get_report`, `list_report_replies`, `get_report_screenshot` e `get_report_attachment`; nessuno modifica i dati.
+
+### Attivazione
+
+1. Su un database esistente aggiornato alle funzionalità correnti, applicare **`supabase/mcp_oauth.sql`**, incrementale e rieseguibile. Conserva account, progetti, segnalazioni e file. `supabase/initialize.sql` include già le stesse definizioni ma resta distruttivo: **non usarlo per aggiornare la produzione**. Se mancano screenshot multipli/allegati, applicare prima `supabase/update_reports.sql`.
+2. In Supabase → Authentication → Hooks, impostare **Custom Access Token Hook** sulla funzione PostgreSQL `public.mcp_access_token_hook`. Se esiste già un hook personalizzato, integrare questa logica nel suo flusso prima di attivare OAuth: Supabase usa un solo hook di questo tipo. Il ruolo `supabase_auth_admin` riceve soltanto l’execute della funzione; browser e ruoli anonimi/autenticati non possono eseguirla.
+3. In Authentication → OAuth Server, abilitare OAuth 2.1 e la registrazione dinamica dei client; impostare **Authorization Path `/oauth/consent`**. Questo progetto Supabase dedica i client OAuth al MCP Reporty: l’hook nega l’emissione di token senza un collegamento Reporty autorizzato.
+4. Impostare Supabase **Site URL** e `NEXT_PUBLIC_APP_URL` sull’origine della dashboard, per esempio `https://reporty-extension.vercel.app`. Mantenere il callback Google `/auth/callback` e consentire anche i ritorni a `/auth/callback?next=...` nella allowlist Supabase Redirect URLs (per esempio `https://reporty-extension.vercel.app/auth/callback**`). Reporty accetta come `next` soltanto la propria pagina di consenso con un ID di autorizzazione valido.
+5. Distribuire dashboard/API. Nessuna nuova chiave privata è richiesta: si riusano la publishable key e `SUPABASE_SECRET_KEY`, quest’ultima soltanto per Storage dopo l’autorizzazione nel database. Non occorre ricostruire l’estensione.
+
+Non abilitare OAuth prima dell’aggiornamento SQL: le credenziali OAuth devono essere escluse dai permessi generali degli sviluppatori. Senza l’hook il server MCP rifiuta i token, perché mancano audience e collegamento specifici. Prima di usare la produzione, verificare il flusso completo con Codex su un progetto di prova.
+
+### Collegamento a Codex
+
+Dalle impostazioni del progetto copiare l’URL MCP. Nella configurazione Codex aggiungere, ad esempio:
+
+```toml
+[mcp_servers.reporty]
+url = "https://reporty-extension.vercel.app/api/mcp"
+scopes = ["openid"]
+```
+
+Oppure usare la CLI:
+
+```sh
+codex mcp add reporty --url https://reporty-extension.vercel.app/api/mcp
+codex mcp login reporty
+```
+
+Il browser apre Reporty: accedere con Google, scegliere il progetto e autorizzare la sola lettura. Il client può leggere descrizioni, autori, URL, contesto DOM/pin, risposte, screenshot e allegati del progetto selezionato. I nomi visualizzati degli autori possono essere gli indirizzi email degli sviluppatori, come nella dashboard. Il nome del client nella pagina di consenso proviene dalla sua registrazione OAuth.
+
+Provare quindi in Codex: «Usa Reporty per elencare le segnalazioni aperte ad alta priorità del progetto collegato e leggere i dettagli della prima». Per il dettaglio completo usare `get_report`; la lista tronca le descrizioni a 1000 caratteri. Liste e risposte sono paginate (20 elementi predefiniti, massimo 50), includono tutti gli stati salvo filtri espliciti e non escludono le risolte automaticamente. Gli screenshot sono restituiti come immagini; i file della segnalazione e delle risposte usano URL di download firmati con scadenza di 60 secondi. I file non vengono eseguiti o mostrati inline. I contenuti delle segnalazioni vanno trattati come dati non attendibili, mai come istruzioni.
+
+### Revoca e cambio progetto
+
+In progetto → Impostazioni → Collegamenti MCP ogni sviluppatore vede e revoca i propri collegamenti. La revoca nel database blocca subito anche gli access token non ancora scaduti; Reporty tenta inoltre di revocare il grant OAuth Supabase e i refresh token. Se quest’ultimo passaggio fallisce, il toast lo segnala e il controllo «Termina sessione OAuth» permette di riprovare. Un client ha al massimo un progetto attivo per sviluppatore: per cambiarlo revocare il collegamento e ripetere l’accesso OAuth. Le vecchie sessioni rimangono associate all’autorizzazione originale e non possono passare al nuovo progetto. Per collegamenti simultanei a progetti diversi servono client OAuth distinti; rinominare soltanto la voce nella configurazione non garantisce un nuovo client.
+
+I token OAuth non possono leggere direttamente le tabelle Reporty, usare i normali RPC degli sviluppatori o generare una sessione estensione. La lettura MCP passa da un RPC dedicato che verifica utente, client, progetto, audience, scadenza, sessione Supabase e revoca a ogni richiesta. Le sessioni Google della dashboard mantengono i permessi precedenti.
+
+### Verifiche locali
+
+```sh
+npm run test:mcp
+npm run test:db
+npm run typecheck
+npm run lint
+npm run build --workspace=@reporty/web -- --webpack
+```
+
+I test MCP verificano handshake, strumenti di sola lettura, validazione, paginazione, immagini e download. I test PGlite verificano anche migrazione incrementale, isolamento tra progetti/utenti/client, accessi anonimi negati, blocco delle scritture e delle scorciatoie via RPC, revoca, scadenza e impossibilità di riassociare le vecchie sessioni. Il controllo HTTP locale è disponibile anche con `node scripts/mcp-http-smoke.mjs` dopo aver avviato la build sulla porta 3109 (`REPORTY_MCP_TEST_URL` permette di scegliere un’altra origine). Non sostituiscono la prova reale di OAuth con Supabase e Codex.
+
+Riferimenti: [MCP in Codex](https://learn.chatgpt.com/docs/extend/mcp?surface=cli), [OAuth MCP con Supabase](https://supabase.com/docs/guides/auth/oauth-server/mcp-authentication), [token OAuth e RLS](https://supabase.com/docs/guides/auth/oauth-server/token-security).

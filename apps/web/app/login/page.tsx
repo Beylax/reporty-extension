@@ -1,4 +1,5 @@
 
+import { oauthReturnPath } from '@/lib/mcp/return-path';
 import { BrandLogo } from '@/components/brand-logo';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
@@ -13,14 +14,15 @@ const messages: Record<string, string> = {
 };
 
 export default async function Login({ searchParams }: {
-  searchParams: Promise<{ message?: string }>;
+  searchParams: Promise<{ message?: string; next?: string }>;
 }) {
+  const { message, next: returnTo } = await searchParams;
+  const next = oauthReturnPath(returnTo);
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
-  if (data?.claims && !data.claims.is_anonymous) {
-    redirect('/dashboard');
+  if (data?.claims && !data.claims.is_anonymous && !data.claims.client_id) {
+    redirect(next ?? '/dashboard');
   }
-  const { message } = await searchParams;
   return (
     <main className="mx-auto w-full max-w-md px-6 py-20">
       <BrandLogo className="mb-8" />
@@ -29,6 +31,7 @@ export default async function Login({ searchParams }: {
       <CardContent className="space-y-6">
       {message && messages[message] ? <FeedbackToast message={messages[message]} type="error" /> : null}
       <form action={signInWithGoogle}>
+        {next ? <input type="hidden" name="next" value={next} /> : null}
         <div className="grid"><SubmitButton variant="outline" pendingLabel="Accesso…">Continua con Google</SubmitButton></div>
       </form>
       </CardContent></Card>
