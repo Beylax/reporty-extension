@@ -46,8 +46,11 @@ export async function POST(request: Request) {
   }
   const secret=request.headers.get('authorization')?.replace(/^Bearer /,'') ?? '';
   if (!validToken(secret)) return cors(Response.json({error:'Sessione non disponibile. Riapri il pannello.'},{status:401}),origin);
-  const {data:environmentId,error}=await supabase.rpc('widget_authorize',{secret,request_origin:origin});
-  if(error || !environmentId) return cors(Response.json({error:'Segnalazioni disabilitate o sessione scaduta.',code:'WIDGET_SESSION_INVALID'},{status:403}),origin);
+  const {data:environmentId,error}=await supabase.rpc('renew_widget_session',{secret,request_origin:origin});
+  if(error || !environmentId) {
+    if (error && error.code !== '42501') return cors(Response.json({error:'Servizio non disponibile. Riprova.'},{status:503}),origin);
+    return cors(Response.json({error:'Segnalazioni disabilitate o accesso revocato.',code:'WIDGET_SESSION_INVALID'},{status:403}),origin);
+  }
   const body=input.action==='attachment' ? {...input.payload,environmentId} : {...input,environmentId};
   const forwarded=new Request(request.url,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${secret}`},body:JSON.stringify(body)});
   return cors(await (input.action==='identity' ? identity(forwarded) : input.action==='screenshot' ? screenshot(forwarded) : input.action==='attachment' ? attachment(forwarded) : reports(forwarded)),origin);

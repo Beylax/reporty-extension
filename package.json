@@ -17,7 +17,7 @@
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspace=@reporty/web",
-    "test": "npm run test --workspace=@reporty/shared && npm run test:db && npm run test:mcp && node --experimental-strip-types --test scripts/notification-polling.test.mjs scripts/notification-feed.test.mjs scripts/report-page-polling.test.mjs scripts/report-mutation-refresh.test.mjs scripts/bulk-reports.test.mjs scripts/report-selection.test.mjs scripts/report-table-order.test.mjs scripts/theme.test.mjs scripts/dashboard-report-create.test.mjs && npm run test:widget",
+    "test": "npm run test --workspace=@reporty/shared && npm run test:db && npm run test:mcp && node --experimental-strip-types --test scripts/notification-polling.test.mjs scripts/notification-feed.test.mjs scripts/report-page-polling.test.mjs scripts/report-mutation-refresh.test.mjs scripts/review-session-renewal.test.mjs scripts/bulk-reports.test.mjs scripts/report-selection.test.mjs scripts/report-table-order.test.mjs scripts/theme.test.mjs scripts/dashboard-report-create.test.mjs && npm run test:widget",
     "test:db": "node --test supabase/tests/*.test.mjs",
     "test:extension": "npm run build --workspace=@reporty/extension && node --test scripts/extension-lifecycle.test.mjs",
     "build:widget": "node scripts/build-widget.mjs",

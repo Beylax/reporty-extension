@@ -65,6 +65,9 @@ Scaricare [`reporty-chrome.zip`](downloads/reporty-chrome.zip), estrarlo e caric
 
 Le sessioni ospite dell’estensione sono separate per origine del sito (protocollo, dominio e porta): aprire un altro invito non scollega i siti già collegati. Gli avvii della revisione sono separati anche per scheda del browser.
 
+Widget ed estensione rinnovano automaticamente la sessione esistente, conservando nome, autore delle segnalazioni e notifiche personali anche al ritorno dopo la scadenza. Il rinnovo avviene all’uso: fino a 30 giorni per l’estensione e un giorno per il widget, senza riscrivere la scadenza a ogni controllo. Revoca della sessione, rigenerazione del link e cancellazione dell’account continuano a bloccare l’accesso; il widget verifica anche toggle e origine esatta. Gli errori temporanei del servizio non cancellano la sessione salvata. La cancellazione dello storage del browser o una sessione già abbandonata dal client richiedono un nuovo collegamento/nome. Per un database esistente applicare **`supabase/review_session_renewal.sql`** dopo `reviewer_read_only.sql` e `widget_localhost.sql`, poi distribuire il backend web. L’estensione installata utilizza già gli endpoint aggiornati, senza richiedere un nuovo ZIP per questa modifica. Nessuna migrazione remota o pubblicazione è stata eseguita.
+
+
 ### Accesso e database
 
 Tutti gli sviluppatori che accedono con Google possono gestire tutti i progetti, ambienti e segnalazioni, senza inviti o ruoli amministratore. Ogni ambiente ha un link guest automatico nella sua card: **Copia link** e **Rigenera link**. La rigenerazione revoca solo il precedente link dell’ambiente e le sue sessioni.

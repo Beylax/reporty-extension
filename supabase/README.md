@@ -47,7 +47,17 @@ La creazione del progetto richiede l’origine del sito e crea atomicamente l’
 
 Su un database esistente eseguire **`widget.sql`**, aggiornamento non distruttivo. Il reset `initialize.sql` include già lo schema widget. Dopo il deploy web, ogni card ambiente mostra lo script da copiare nel sito e il toggle Abilita/Disabilita, inizialmente disabilitato.
 
-Chiunque visiti l’origine configurata, quando lo script è attivo, può consultare senza nome le segnalazioni di quell’ambiente. Il nome viene richiesto alla prima scrittura, conservato nella sessione e permette di creare, rispondere, cambiare stato/priorità, modificare ed eliminare secondo i permessi del widget. La chiave nello snippet è pubblica, non un segreto amministrativo. Il backend e il database verificano ambiente, origine e stato del toggle a ogni operazione. La sessione dura un giorno; il pannello controlla il toggle ogni 10 secondi. Disabilitando il widget le nuove operazioni vengono bloccate subito e il pannello scompare al controllo successivo.
+Chiunque visiti l’origine configurata, quando lo script è attivo, può consultare senza nome le segnalazioni di quell’ambiente. Il nome viene richiesto alla prima scrittura, conservato nella sessione e permette di creare, rispondere, cambiare stato/priorità, modificare ed eliminare secondo i permessi del widget. La chiave nello snippet è pubblica, non un segreto amministrativo. Il backend e il database verificano ambiente, origine e stato del toggle a ogni operazione. La sessione viene rinnovata automaticamente all’uso dopo l’aggiornamento `review_session_renewal.sql`; il pannello controlla il toggle ogni 10 secondi. Disabilitando il widget le nuove operazioni vengono bloccate subito e il pannello scompare al controllo successivo.
+
+## Rinnovo automatico delle sessioni
+
+Su un database esistente applicare **`review_session_renewal.sql`** dopo `reviewer_read_only.sql` e `widget_localhost.sql`, poi distribuire il backend web. Lo script è incrementale, transazionale e rieseguibile; non modifica i dati o le scadenze finché la sessione non viene usata. `initialize.sql` include già le RPC, ma resta un reset distruttivo. Nessun comando remoto viene eseguito automaticamente.
+
+Le nuove RPC `renew_extension_session` e `renew_widget_session` autorizzano nuovamente il token esistente, anche se scaduto, e ne prolungano la validità quando resta meno di metà della durata: 30 giorni per l’estensione, un giorno per il widget. Il token rimane la credenziale di rinnovo fino alla revoca: non viene creata un’altra sessione e non viene cambiato il nome. Si conservano attribuzione, notifiche e vincoli degli ospiti senza nome. I codici di collegamento restano monouso e con la loro scadenza breve.
+
+Ogni rinnovo verifica revoca della sessione/link e utente sviluppatore non anonimo; il widget verifica anche ambiente, toggle e origine effettiva, compresi protocollo e porta e l’eccezione localhost già prevista. Rigenerare un link blocca le sue sessioni senza influire sugli altri link. Le RPC ordinarie continuano a rifiutare token scaduti senza un rinnovo autorizzato. Gli errori di servizio restituiscono 503 senza far abbandonare al widget una sessione valida. I client che hanno già cancellato il token devono collegarsi e identificarsi di nuovo una volta.
+
+La modifica è solo sul database e sulle API: l’estensione installata può usare il rinnovo senza aggiornare il suo ZIP. I test PGlite coprono schema nuovo e migrazione ripetuta su sessioni scadute, conservazione del nome, letture senza nome, scritture negate, isolamento, origine, disabilitazione e revoche.
 
 ## Consultazione senza nome
 

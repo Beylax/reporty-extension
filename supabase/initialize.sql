@@ -18,7 +18,7 @@ declare item record;
 begin
   for item in select p.oid::regprocedure::text as signature from pg_proc p
     join pg_namespace n on n.oid=p.pronamespace
-    where n.nspname='public' and p.proname in ('authorize_mcp_connection','revoke_mcp_connection','mcp_access_token_hook','mcp_current_connection','mcp_read','require_reviewer_name','reviewer_identity','attachment_operation','report_attachment_operation','notify_issue_reply','notification_operation','notification_page','notify_issue_status','list_project_participants','widget_config','widget_authorize','start_widget_session','add_environment_widget','create_project_with_production','is_platform_admin','can_read_project','can_manage_project','add_project_owner','create_member_invite','accept_member_invite','create_guest_invite','revoke_project_invite','list_project_members','preview_guest_invite','start_guest_session','get_guest_session','create_member_handoff','create_guest_handoff','redeem_extension_handoff','extension_context','revoke_extension_session','report_actor','report_operation','report_page','report_pins','report_text_sort','manage_project_member','platform_delete_resource','create_environment_guest_invite','preview_guest_review','save_project_review_link','create_environment_review_link','regenerate_environment_review_link')
+    where n.nspname='public' and p.proname in ('renew_extension_session','renew_widget_session','authorize_mcp_connection','revoke_mcp_connection','mcp_access_token_hook','mcp_current_connection','mcp_read','require_reviewer_name','reviewer_identity','attachment_operation','report_attachment_operation','notify_issue_reply','notification_operation','notification_page','notify_issue_status','list_project_participants','widget_config','widget_authorize','start_widget_session','add_environment_widget','create_project_with_production','is_platform_admin','can_read_project','can_manage_project','add_project_owner','create_member_invite','accept_member_invite','create_guest_invite','revoke_project_invite','list_project_members','preview_guest_invite','start_guest_session','get_guest_session','create_member_handoff','create_guest_handoff','redeem_extension_handoff','extension_context','revoke_extension_session','report_actor','report_operation','report_page','report_pins','report_text_sort','manage_project_member','platform_delete_resource','create_environment_guest_invite','preview_guest_review','save_project_review_link','create_environment_review_link','regenerate_environment_review_link')
   loop execute format('drop function if exists %s cascade',item.signature); end loop;
 end;
 $$;
@@ -1339,4 +1339,53 @@ do $$ begin
     grant execute on function public.mcp_access_token_hook(jsonb) to supabase_auth_admin;
   end if;
 end $$;
+
+-- Automatic review-session renewal, preserving identity and revocation.
+
+create or replace function public.renew_extension_session(secret text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare connection public.extension_sessions;
+begin
+  select * into connection from public.extension_sessions
+    where token_hash=encode(sha256(convert_to(secret,'UTF8')),'hex') and revoked_at is null for update;
+  if connection.id is null then raise exception 'Invalid session' using errcode='42501'; end if;
+  if connection.guest_session_id is not null then
+    perform 1 from public.guest_sessions g join public.guest_invites i on i.id=g.invite_id and i.project_id=g.project_id
+      where g.id=connection.guest_session_id and i.revoked_at is null for share of i;
+    if not found then raise exception 'Guest access revoked' using errcode='42501'; end if;
+  else
+    perform 1 from auth.users u where u.id=connection.user_id and not coalesce((to_jsonb(u)->>'is_anonymous')::boolean,false);
+    if not found then raise exception 'Invalid session' using errcode='42501'; end if;
+  end if;
+  -- Avoid writing on every poll. Never shorten an existing expiration.
+  if connection.expires_at < now()+interval '15 days' then
+    update public.extension_sessions set expires_at=now()+interval '30 days' where id=connection.id;
+  end if;
+  return public.extension_context(secret);
+end;
+$$;
+
+create or replace function public.renew_widget_session(secret text, request_origin text) returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare connection public.widget_sessions;
+begin
+  select * into connection from public.widget_sessions
+    where token_hash=encode(sha256(convert_to(secret,'UTF8')),'hex') and origin=request_origin for update;
+  if connection.token_hash is null then raise exception 'Widget disabled or session unavailable' using errcode='42501'; end if;
+  perform 1 from public.environment_widgets w join public.environments e on e.id=w.environment_id
+    join public.guest_sessions g on g.id=connection.guest_session_id and g.project_id=e.project_id
+    join public.guest_invites i on i.id=g.invite_id and i.project_id=g.project_id
+    where w.environment_id=connection.environment_id and w.enabled and i.revoked_at is null
+      and (connection.origin=e.origin or connection.origin ~ '^https?://localhost(:[0-9]{1,5})?$')
+    for share of w,i,e;
+  if not found then raise exception 'Widget disabled or session unavailable' using errcode='42501'; end if;
+  if connection.expires_at < now()+interval '12 hours' then
+    update public.widget_sessions set expires_at=now()+interval '1 day' where token_hash=connection.token_hash;
+  end if;
+  return public.widget_authorize(secret,request_origin);
+end;
+$$;
+
+revoke all on function public.renew_extension_session(text),public.renew_widget_session(text,text) from public,anon,authenticated;
+grant execute on function public.renew_extension_session(text),public.renew_widget_session(text,text) to anon,authenticated;
 commit;
