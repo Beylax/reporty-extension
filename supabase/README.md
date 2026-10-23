@@ -1,5 +1,15 @@
 # Configurazione Supabase
 
+## Aggiornamento unico delle modifiche recenti, senza reset
+
+Eseguire **solo `update_reports.sql`**, copiando tutto il contenuto nel SQL Editor di Supabase in un’unica esecuzione. Include screenshot multipli, fino a 5 file da 5 MB per segnalazione e creazione di segnalazioni di pagina dalla dashboard. Sostituisce l’esecuzione separata di `report_screenshots.sql`, `report_attachments.sql` e `page_reports.sql`.
+
+Lo script mantiene account, progetti, ambienti, sessioni, segnalazioni, risposte, notifiche e file esistenti. Copia il percorso dello screenshot storico nel nuovo array, lasciando intatto il campo precedente. Eventuali file già presenti sopra 5 MB non vengono rimossi né riscritti: il limite di 5 MB viene applicato ai nuovi upload tramite bucket e RPC. Se la tabella degli allegati esiste, i suoi record e i vincoli storici sono conservati.
+
+È incrementale, rieseguibile e racchiuso in **una sola transazione**; un errore annulla l’intera esecuzione. Controlla prima la presenza delle tabelle, funzioni e colonne di base necessarie: se manca un prerequisito, si interrompe senza modifiche. Nessuna funzione di cancellazione viene invocata, nessuna tabella o account viene eliminato e nessun oggetto Storage viene cancellato. I `DELETE` presenti nei corpi delle RPC definiscono il comportamento delle future cancellazioni richieste dall’app, senza eseguirle durante l’aggiornamento.
+
+Verifiche locali: `supabase/tests/update-reports.test.mjs` confronta tutti i record preesistenti negli schemi applicativi, Auth e Storage prima e dopo l’aggiornamento, prova il rollback su errore e la seconda esecuzione, copre il vecchio screenshot singolo e installazioni parziali con file più grandi. Le RPC finali sono confrontate con le migrazioni individuali già testate. Nessuno script è stato eseguito sul remoto.
+
 ## Inizializzazione e reset
 
 Eseguire **`initialize.sql`** nel SQL Editor di Supabase. È l’unico script di inizializzazione e sostituisce le precedenti migrazioni.
@@ -76,3 +86,21 @@ Se il sistema di notifiche era già installato, applicare **`supabase/notificati
 Per aggiungere le notifiche delle risposte a un database con notifiche già attive, applicare **`supabase/notifications_reply.sql`**. Lo script è incrementale e rieseguibile, conserva gli eventi e le letture precedenti, distingue le tipologie e non genera notifiche per risposte storiche. `initialize.sql` e le versioni correnti di `notifications.sql` e `notification_creation.sql` includono già anche le risposte. Poi distribuire dashboard/API e ricostruire e ricaricare l’estensione. Nessuno script remoto è stato eseguito.
 
 Per gli allegati delle risposte su un database esistente, eseguire una volta `reply_attachments.sql` prima del nuovo deploy web. È incrementale e conserva tutti i dati: aggiunge `comment_attachments`, la RPC autorizzata `attachment_operation`, associazione atomica nella risposta e bucket privato `attachments` (massimo 2.500.000 byte per file, 5 file per risposta). Non aggiungere policy Storage per anon/authenticated: upload, lettura e pulizia passano dal backend. `initialize.sql` include questa modifica e richiede lo svuotamento preventivo di `screenshots` e `attachments` tramite Storage; resta un reset distruttivo. Upload interrotti da una chiusura forzata possono lasciare prenotazioni e file temporanei; vengono raccolti alla cancellazione della segnalazione/ambiente/progetto.
+
+## Screenshot multipli
+
+Questa modifica è inclusa in `update_reports.sql`, da applicare prima del deploy; `report_screenshots.sql` resta il riferimento individuale. La migrazione è incrementale e rieseguibile: aggiunge `issues.screenshot_paths`, conserva lo screenshot storico in `screenshot_path` e come prima immagine dell’array, e aggiorna le RPC di autorizzazione e pulizia. Sono consentiti al massimo 5 screenshot JPEG fino a 2,5 MB ciascuno. Lettura per sessioni ospiti anche senza nome; scrittura solo per sviluppatori autenticati o per l’autore ospite identificato, con verifica del toggle widget e della sessione. I nuovi percorsi sono `progetto/segnalazione/screenshot.jpg`; quelli storici restano validi. Il database controlla presenza, tipo e dimensione degli oggetti prima del collegamento; i file vengono eliminati solo tramite API Storage. Non eseguire `initialize.sql` per aggiornare un database da conservare.
+
+## File della segnalazione fino a 5 MB
+
+Questa modifica è inclusa in `update_reports.sql`, da applicare prima del deploy; `report_attachments.sql` resta il riferimento individuale. È una migrazione incrementale, transazionale e rieseguibile. Aggiunge `issue_attachments`, protetta da RLS senza accesso diretto per `anon` e `authenticated`, la RPC `report_attachment_operation` con `search_path` esplicito e il bucket privato `report-attachments` con limite di 5.000.000 byte. I dati e il bucket degli allegati delle risposte sono conservati, con il loro limite di 2,5 MB.
+
+Ogni segnalazione ha al massimo 5 file, compresi quelli prenotati in attesa di upload. Le scritture richiedono sviluppatore autenticato oppure autore ospite identificato; la lettura dei file confermati è disponibile anche agli ospiti senza nome autorizzati sul progetto/ambiente. I controlli RPC comprendono sessione, toggle widget, proprietà della prenotazione, dimensione effettiva e MIME Storage prima del collegamento. Upload incompleti non appaiono nel dettaglio e non sono scaricabili tramite API. Le cancellazioni della segnalazione, del progetto o dell’ambiente restituiscono anche i percorsi dei file prenotati per la pulizia tramite API Storage.
+
+Il backend emette un token upload per un solo percorso, senza overwrite; il client usa TUS e la chiave server non lascia il backend. Gli upload firmati Supabase possono restare validi per 2 ore anche dopo la revoca della sessione: la conferma nel database viene sempre nuovamente autorizzata. Il file generico è forzato a `application/octet-stream` e viene sempre scaricato, tramite URL firmato di 60 secondi. Verificare anche il limite globale Storage, che non viene modificato da SQL. Il piano Free include 1 GB complessivo: l’operazione non è distruttiva, ma file da 5 MB possono consumare rapidamente la quota.
+
+## Segnalazioni di pagina dalla dashboard
+
+Questa modifica è inclusa in `update_reports.sql`, da applicare prima del deploy; `page_reports.sql` resta il riferimento individuale. La migrazione incrementale, transazionale e rieseguibile aggiorna solo `report_operation` e i relativi grant, senza riscrivere o eliminare dati. `initialize.sql` include già lo stesso supporto, ma resta uno script distruttivo da non usare per aggiornare dati esistenti.
+
+Il nuovo `anchor.kind = page` permette la creazione senza coordinate, viewport o scroll fittizi. I controlli su utente sviluppatore, sessione ospite identificata, revoca e origine dell’ambiente restano attivi. I tipi `pin` ed `element` richiedono ancora i rispettivi metadati e la viewport/scroll. Screenshot, file, risposte e operazioni di pulizia usano le RPC e i bucket già esistenti. La nuova API `/api/reports` accetta solo creazione e screenshot tramite sessione dashboard autenticata non anonima.

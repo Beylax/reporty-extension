@@ -92,3 +92,10 @@ test('bulk deletion cleans attachments and continues after a screenshot cleanup 
   assert.deepEqual(removed,['one.jpg','attachments/one/file1','attachments/one/file2']);
   assert.deepEqual(result.storageWarnings,['one']);assert.deepEqual(result.failed,['denied']);
 });
+
+test('bulk deletion cleans every screenshot once, including legacy primary paths', async () => {
+  const removed = [];
+  const result = await executeBulkReports({ operation: 'delete', targets: [target('multiple')] }, async () => ({ data: { screenshot_path: 'first.jpg', screenshot_paths: ['first.jpg','second.jpg','third.jpg'] } }), async path => { removed.push(path); });
+  assert.deepEqual(removed,['first.jpg','second.jpg','third.jpg']);
+  assert.deepEqual(result.succeeded,['multiple']);
+});

@@ -1,7 +1,7 @@
 'use client';
 
 import { Check, Trash2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { priorityLabels, type Report } from '@reporty/shared';
 import type { BulkReportAction, BulkReportProgress } from '@/lib/bulk-report-update';
 import { Button } from '@/components/ui/button';
@@ -13,51 +13,44 @@ import { Progress } from '@/components/ui/progress';
 import { ReportCountBadge } from '@/components/report-count-badge';
 
 const statuses = { open: 'Aperta', in_progress: 'In lavorazione', validation: 'Validazione', resolved: 'Chiusa' };
-function BulkToolbarPosition({ enabled, children }: { enabled: boolean; children: React.ReactNode }) {
+function BulkToolbarPosition({ children }: { children: React.ReactNode }) {
   const anchor = useRef<HTMLDivElement>(null);
   const toolbar = useRef<HTMLElement>(null);
-  const [offscreen, setOffscreen] = useState(false);
-  const floating = enabled && offscreen;
-  useEffect(() => {
+  useLayoutEffect(() => {
     const placeholder = anchor.current, element = toolbar.current;
     if (!placeholder || !element) return;
-    // Keep the inline space stable while the same controls become fixed.
-    // This also preserves focus, selected values and the deletion dialog.
+    // Center the floating controls within the list and leave room after pagination
+    // so the last rows remain reachable, including when controls wrap on mobile.
     const measure = () => {
       const bounds = placeholder.getBoundingClientRect();
       element.style.setProperty('--bulk-toolbar-center', `${bounds.left + bounds.width / 2}px`);
       element.style.setProperty('--bulk-toolbar-width', `${Math.min(bounds.width, window.innerWidth - 32)}px`);
-      if (getComputedStyle(element).position !== 'fixed') placeholder.style.height = `${element.getBoundingClientRect().height}px`;
+      placeholder.style.height = `${element.getBoundingClientRect().height + 24}px`;
     };
     measure();
     const resize = new ResizeObserver(measure);
     resize.observe(element);
     resize.observe(placeholder);
     window.addEventListener('resize', measure);
-    const observer = new IntersectionObserver(([entry]) => {
-      setOffscreen(!entry.isIntersecting && entry.boundingClientRect.bottom <= (entry.rootBounds?.top ?? 0));
-    });
-    observer.observe(placeholder);
-    return () => { observer.disconnect(); resize.disconnect(); window.removeEventListener('resize', measure); placeholder.style.height = ''; };
+    return () => { resize.disconnect(); window.removeEventListener('resize', measure); placeholder.style.height = ''; };
   }, []);
   return <div ref={anchor}>
-    <section ref={toolbar} aria-label="Azioni in blocco" className={`space-y-2 rounded-xl border bg-card p-2 ${floating ? 'fixed bottom-6 left-[var(--bulk-toolbar-center)] z-30 w-max max-w-[var(--bulk-toolbar-width)] -translate-x-1/2 shadow-xl' : ''}`}>
+    <section ref={toolbar} aria-label="Azioni in blocco" className="fixed bottom-6 left-[var(--bulk-toolbar-center)] z-30 w-max max-w-[var(--bulk-toolbar-width)] -translate-x-1/2 space-y-2 rounded-xl border bg-card p-2 shadow-xl">
       {children}
     </section>
   </div>;
 }
 
-export function ReportBulkToolbar({ count, total, showSelectAll, selectingAll, onSelectAll, onDeselectAll, disabled, pending, canUpdate, canDelete, onApply, floatOnScroll = false }: {
+export function ReportBulkToolbar({ count, total, showSelectAll, selectingAll, onSelectAll, onDeselectAll, disabled, pending, canUpdate, canDelete, onApply }: {
   count: number; disabled: boolean;
   total: number; showSelectAll: boolean; selectingAll: boolean;
   onSelectAll: () => void; onDeselectAll: () => void;
   pending: BulkReportProgress | null;
   canUpdate: boolean; canDelete: boolean;
-  floatOnScroll?: boolean;
   onApply: (action: BulkReportAction) => Promise<void>;
 }) {
   const [status, setStatus] = useState(''), [priority, setPriority] = useState('');
-  return count > 0 ? <BulkToolbarPosition enabled={floatOnScroll}>
+  return count > 0 ? <BulkToolbarPosition>
       <div className="flex flex-wrap items-center gap-2 [&_[data-slot=select-trigger]]:h-8 [&_[data-slot=select-trigger]]:px-2 [&_[data-slot=select-trigger]]:text-xs">
         <p role="status" aria-atomic="true" className="mr-1 flex items-center text-xs font-medium"><ReportCountBadge count={count} label={count === 1 ? 'segnalazione selezionata' : 'segnalazioni selezionate'} /></p>
         <div className="flex items-center gap-1.5">

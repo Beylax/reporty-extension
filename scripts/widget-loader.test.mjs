@@ -83,3 +83,36 @@ test('loader skips configuration calls without focus and resumes when the page r
   document.visibilityState = 'visible'; await listeners.visibilitychange(); assert.equal(calls, 2);
   focused = false; await poll(); assert.equal(calls, 2);
 });
+
+test('loader starts an unfocused playground iframe from the trusted dashboard and pauses inactive frames', async () => {
+  let receive, poll, now = 0, calls = 0, enabled = false;
+  const appended = [];
+  const listeners = {};
+  const parent = {};
+  const document = {
+    visibilityState: 'visible', hasFocus: () => false, addEventListener: (name, callback) => { listeners[name] = callback; },
+    currentScript: { dataset: { reporty: 'environment-key' }, src: 'https://reporty.example/widget/reporty.js' },
+    createElement: () => ({ dataset: {} }), head: { append: script => appended.push(script) },
+  };
+  vm.runInNewContext(source, {
+    document, window: { parent, addEventListener: (name, callback) => { if (name === 'message') receive = callback; } }, URL, encodeURIComponent, Date: { now: () => now },
+    fetch: async () => { calls++; return { ok: true, json: async () => ({ enabled }) }; },
+    setInterval: callback => { poll = callback; },
+  });
+  const connect = { source: parent, origin: 'https://reporty.example', data: { type: 'REPORTY_PLAYGROUND_CONNECT', key: 'environment-key', nonce: '12345678-1234-1234-1234-123456789abc', active: true } };
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  for (const patch of [{ source: {} }, { origin: 'https://evil.example' }, { data: { ...connect.data, key: 'other' } }, { data: { ...connect.data, nonce: 'invalid' } }]) receive({ ...connect, ...patch });
+  await flush(); assert.equal(calls, 0);
+  receive(connect); await flush(); assert.equal(calls, 1);
+  receive(connect); await flush(); assert.equal(calls, 1, 'heartbeats do not increase API polling frequency');
+  receive({ ...connect, data: { ...connect.data, active: false } }); await flush(); await poll();
+  assert.equal(calls, 1);
+  receive(connect); await flush(); assert.equal(calls, 2);
+  now = 3001; await poll(); assert.equal(calls, 2);
+  enabled = true;
+  document.visibilityState = 'hidden'; receive(connect); await flush(); assert.equal(calls, 2);
+  document.visibilityState = 'visible'; await listeners.visibilitychange(); await flush();
+  assert.equal(calls, 3);
+  assert.equal(appended.length, 1);
+  assert.equal(appended[0].src, 'https://reporty.example/widget/panel.js');
+});

@@ -2,6 +2,7 @@ import 'server-only';
 import { attachmentRequestSchema, attachmentMime, isPreviewImage, MAX_ATTACHMENT_BYTES } from '@reporty/shared';
 import { createClient } from '@/lib/supabase/server';
 import { storageClient, storageServiceClient, removeStoredFiles } from '@/lib/supabase/storage';
+import { handleReportAttachment } from '@/lib/report-attachments';
 
 export async function handleAttachment(request: Request, secret: string | null) {
   let input;
@@ -12,6 +13,8 @@ export async function handleAttachment(request: Request, secret: string | null) 
     const { data } = await supabase.auth.getClaims();
     if (!data?.claims || data.claims.is_anonymous) return Response.json({ error: 'Accesso richiesto.' }, { status: 401 });
   }
+  if (input.scope === 'report') return handleReportAttachment(input, secret, supabase);
+  if (!['upload', 'read', 'remove'].includes(input.operation)) return Response.json({ error: 'Operazione non valida.' }, { status: 400 });
   let bytes: Buffer | undefined;
   if (input.operation === 'upload') {
     if (!input.name || !input.content || input.content.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(input.content)) return Response.json({ error: 'File non valido.' }, { status: 400 });

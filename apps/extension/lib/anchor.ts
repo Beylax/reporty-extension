@@ -21,6 +21,7 @@ export function elementAnchor(element: Element, x: number, y: number): Anchor {
 }
 
 export function anchorPosition(anchor: Anchor): { x: number; y: number } | null {
+  if (anchor.kind === 'page') return null;
   if (anchor.kind === 'pin') return { x: anchor.documentX - scrollX, y: anchor.documentY - scrollY };
   try {
     const nodes = document.querySelectorAll(anchor.selector);

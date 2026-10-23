@@ -13,8 +13,8 @@ export function storageClient(bucket = 'screenshots') { return storageServiceCli
 /** Attachment paths have a reserved prefix; screenshot paths keep their existing format. */
 export async function removeStoredFiles(paths: string[]) {
   const failures: unknown[] = [];
-  for (const bucket of ['screenshots','attachments']) {
-    const selected = paths.filter(path => path.startsWith('attachments/') === (bucket === 'attachments'));
+  for (const bucket of ['screenshots','attachments','report-attachments']) {
+    const selected = [...new Set(paths.filter(path => (path.startsWith('report-attachments/') ? 'report-attachments' : path.startsWith('attachments/') ? 'attachments' : 'screenshots') === bucket))];
     for (let index = 0; index < selected.length; index += 100) {
       try {
         const { error } = await storageClient(bucket).remove(selected.slice(index,index + 100));

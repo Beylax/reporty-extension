@@ -11,11 +11,17 @@ await writeFile(new URL('../apps/web/public/widget/reporty.js',import.meta.url),
   if(!key)return;
   window.addEventListener('message',event=>{
     const input=event.data;
+    if(window.parent!==window&&event.source===window.parent&&event.origin===api&&input?.type==='REPORTY_PLAYGROUND_CONNECT'&&input.key===key&&typeof input.nonce==='string'&&/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(input.nonce)&&typeof input.active==='boolean'){
+      const wasActive=parentActivity?.active&&Date.now()<parentActivity.expires;
+      parentActivity={active:input.active,expires:Date.now()+3000};
+      if(input.active&&!wasActive)void check();
+      return;
+    }
     if(event.origin!==api||!window.opener||event.source!==window.opener||input?.type!=='REPORTY_VERIFY_WIDGET'||typeof input.nonce!=='string'||!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(input.nonce))return;
     event.source.postMessage({type:'REPORTY_WIDGET_VERIFIED',nonce:input.nonce,key},api);
   });
-  let loaded=false,busy=false;
-  const active=()=>document.visibilityState==='visible'&&document.hasFocus();
+  let loaded=false,busy=false,parentActivity;
+  const active=()=>document.visibilityState==='visible'&&(parentActivity?parentActivity.active&&Date.now()<parentActivity.expires:document.hasFocus());
   async function check(){
     if(loaded||busy||!active())return;
     busy=true;

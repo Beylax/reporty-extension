@@ -1,6 +1,7 @@
 import type { BulkReportRequest, BulkReportResult } from '@reporty/shared';
+import { reportScreenshotPaths } from '@reporty/shared/screenshots';
 
-type MutationResult = { error?: unknown; data?: { screenshot_path?: string | null; attachment_paths?: string[] } | null };
+type MutationResult = { error?: unknown; data?: { screenshot_path?: string | null; screenshot_paths?: string[]; attachment_paths?: string[] } | null };
 
 /** Each target goes through the authorized report RPC. Failures remain retryable. */
 export async function executeBulkReports(
@@ -19,7 +20,7 @@ export async function executeBulkReports(
       } catch { result.failed.push(target.id); return; }
       result.succeeded.push(target.id);
       if (request.operation === 'delete') {
-        const paths = [...(mutation.data?.screenshot_path ? [mutation.data.screenshot_path] : []),...(mutation.data?.attachment_paths ?? [])];
+        const paths = [...reportScreenshotPaths(mutation.data ?? {}),...(mutation.data?.attachment_paths ?? [])];
         let failed = false;
         for (const path of paths) { try { await removeScreenshot(path); } catch { failed = true; } }
         if (failed) result.storageWarnings.push(target.id);

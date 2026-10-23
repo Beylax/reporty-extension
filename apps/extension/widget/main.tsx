@@ -11,7 +11,7 @@ import { isOpenerPosition } from '@/lib/opener-position';
 import type { Site, Environment } from '@/lib/session';
 import css from '@/entrypoints/popup/style.css?inline';
 import { createPlaygroundBridge, type PlaygroundSelection } from '@/lib/playground-bridge';
-import { isPageActive } from '@reporty/shared';
+import { isPageActive, setEmbeddedPageActive } from '@reporty/shared';
 import { usePageActive } from '@reporty/shared/ui/use-page-active';
 
 const script=document.currentScript as HTMLScriptElement | null;
@@ -41,7 +41,7 @@ function saveToken(value: string) {
 }
 const host=document.createElement('div');
 host.id='reporty-widget';
-const playground = key && api ? createPlaygroundBridge(api, key) : null;
+const playground = key && api ? createPlaygroundBridge(api, key, window, setEmbeddedPageActive) : null;
 window.addEventListener('pagehide', event => { if (!event.persisted) playground?.dispose(); });
 
 function Widget() {

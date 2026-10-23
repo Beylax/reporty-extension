@@ -1,13 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useRef, useState, useSyncExternalStore } from 'react';
 import { Minimize2 } from 'lucide-react';
-import { isUuid } from '@reporty/shared';
+import { isPageActive, isUuid } from '@reporty/shared';
+import { usePageActive } from '@reporty/shared/ui/use-page-active';
 import { TooltipButton } from '@reporty/shared/ui/tooltip-button';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToastManager } from '@/components/ui/toast';
-import { capturePlaygroundFrame } from '@/lib/playground-capture';
+import { capturePlaygroundFrame, hasPlaygroundCapture, subscribePlaygroundCapture } from '@/lib/playground-capture';
 import { isPlaygroundMessage, playgroundFrameLayout, playgroundUrl, type PlaygroundEnvironment, type Viewport } from '@/lib/playground';
 
 export function PlaygroundFrame({ environment, url, viewport, active, reload, requestedReport, onPage, fitWidth, fullscreen, onExitFullscreen, onSelectReport, reportsRevision = 0 }: {
@@ -27,11 +28,13 @@ export function PlaygroundFrame({ environment, url, viewport, active, reload, re
   const [connected, setConnected] = useState(false);
   const [capture, setCapture] = useState<{ requestId: string; url: string } | null>(null);
   const [capturing, setCapturing] = useState(false);
+  const sharing = useSyncExternalStore(subscribePlaygroundCapture, hasPlaygroundCapture, () => false);
   const captureLock = useRef(false);
   const sentSelection = useRef('');
   const currentUrl = useRef(url);
   const generation = useRef(0);
   const toast = useToastManager();
+  const pageActive = usePageActive();
   const notifyPage = useEffectEvent(onPage);
   const selectReport = useEffectEvent(onSelectReport);
   const layout = playgroundFrameLayout(viewport, available, fitWidth || fullscreen);
@@ -39,6 +42,10 @@ export function PlaygroundFrame({ environment, url, viewport, active, reload, re
   const post = useCallback((data: Record<string, unknown>) => {
     frame.current?.contentWindow?.postMessage({ ...data, nonce }, environment.origin);
   }, [environment.origin, nonce]);
+  const sendConnection = useCallback(() => {
+    post({ type: 'REPORTY_PLAYGROUND_CONNECT', key: environment.publicKey, externalDetails: true, active: active && isPageActive() });
+  }, [post, environment.publicKey, active]);
+  useEffect(() => { sendConnection(); }, [pageActive, sendConnection]);
   function cancelCapture(message: string) {
     if (capture) generation.current++;
     if (capture) post({ type: 'REPORTY_PLAYGROUND_CAPTURE_RESULT', requestId: capture.requestId, error: message });
@@ -67,7 +74,7 @@ export function PlaygroundFrame({ environment, url, viewport, active, reload, re
     let lastSeen = Date.now();
     const lifetime = generation;
     function connect() {
-      post({ type: 'REPORTY_PLAYGROUND_CONNECT', key: environment.publicKey, externalDetails: true });
+      sendConnection();
       if (lastSeen && Date.now() - lastSeen > 6000) {
         setConnected(false);
         notifyPage(currentUrl.current, false);
@@ -104,7 +111,7 @@ export function PlaygroundFrame({ environment, url, viewport, active, reload, re
     const timer = setInterval(connect, 1000);
     connect();
     return () => { clearInterval(timer); window.removeEventListener('message', receive); lifetime.current++; };
-  }, [environment.origin, environment.publicKey, nonce, active, reload, post]);
+  }, [environment.origin, environment.publicKey, nonce, active, reload, post, sendConnection]);
   useEffect(() => {
     if (active && connected && requestedReport && sentSelection.current !== requestedReport.requestId) {
       sentSelection.current = requestedReport.requestId;
@@ -140,13 +147,17 @@ export function PlaygroundFrame({ environment, url, viewport, active, reload, re
       toast.add({ title: 'Acquisizione non riuscita', description: message, type: 'error' });
     } finally { captureLock.current = false; setCapturing(false); setCapture(null); }
   }
-  const reset = () => { generation.current++; sentSelection.current = ''; setLoadedRevision(reload); setConnected(false); cancelCapture('La pagina è stata ricaricata.'); onPage(currentUrl.current, false); post({ type: 'REPORTY_PLAYGROUND_CONNECT', key: environment.publicKey, externalDetails: true }); };
+  const captureAutomatically = useEffectEvent(takeScreenshot);
+  useEffect(() => {
+    if (capture && sharing) void captureAutomatically();
+  }, [capture, sharing]);
+  const reset = () => { generation.current++; sentSelection.current = ''; setLoadedRevision(reload); setConnected(false); cancelCapture('La pagina è stata ricaricata.'); onPage(currentUrl.current, false); sendConnection(); };
   return <div className={`relative min-h-0 min-w-0 flex-1 flex-col ${active ? 'flex' : 'hidden'}`}>
     <div className={`${fullscreen ? 'hidden' : 'flex'} flex-wrap items-center justify-between gap-2 border-b bg-background px-4 py-2 text-xs text-muted-foreground`}>
       <span>{connected ? 'Widget collegato' : 'In attesa del widget: verifica script, attivazione e permesso di incorporamento del sito.'}</span>
       <span>{layout.width} × {layout.height} · {Math.round(scale * 100)}%</span>
     </div>
-    {capture && !capturing ? <div role="status" className="absolute inset-x-0 top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b bg-background p-3 text-sm shadow-sm"><p>Condividi questa scheda per acquisire solo la pagina, con il punto evidenziato.</p><div className="flex gap-2"><Button disabled={capturing} onClick={() => void takeScreenshot()}>Condividi scheda e acquisisci</Button><Button variant="outline" disabled={capturing} onClick={() => cancelCapture('Acquisizione annullata.')}>Annulla</Button></div></div> : null}
+    {capture && !capturing && !sharing ? <div role="status" className="absolute inset-x-0 top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b bg-background p-3 text-sm shadow-sm"><p>Condividi questa scheda una volta: gli screenshot successivi saranno automatici finché resta aperto il playground.</p><div className="flex gap-2"><Button disabled={capturing} onClick={() => void takeScreenshot()}>Condividi scheda e acquisisci</Button><Button variant="outline" disabled={capturing} onClick={() => cancelCapture('Acquisizione annullata.')}>Annulla</Button></div></div> : null}
     <div ref={stage} className={`relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted/60 p-4 ${fullscreen ? 'pt-16' : ''}`}>
       {fullscreen ? <TooltipButton ref={exitButton} label="Esci da schermo intero" className="absolute right-4 top-4 z-10 bg-background shadow-sm" onClick={onExitFullscreen}><Minimize2 aria-hidden="true" /></TooltipButton> : null}
       {loadedRevision !== reload ? <div role="status" aria-label="Caricamento pagina del playground" className="absolute inset-4 space-y-6 rounded-lg border bg-background p-6"><div className="flex gap-4"><Skeleton className="h-8 w-28" /><Skeleton className="ml-auto h-8 w-48" /></div><Skeleton className="h-12 w-2/3" /><Skeleton className="h-5 w-4/5" /><div className="grid grid-cols-3 gap-4">{[0,1,2].map(i => <Skeleton key={i} className="h-48 w-full" />)}</div></div> : null}

@@ -92,9 +92,11 @@ export function RadioButtons({ id, label, value, options, onValueChange, disable
 
   return <div ref={scroller} className="min-w-0 max-w-full overflow-x-auto overscroll-x-contain py-1">
     <RadioGroup id={id} aria-label={label} value={value} disabled={disabled} onValueChange={onValueChange} className={cn('relative isolate flex w-full min-w-max flex-nowrap', variant === 'standard' && 'rounded-full bg-muted p-1')}>
-      {variant === 'standard' && indicator ? <span aria-hidden="true"
-        className={cn('pointer-events-none absolute inset-y-1 left-0 rounded-full bg-background shadow-sm transition-[transform,width] duration-400 ease-[cubic-bezier(0.34,1.56,0.64,1)] motion-reduce:transition-none', disabled && 'opacity-50')}
-        style={{ width: indicator.width, transform: `translateX(${indicator.left}px)` }} /> : null}
+      {variant === 'standard' && indicator ? <span aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-clip rounded-full">
+        <span
+          className={cn('absolute inset-y-1 left-0 rounded-full bg-background shadow-sm transition-[transform,width] duration-400 ease-[cubic-bezier(0.34,1.56,0.64,1)] motion-reduce:transition-none', disabled && 'opacity-50')}
+          style={{ width: indicator.width, transform: `translateX(${indicator.left}px)` }} />
+      </span> : null}
       {options.map((option, index) => {
         const first = index === 0;
         const last = index === options.length - 1;

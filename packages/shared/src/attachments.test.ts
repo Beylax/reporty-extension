@@ -18,3 +18,11 @@ test('request limits reject oversized content and more than five reply attachmen
   assert.equal(attachmentRequestSchema.safeParse({environmentId:id,issueId:'invalid',id,operation:'read'}).success,false);
   assert.equal(reportRequestSchema.safeParse({environmentId:id,operation:'reply',payload:{id,body:'Reply',attachments:Array(6).fill(id)}}).success,false);
 });
+
+test('report attachments validate 5 MB metadata without accepting a large app API body',()=>{
+  const request={environmentId:id,issueId:id,id,scope:'report',operation:'begin_upload',name:'archive.zip',size:5000000};
+  assert.equal(attachmentRequestSchema.safeParse(request).success,true);
+  for(const size of [0,-1,5000001,50.5])assert.equal(attachmentRequestSchema.safeParse({...request,size}).success,false);
+  assert.equal(attachmentRequestSchema.safeParse({...request,scope:'arbitrary'}).success,false);
+  assert.equal(attachmentRequestSchema.safeParse({...request,operation:'complete_upload'}).success,true);
+});

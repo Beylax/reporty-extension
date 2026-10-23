@@ -1,19 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createPlaygroundBridge } from '../apps/extension/lib/playground-bridge.ts';
+import { isPageActive, setEmbeddedPageActive, whenPageActive } from '../packages/shared/src/page-activity.ts';
 
 const api = 'https://reporty.example';
 const key = 'public-key';
 const nonce = '2c17dceb-1675-4bbf-8cd6-93805c779bea';
 const id = '21bdd379-5b2b-47cf-a4fa-e4ce8a3be419';
-function setup(t) {
+function setup(t, onActivity) {
   const sent = [], listeners = new Map();
   const parent = { postMessage: (message, origin) => sent.push({ message, origin }) };
   const target = { parent, location: { href: 'https://site.example/page' }, crypto,
     addEventListener: (type, listener) => listeners.set(type, listener),
     removeEventListener: type => listeners.delete(type),
   };
-  const bridge = createPlaygroundBridge(api, key, target);
+  const bridge = createPlaygroundBridge(api, key, target, onActivity);
   t.after(() => bridge.dispose());
   return { bridge, sent, target, emit: (data, overrides = {}) => listeners.get('message')?.({ data, origin: api, source: parent, ...overrides }),
     connect(overrides = {}) { this.emit({ type: 'REPORTY_PLAYGROUND_CONNECT', nonce, key, ...overrides }); },
@@ -34,6 +35,38 @@ test('handshake rejects other windows, origins, keys and malformed nonces', t =>
   assert.equal(s.sent.at(-1).message.url, s.target.location.href);
   s.bridge.setEnabled(false);
   assert.equal(s.sent.at(-1).message.enabled, false);
+});
+
+test('trusted dashboard activity starts iframe reads without a click and expires without heartbeats', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const document = Object.assign(new EventTarget(), { visibilityState: 'visible', hasFocus: () => false });
+  const s = setup(t, active => setEmbeddedPageActive(active, document));
+  let reads = 0;
+  const stop = whenPageActive(() => reads++, document, new EventTarget());
+  const connect = { type: 'REPORTY_PLAYGROUND_CONNECT', key, nonce, active: true };
+  s.emit(connect, { source: {} });
+  s.emit(connect, { origin: 'https://evil.example' });
+  s.emit({ ...connect, key: 'other' });
+  s.emit({ ...connect, nonce: 'invalid' });
+  assert.equal(reads, 0);
+  s.emit(connect);
+  assert.equal(reads, 1);
+  assert.equal(isPageActive(document), true);
+  s.emit({ ...connect, active: false });
+  assert.equal(isPageActive(document), false);
+  s.emit(connect);
+  t.mock.timers.tick(2000);
+  s.emit(connect);
+  t.mock.timers.tick(2000);
+  assert.equal(isPageActive(document), true);
+  t.mock.timers.tick(1000);
+  assert.equal(isPageActive(document), false);
+  s.emit(connect);
+  s.bridge.dispose();
+  assert.equal(isPageActive(document), false);
+  s.emit(connect);
+  assert.equal(isPageActive(document), false);
+  stop();
 });
 
 test('selection requires established nonce, enabled widget and valid report id', t => {

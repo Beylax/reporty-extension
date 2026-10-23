@@ -6,8 +6,8 @@ begin;
 
 do $$
 begin
-  if exists(select 1 from storage.objects where bucket_id in ('screenshots','attachments')) then
-    raise exception 'Reset annullato: svuota prima i bucket screenshots e attachments tramite Supabase Storage, senza eliminare il bucket.';
+  if exists(select 1 from storage.objects where bucket_id in ('screenshots','attachments','report-attachments')) then
+    raise exception 'Reset annullato: svuota prima i bucket screenshots, attachments e report-attachments tramite Supabase Storage, senza eliminare il bucket.';
   end if;
 end;
 $$;
@@ -18,13 +18,13 @@ declare item record;
 begin
   for item in select p.oid::regprocedure::text as signature from pg_proc p
     join pg_namespace n on n.oid=p.pronamespace
-    where n.nspname='public' and p.proname in ('require_reviewer_name','reviewer_identity','attachment_operation','notify_issue_reply','notification_operation','notification_page','notify_issue_status','list_project_participants','widget_config','widget_authorize','start_widget_session','add_environment_widget','create_project_with_production','is_platform_admin','can_read_project','can_manage_project','add_project_owner','create_member_invite','accept_member_invite','create_guest_invite','revoke_project_invite','list_project_members','preview_guest_invite','start_guest_session','get_guest_session','create_member_handoff','create_guest_handoff','redeem_extension_handoff','extension_context','revoke_extension_session','report_actor','report_operation','report_page','report_pins','report_text_sort','manage_project_member','platform_delete_resource','create_environment_guest_invite','preview_guest_review','save_project_review_link','create_environment_review_link','regenerate_environment_review_link')
+    where n.nspname='public' and p.proname in ('require_reviewer_name','reviewer_identity','attachment_operation','report_attachment_operation','notify_issue_reply','notification_operation','notification_page','notify_issue_status','list_project_participants','widget_config','widget_authorize','start_widget_session','add_environment_widget','create_project_with_production','is_platform_admin','can_read_project','can_manage_project','add_project_owner','create_member_invite','accept_member_invite','create_guest_invite','revoke_project_invite','list_project_members','preview_guest_invite','start_guest_session','get_guest_session','create_member_handoff','create_guest_handoff','redeem_extension_handoff','extension_context','revoke_extension_session','report_actor','report_operation','report_page','report_pins','report_text_sort','manage_project_member','platform_delete_resource','create_environment_guest_invite','preview_guest_review','save_project_review_link','create_environment_review_link','regenerate_environment_review_link')
   loop execute format('drop function if exists %s cascade',item.signature); end loop;
 end;
 $$;
 
 drop table if exists public.notifications, public.widget_sessions, public.environment_widgets, public.environment_review_links, public.project_review_links,
- public.extension_handoffs, public.extension_sessions, public.comment_attachments, public.comments, public.issues,
+ public.extension_handoffs, public.extension_sessions, public.issue_attachments, public.comment_attachments, public.comments, public.issues,
  public.member_invites, public.guest_sessions, public.guest_invites,
  public.environments, public.project_members, public.projects, public.platform_admins cascade;
 
@@ -79,6 +79,7 @@ create table public.issues (
   guest_session_id uuid,
   context jsonb not null check (jsonb_typeof(context) = 'object'),
   screenshot_path text,
+  screenshot_paths text[] not null default '{}' check(cardinality(screenshot_paths)<=5),
   created_at timestamptz not null default now(),
   foreign key (environment_id, project_id) references public.environments(id, project_id),
   foreign key (guest_session_id, project_id) references public.guest_sessions(id, project_id),
@@ -130,6 +131,24 @@ alter table public.comment_attachments enable row level security;
 revoke all on public.comment_attachments from public,anon,authenticated;
 
 
+
+create table if not exists public.issue_attachments (
+  id uuid primary key,
+  issue_id uuid not null references public.issues(id) on delete cascade,
+  author_id uuid references auth.users(id),
+  guest_session_id uuid references public.guest_sessions(id),
+  name text not null check(char_length(name) between 1 and 255),
+  mime text not null default 'application/octet-stream' check(mime='application/octet-stream'),
+  size integer not null check(size between 1 and 5000000),
+  path text not null unique,
+  committed boolean not null default false,
+  removing boolean not null default false,
+  created_at timestamptz not null default now(),
+  check(num_nonnulls(author_id,guest_session_id)=1)
+);
+create index if not exists issue_attachments_issue on public.issue_attachments(issue_id);
+alter table public.issue_attachments enable row level security;
+revoke all on public.issue_attachments from public,anon,authenticated;
 
 create table public.extension_handoffs (
   id uuid primary key default gen_random_uuid(),
@@ -354,9 +373,61 @@ $$;
 revoke all on function public.attachment_operation(text,uuid,text,jsonb) from public,anon,authenticated;
 grant execute on function public.attachment_operation(text,uuid,text,jsonb) to anon,authenticated;
 
+create or replace function public.report_attachment_operation(secret text, target uuid, operation text, payload jsonb) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare a jsonb; report public.issues; item public.issue_attachments; actor uuid; guest uuid;
+begin
+  a := public.report_actor(secret,target); actor := (a->>'userId')::uuid; guest := (a->>'guestId')::uuid;
+  if operation is distinct from 'read' then perform public.require_reviewer_name(secret,target); end if;
+  select * into report from public.issues where id=(payload->>'issueId')::uuid and environment_id=target for update;
+  if report.id is null then raise exception 'Report unavailable' using errcode='42501'; end if;
+  select * into item from public.issue_attachments where id=(payload->>'id')::uuid and issue_id=report.id;
+  if operation='read' then
+    if item.id is null or not item.committed or item.removing then raise exception 'Attachment unavailable' using errcode='42501'; end if;
+    return to_jsonb(item);
+  end if;
+  if not coalesce((a->>'manager')::boolean,false) and not coalesce(guest is not null and report.guest_session_id=guest,false) then
+    raise exception 'Not authorized' using errcode='42501'; end if;
+  if operation='reserve' then
+    if char_length(coalesce(payload->>'name','')) not between 1 and 255 or payload->>'size' is null
+      or (payload->>'size')::integer not between 1 and 5000000 then raise exception 'Invalid attachment' using errcode='22023'; end if;
+    if item.id is not null then
+      if item.author_id is distinct from actor or item.guest_session_id is distinct from guest or item.removing
+        or item.name is distinct from payload->>'name' or item.size is distinct from (payload->>'size')::integer then
+        raise exception 'Attachment unavailable' using errcode='42501'; end if;
+      return to_jsonb(item);
+    end if;
+    if (select count(*) from public.issue_attachments where issue_id=report.id)>=5 then raise exception 'Maximum 5 attachments' using errcode='22023'; end if;
+    insert into public.issue_attachments(id,issue_id,author_id,guest_session_id,name,size,path)
+      values((payload->>'id')::uuid,report.id,actor,guest,payload->>'name',(payload->>'size')::integer,
+        'report-attachments/'||report.project_id::text||'/'||report.id::text||'/'||(payload->>'id')::uuid::text) returning * into item;
+  elsif operation in ('commit','remove','discard') then
+    if item.id is null then
+      if operation in ('remove','discard') then return null; end if;
+      raise exception 'Attachment unavailable' using errcode='42501';
+    end if;
+    if item.author_id is distinct from actor or item.guest_session_id is distinct from guest then raise exception 'Not authorized' using errcode='42501'; end if;
+    if operation='commit' then
+      if item.removing or not exists(select 1 from storage.objects where bucket_id='report-attachments' and name=item.path
+        and metadata->>'mimetype'='application/octet-stream' and metadata->>'size' ~ '^[0-9]+$' and (metadata->>'size')::bigint=item.size) then
+        raise exception 'Attachment unavailable' using errcode='42501'; end if;
+      update public.issue_attachments set committed=true where id=item.id returning * into item;
+    else
+      if item.committed then raise exception 'Not authorized' using errcode='42501'; end if;
+      if operation='remove' then update public.issue_attachments set removing=true where id=item.id returning * into item;
+      elsif item.removing then delete from public.issue_attachments where id=item.id;
+      else raise exception 'Removal not started' using errcode='22023'; end if;
+    end if;
+  else raise exception 'Unknown operation' using errcode='22023'; end if;
+  return to_jsonb(item);
+end;
+$$;
+revoke all on function public.report_attachment_operation(text,uuid,text,jsonb) from public,anon,authenticated;
+grant execute on function public.report_attachment_operation(text,uuid,text,jsonb) to anon,authenticated;
+
 create or replace function public.report_operation(secret text, target uuid, operation text, payload jsonb default '{}'::jsonb) returns jsonb
 language plpgsql security definer set search_path = '' as $$
-declare field_name text; anchor jsonb; dimensions jsonb; scroll_position jsonb; a jsonb; report public.issues; result jsonb; actor uuid; guest uuid; manager boolean; editable boolean; report_id uuid; text_body text; comment_uuid uuid; attachment_ids uuid[]; paths jsonb;
+declare field_name text; anchor jsonb; dimensions jsonb; scroll_position jsonb; a jsonb; report public.issues; result jsonb; actor uuid; guest uuid; manager boolean; editable boolean; report_id uuid; text_body text; comment_uuid uuid; attachment_ids uuid[]; paths jsonb; screenshot_file text; screenshot_files text[];
 begin
   a := public.report_actor(secret,target); actor := (a->>'userId')::uuid; guest := (a->>'guestId')::uuid; manager := (a->>'manager')::boolean;
   if operation is null or operation not in ('list','thread') then perform public.require_reviewer_name(secret,target); end if;
@@ -378,8 +449,10 @@ begin
     if payload ? 'priority' and (payload->>'priority' is null or payload->>'priority' not in ('low','medium','high')) then raise exception 'Invalid priority' using errcode='22023'; end if;
     text_body := trim(payload->>'body');
     if text_body is null or char_length(text_body) not between 1 and 10000 or jsonb_typeof(payload->'context') <> 'object'
-      or jsonb_typeof(payload->'context'->'anchor') is distinct from 'object' or coalesce(payload->'context'->'anchor'->>'kind','') not in ('pin','element')
-      or jsonb_typeof(payload->'context'->'viewport') is distinct from 'object' or jsonb_typeof(payload->'context'->'scroll') is distinct from 'object'
+      or jsonb_typeof(payload->'context'->'anchor') is distinct from 'object' or coalesce(payload->'context'->'anchor'->>'kind','') not in ('pin','element','page')
+      or ((payload->'context'->'anchor'->>'kind') <> 'page' and (jsonb_typeof(payload->'context'->'viewport') is distinct from 'object' or jsonb_typeof(payload->'context'->'scroll') is distinct from 'object'))
+      or (payload->'context' ? 'viewport' and jsonb_typeof(payload->'context'->'viewport') is distinct from 'object')
+      or (payload->'context' ? 'scroll' and jsonb_typeof(payload->'context'->'scroll') is distinct from 'object')
       or char_length(coalesce(payload->'context'->>'url','')) not between 1 and 8192 or char_length(coalesce(payload->'context'->>'pagePath','')) > 8192
       or (payload->'context'->>'origin') is distinct from (a->>'origin') or coalesce(payload->'context'->>'pagePath','')='' then
       raise exception 'Invalid report' using errcode='22023'; end if;
@@ -391,20 +464,24 @@ begin
         if jsonb_typeof(anchor->field_name) is distinct from 'number' then raise exception 'Invalid offset' using errcode='22023'; end if;
         if (anchor->>field_name)::numeric not between 0 and 1 then raise exception 'Invalid offset' using errcode='22023'; end if;
       end loop;
-    else
+    elsif anchor->>'kind'='pin' then
       foreach field_name in array array['documentX','documentY'] loop
         if jsonb_typeof(anchor->field_name) is distinct from 'number' then raise exception 'Invalid pin' using errcode='22023'; end if;
         if (anchor->>field_name)::numeric not between 0 and 10000000 then raise exception 'Invalid pin' using errcode='22023'; end if;
       end loop;
     end if;
-    foreach field_name in array array['width','height','devicePixelRatio'] loop
-      if jsonb_typeof(dimensions->field_name) is distinct from 'number' then raise exception 'Invalid viewport' using errcode='22023'; end if;
-      if (dimensions->>field_name)::numeric <= 0 or (dimensions->>field_name)::numeric > 10000000 then raise exception 'Invalid viewport' using errcode='22023'; end if;
-    end loop;
-    foreach field_name in array array['x','y'] loop
-      if jsonb_typeof(scroll_position->field_name) is distinct from 'number' then raise exception 'Invalid scroll' using errcode='22023'; end if;
-      if (scroll_position->>field_name)::numeric not between 0 and 10000000 then raise exception 'Invalid scroll' using errcode='22023'; end if;
-    end loop;
+    if dimensions is not null then
+      foreach field_name in array array['width','height','devicePixelRatio'] loop
+        if jsonb_typeof(dimensions->field_name) is distinct from 'number' then raise exception 'Invalid viewport' using errcode='22023'; end if;
+        if (dimensions->>field_name)::numeric <= 0 or (dimensions->>field_name)::numeric > 10000000 then raise exception 'Invalid viewport' using errcode='22023'; end if;
+      end loop;
+    end if;
+    if scroll_position is not null then
+      foreach field_name in array array['x','y'] loop
+        if jsonb_typeof(scroll_position->field_name) is distinct from 'number' then raise exception 'Invalid scroll' using errcode='22023'; end if;
+        if (scroll_position->>field_name)::numeric not between 0 and 10000000 then raise exception 'Invalid scroll' using errcode='22023'; end if;
+      end loop;
+    end if;
     report_id := coalesce((payload->>'id')::uuid,gen_random_uuid());
     insert into public.issues(id,project_id,environment_id,page_path,body,author_id,guest_session_id,context,priority)
     values (report_id,(a->>'projectId')::uuid,target,payload->'context'->>'pagePath',text_body,actor,guest,payload->'context',coalesce(payload->>'priority','medium')) on conflict(id) do nothing returning * into report;
@@ -423,7 +500,8 @@ begin
   if operation='thread' then
     select coalesce(jsonb_agg(to_jsonb(c)||jsonb_build_object('authorName',coalesce(g.display_name,u.email,'Utente'),'attachments',coalesce((select jsonb_agg(jsonb_build_object('id',f.id,'name',f.name,'mime',f.mime,'size',f.size) order by f.created_at,f.id) from public.comment_attachments f where f.comment_id=c.id),'[]'::jsonb)) order by c.created_at),'[]'::jsonb)
     into result from public.comments c left join public.guest_sessions g on g.id=c.guest_session_id left join auth.users u on u.id=c.author_id where c.issue_id=report.id;
-    return jsonb_build_object('issue',to_jsonb(report),'comments',result);
+    return jsonb_build_object('issue',to_jsonb(report)||jsonb_build_object('attachments',coalesce((select jsonb_agg(jsonb_build_object('id',f.id,'name',f.name,'mime',f.mime,'size',f.size) order by f.created_at,f.id)
+      from public.issue_attachments f where f.issue_id=report.id and f.committed and not f.removing),'[]'::jsonb)),'comments',result);
   elsif operation='reply' then
     text_body := trim(payload->>'body');
     if text_body is null or char_length(text_body) not between 1 and 10000 then raise exception 'Invalid comment' using errcode='22023'; end if;
@@ -461,12 +539,26 @@ begin
     text_body := trim(payload->>'body');
     if text_body is null or char_length(text_body) not between 1 and 10000 then raise exception 'Invalid report' using errcode='22023'; end if;
     update public.issues set body=text_body where id=report.id;
-  elsif operation='screenshot' then
-    if not coalesce(editable,false) and not (guest is not null and report.guest_session_id=guest) then raise exception 'Not authorized' using errcode='42501'; end if;
-    update public.issues set screenshot_path=report.project_id::text||'/'||report.id::text||'.jpg' where id=report.id;
+  elsif operation in ('screenshot','screenshot_prepare') then
+    if not coalesce(editable,false) and not coalesce(guest is not null and report.guest_session_id=guest,false) then raise exception 'Not authorized' using errcode='42501'; end if;
+    screenshot_file := case when payload ? 'screenshotId' then report.project_id::text||'/'||report.id::text||'/'||(payload->>'screenshotId')::uuid::text||'.jpg'
+      else report.project_id::text||'/'||report.id::text||'.jpg' end;
+    if screenshot_file is null then raise exception 'Invalid screenshot' using errcode='22023'; end if;
+    screenshot_files := report.screenshot_paths;
+    if report.screenshot_path is not null and not report.screenshot_path=any(screenshot_files) then screenshot_files := array_prepend(report.screenshot_path,screenshot_files); end if;
+    if not screenshot_file=any(screenshot_files) and cardinality(screenshot_files)>=5 then raise exception 'Maximum 5 screenshots' using errcode='22023'; end if;
+    if operation='screenshot_prepare' then return to_jsonb(report); end if;
+    if payload ? 'screenshotId' and not exists(select 1 from storage.objects where bucket_id='screenshots' and name=screenshot_file
+      and metadata->>'mimetype'='image/jpeg' and metadata->>'size' ~ '^[0-9]+$' and (metadata->>'size')::bigint between 1 and 2500000) then
+      raise exception 'Screenshot unavailable' using errcode='42501'; end if;
+    if not screenshot_file=any(screenshot_files) then screenshot_files := array_append(screenshot_files,screenshot_file); end if;
+    update public.issues set screenshot_path=screenshot_files[1],screenshot_paths=screenshot_files where id=report.id;
   elsif operation='delete' then
     if not coalesce(editable,false) then raise exception 'Not authorized' using errcode='42501'; end if;
-    select coalesce(jsonb_agg(path),'[]'::jsonb) into paths from public.comment_attachments where issue_id=report.id;
+    select coalesce(jsonb_agg(path),'[]'::jsonb) into paths from (
+      select path from public.comment_attachments where issue_id=report.id
+      union all select path from public.issue_attachments where issue_id=report.id
+    ) files;
     delete from public.issues where id=report.id;
     return to_jsonb(report)||jsonb_build_object('attachment_paths',paths);
   else raise exception 'Unknown operation' using errcode='22023'; end if;
@@ -513,9 +605,11 @@ begin
     select project_id into project from public.environments where id=target for update;
   else raise exception 'Invalid resource' using errcode='22023'; end if;
   if project is null then raise exception 'Resource unavailable' using errcode='22023'; end if;
-  select coalesce(jsonb_agg(screenshot_path),'[]'::jsonb) into paths from public.issues
-    where project_id=project and (kind='project' or environment_id=target) and screenshot_path is not null;
+  select coalesce(jsonb_agg(distinct shot.path),'[]'::jsonb) into paths from public.issues i
+    cross join lateral unnest(i.screenshot_paths || array[i.screenshot_path]) as shot(path)
+    where i.project_id=project and (kind='project' or i.environment_id=target) and shot.path is not null;
   paths := paths || coalesce((select jsonb_agg(f.path) from public.comment_attachments f join public.issues i on i.id=f.issue_id where i.project_id=project and (kind='project' or i.environment_id=target)),'[]'::jsonb);
+  paths := paths || coalesce((select jsonb_agg(f.path) from public.issue_attachments f join public.issues i on i.id=f.issue_id where i.project_id=project and (kind='project' or i.environment_id=target)),'[]'::jsonb);
   -- Remove issues first because the environment FK does not cascade.
   delete from public.issues where project_id=project and (kind='project' or environment_id=target);
   if kind='project' then delete from public.projects where id=target;
@@ -840,6 +934,10 @@ on conflict(id) do update set public=false,file_size_limit=excluded.file_size_li
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
 values('attachments','attachments',false,2500000,null)
 on conflict(id) do update set public=false,file_size_limit=2500000,allowed_mime_types=null;
+insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
+values('report-attachments','report-attachments',false,5000000,array['application/octet-stream'])
+on conflict(id) do update set public=false,file_size_limit=excluded.file_size_limit,allowed_mime_types=excluded.allowed_mime_types;
+
 
 commit;
 

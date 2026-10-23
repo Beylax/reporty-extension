@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { capturePlaygroundFrame } from '../apps/web/lib/playground-capture.ts';
+import { capturePlaygroundFrame, hasPlaygroundCapture, stopPlaygroundCapture } from '../apps/web/lib/playground-capture.ts';
+
+globalThis.window = new EventTarget();
 
 function setup({ wrongTab = false, denied = false } = {}) {
+  stopPlaygroundCapture();
   let handle, stopped = false, requested = false, drawn;
   const configs = [];
-  const track = { getSettings: () => ({ displaySurface: 'browser' }), getCaptureHandle: () => ({ handle: wrongTab ? 'other' : handle }), stop: () => { stopped = true; } };
+  const track = Object.assign(new EventTarget(), { readyState: 'live', getSettings: () => ({ displaySurface: 'browser' }), getCaptureHandle: () => ({ handle: wrongTab ? 'other' : handle }), stop() { stopped = true; this.readyState = 'ended'; } });
   Object.defineProperty(globalThis, 'location', { configurable: true, value: { origin: 'https://dashboard.example' } });
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { mediaDevices: {
     setCaptureHandleConfig: config => { configs.push(config); handle = config.handle; },
@@ -17,12 +20,17 @@ function setup({ wrongTab = false, denied = false } = {}) {
   const frame = { isConnected: true, clientWidth: 1440, clientHeight: 900, getBoundingClientRect: () => ({ left: 400, top: 100, right: 1120, bottom: 550, width: 720, height: 450 }) };
   return { frame, configs, get stopped() { return stopped; }, get requested() { return requested; }, get drawn() { return drawn; } };
 }
-test('capture starts in the click handler, crops the scaled iframe and stops all tracks', async () => {
+test('capture starts in the click handler, crops the scaled iframe and reuses sharing until the playground closes', async () => {
   const state = setup();
   const capture = capturePlaygroundFrame(state.frame, () => true);
   assert.equal(state.requested, true);
   assert.equal(await capture, 'data:image/jpeg;base64,frame');
   assert.deepEqual(state.drawn, [800, 200, 1440, 900, 0, 0, 1440, 900]);
+  assert.equal(state.stopped, false);
+  assert.equal(hasPlaygroundCapture(), true);
+  navigator.mediaDevices.getDisplayMedia = async () => { throw new Error('Must reuse the active sharing session'); };
+  assert.equal(await capturePlaygroundFrame(state.frame, () => true), 'data:image/jpeg;base64,frame');
+  stopPlaygroundCapture();
   assert.equal(state.stopped, true);
   assert.equal(state.configs.at(-1).handle, '');
 });
@@ -49,6 +57,7 @@ test('a second capture cannot overwrite an active capture handle', async () => {
   assert.equal(state.configs.length, 1);
   await release();
   await first;
+  stopPlaygroundCapture();
   assert.equal(state.stopped, true);
 });
 test('detached or clipped frames cannot produce a misleading screenshot', async () => {

@@ -1,4 +1,5 @@
 'use client';
+import { ReportContextDetails } from '@reporty/shared/ui/report-context';
 
 import { useEffect, useEffectEvent, useId, useRef, useState } from 'react';
 import { Eye, EyeOff, MoveHorizontal, Pencil, Trash2, X } from 'lucide-react';
@@ -73,7 +74,7 @@ export function PlaygroundReportDrawer({ id, environmentId, pagePath, onClose, o
   const [editing, setEditing] = useState(false);
   const [transparent, setTransparent] = useState(false);
   const [body, setBody] = useState('');
-  const [gallery, setGallery] = useState<{ url: string; loading: boolean } | null>(null);
+  const [gallery, setGallery] = useState<{ urls: string[]; loading: boolean } | null>(null);
   const toast = useToastManager();
   const finishClose = useEffectEvent(onClose);
   useEffect(() => {
@@ -102,7 +103,7 @@ export function PlaygroundReportDrawer({ id, environmentId, pagePath, onClose, o
       if (disposed) return;
       const item = listing.reports[0];
       if (!item || item.environment_id !== environmentId || item.page_path !== pagePath || thread.error) throw new Error(thread.error ?? 'Segnalazione non disponibile in questa pagina.');
-      setReport(item); setComments(thread.data.comments); setFailed(false);
+      setReport({ ...item, attachments: thread.data.issue.attachments ?? [] }); setComments(thread.data.comments); setFailed(false);
     }).catch(error => {
       if (disposed) return;
       setFailed(true);
@@ -113,7 +114,7 @@ export function PlaygroundReportDrawer({ id, environmentId, pagePath, onClose, o
   async function reload() {
     const [listing, thread] = await Promise.all([getReportPage(environmentId, { id, environments: [environmentId], pages: [pagePath], limit: 1 }), getReportThread(environmentId, id)]);
     if (thread.error || !listing.reports[0]) throw new Error(thread.error ?? 'Segnalazione non disponibile.');
-    if (alive.current) { setReport(listing.reports[0]); setComments(thread.data.comments); }
+    if (alive.current) { setReport({ ...listing.reports[0], attachments: thread.data.issue.attachments ?? [] }); setComments(thread.data.comments); }
   }
   async function write(operation: 'status' | 'priority' | 'edit' | 'reply' | 'delete', payload: { body?: string; status?: string; priority?: string; attachments?: string[]; replyId?: string }) {
     const result = await mutateReport(environmentId, operation, { id, ...payload }, false);
@@ -141,7 +142,7 @@ export function PlaygroundReportDrawer({ id, environmentId, pagePath, onClose, o
   }
   function attachmentError(message: string) { toast.add({ title: 'Operazione non riuscita', description: message, type: 'error' }); }
   function applyReportViewport() {
-    if (!report) return;
+    if (!report?.context.viewport) return;
     const { width, height } = report.context.viewport;
     if (!isViewportDimension(width) || !isViewportDimension(height)) {
       toast.add({ title: 'Dimensioni non valide', description: 'La viewport deve avere dimensioni intere da 240 a 3840 pixel.', type: 'error' });
@@ -152,25 +153,26 @@ export function PlaygroundReportDrawer({ id, environmentId, pagePath, onClose, o
   }
   async function screenshot() {
     const revision = ++screenshotRevision.current;
-    setGallery({ url: '', loading: true });
+    setGallery({ urls: [], loading: true });
     try {
       const response = await fetch(`/api/reports/${id}/screenshot`);
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Screenshot non disponibile.');
-      if (alive.current && screenshotRevision.current === revision) setGallery({ url: result.url, loading: false });
+      if (alive.current && screenshotRevision.current === revision) setGallery({ urls: result.urls ?? [result.url], loading: false });
     } catch (error) { if (alive.current && screenshotRevision.current === revision) { setGallery(null); attachmentError(error instanceof Error ? error.message : 'Screenshot non disponibile.'); } }
   }
   return <aside ref={drawer} inert={closing} aria-labelledby={titleId} className={`absolute inset-y-0 right-0 z-30 flex w-[min(440px,calc(100%_-_1rem))] ${closing ? 'animate-out slide-out-to-right-full [animation-fill-mode:forwards]' : 'animate-in slide-in-from-right-full'} flex-col border-l transition-[background-color,border-color,box-shadow] duration-300 ease-out motion-reduce:animate-none motion-reduce:transition-none ${transparent ? 'border-border/10 bg-background/5 shadow-none' : 'bg-background shadow-xl'}`} onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented) { event.stopPropagation(); if (!busy) setClosing(true); } }}>
-    <header className={`flex shrink-0 items-center justify-between gap-3 border-b p-4 transition-colors duration-200 motion-reduce:transition-none ${transparent ? 'border-border/10' : ''}`}><h2 id={titleId} className={`text-lg font-semibold transition-opacity duration-200 motion-reduce:transition-none ${transparent ? 'opacity-10' : ''}`}>Dettaglio segnalazione</h2><div className="flex shrink-0 gap-2"><TooltipButton label="Adatta alla viewport della segnalazione" className="bg-background" disabled={loading || failed || !report || closing} onClick={applyReportViewport}><MoveHorizontal aria-hidden="true" /></TooltipButton><TooltipButton variant={transparent ? 'secondary' : 'outline'} className="bg-background" label={transparent ? 'Ripristina opacità drawer' : 'Rendi drawer trasparente'} aria-pressed={transparent} onClick={() => setTransparent(value => !value)}>{transparent ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}</TooltipButton><Button ref={closeButton} variant="outline" size="icon" className="bg-background" aria-label="Chiudi dettaglio segnalazione" disabled={busy || closing} onClick={() => setClosing(true)}><X aria-hidden="true" /></Button></div></header>
+    <header className={`flex shrink-0 items-center justify-between gap-3 border-b p-4 transition-colors duration-200 motion-reduce:transition-none ${transparent ? 'border-border/10' : ''}`}><h2 id={titleId} className={`text-lg font-semibold transition-opacity duration-200 motion-reduce:transition-none ${transparent ? 'opacity-10' : ''}`}>Dettaglio segnalazione</h2><div className="flex shrink-0 gap-2"><TooltipButton label="Adatta alla viewport della segnalazione" className="bg-background" disabled={loading || failed || !report?.context.viewport || closing} onClick={applyReportViewport}><MoveHorizontal aria-hidden="true" /></TooltipButton><TooltipButton variant={transparent ? 'secondary' : 'outline'} className="bg-background" label={transparent ? 'Ripristina opacità drawer' : 'Rendi drawer trasparente'} aria-pressed={transparent} onClick={() => setTransparent(value => !value)}>{transparent ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}</TooltipButton><Button ref={closeButton} variant="outline" size="icon" className="bg-background" aria-label="Chiudi dettaglio segnalazione" disabled={busy || closing} onClick={() => setClosing(true)}><X aria-hidden="true" /></Button></div></header>
     <div className={`min-h-0 flex-1 space-y-4 overflow-y-auto p-4 transition-opacity duration-200 motion-reduce:transition-none ${transparent ? 'opacity-10' : ''}`}>
       {loading ? <DetailSkeleton /> : failed || !report ? <div className="space-y-3"><p className="text-sm text-muted-foreground">Il dettaglio della segnalazione non è disponibile.</p><Button variant="outline" onClick={() => { setLoading(true); setAttempt(value => value + 1); }}>Riprova</Button></div> : <>
         <div className="flex items-center justify-between gap-3"><div className="flex shrink-0 items-center gap-2"><Badge className={statusColors[report.status]}><ReportIcon value={report.status} />{statuses[report.status]}</Badge><Badge className={priorityColors[report.priority ?? 'medium']}><ReportIcon value={report.priority ?? 'medium'} />{priorityLabels[report.priority ?? 'medium']}</Badge></div>{report.screenshot_path ? <ScreenshotButton disabled={gallery?.loading === true} onClick={() => void screenshot()} /> : null}</div>
         <section className="space-y-3 rounded-xl border bg-muted/50 p-4"><h3 className="text-sm font-semibold">Descrizione</h3>{editing ? <form className="space-y-3" onSubmit={event => { event.preventDefault(); if (body.trim() && body.trim() !== report.body.trim()) void run(async () => { await write('edit', { body }); if (alive.current) setEditing(false); }); }}><Textarea aria-label="Modifica descrizione" value={body} onChange={event => setBody(event.target.value)} maxLength={10000} required disabled={busy} className="min-h-28" /><div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={busy} onClick={() => setEditing(false)}>Annulla</Button><Button disabled={busy || !body.trim() || body.trim() === report.body.trim()}>Salva testo</Button></div></form> : <><p className="whitespace-pre-wrap break-words leading-relaxed">{report.body}</p>{report.canEdit ? <div className="flex justify-end"><TooltipButton label="Modifica descrizione" disabled={busy} onClick={() => { setBody(report.body); setEditing(true); }}><Pencil aria-hidden="true" /></TooltipButton></div> : null}</>}
         </section>
-        {gallery ? <ScreenshotGallery autoOpen src={gallery.url} loading={gallery.loading} aspectRatio={`${report.context.viewport.width} / ${report.context.viewport.height}`} onClose={() => { screenshotRevision.current++; setGallery(null); }} /> : null}
+        {report.attachments?.length ? <section className="space-y-3 rounded-xl border bg-muted/50 p-4" aria-label="File allegati alla segnalazione"><h3 className="font-semibold">File allegati</h3><ReplyAttachmentList attachments={report.attachments} label="File della segnalazione" requestFile={input => attachmentRequest({ ...input, scope: 'report' })} onError={attachmentError} /></section> : null}
+        {gallery ? <ScreenshotGallery autoOpen src={gallery.urls[0] ?? ''} sources={gallery.urls} loading={gallery.loading} aspectRatio={report.context.viewport ? `${report.context.viewport.width} / ${report.context.viewport.height}` : '16 / 9'} onClose={() => { screenshotRevision.current++; setGallery(null); }} /> : null}
         <section className="space-y-4 rounded-xl border bg-muted/50 p-4"><div className="space-y-2"><Label htmlFor={`${titleId}-status`}>Stato</Label><RadioButtons id={`${titleId}-status`} label="Stato" value={report.status} options={Object.entries(statuses).map(([value, label]) => ({ value, label }))} disabled={busy || !report.canChangeStatus} onValueChange={value => { if (value !== report.status) void run(() => write('status', { status: value })); }} /></div><div className="space-y-2"><Label htmlFor={`${titleId}-priority`}>Priorità</Label><RadioButtons id={`${titleId}-priority`} label="Priorità" variant="standard" value={report.priority ?? 'medium'} options={(['high','medium','low'] as const).map(value => ({ value, label: priorityLabels[value] }))} disabled={busy || !report.canChangeStatus} onValueChange={value => { if (value !== (report.priority ?? 'medium')) void run(() => write('priority', { priority: value })); }} /></div></section>
         <section className="space-y-4 rounded-xl border bg-muted/50 p-4"><h3 className="font-semibold">Risposte</h3>{comments.map(comment => <div key={comment.id} className="space-y-2 rounded-lg border bg-background p-3"><div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground"><span>{comment.authorName}</span><time dateTime={comment.created_at}>{formatReportDateTime(comment.created_at)}</time></div><p className="whitespace-pre-wrap break-words text-sm">{comment.body}</p><ReplyAttachmentList attachments={comment.attachments} requestFile={attachmentRequest} onError={attachmentError} /></div>)}<ReplyComposer disabled={busy} onBusyChange={setBusy} requestFile={attachmentRequest} onError={attachmentError} submit={async (body, attachments, replyId) => { await write('reply', { body, attachments, replyId }); }} /></section>
-        <footer className="space-y-1 rounded-xl border bg-muted/50 p-4 text-xs text-muted-foreground"><p>Segnalata da {report.authorName} · {formatReportDateTime(report.created_at)}</p><p>{report.updated_at ? `Ultima modifica: ${report.updatedByName ?? 'Utente'} · ${formatReportDateTime(report.updated_at)}` : 'Nessuna modifica registrata'}</p><p>Viewport originale: {report.context.viewport.width} × {report.context.viewport.height} · scroll {Math.round(report.context.scroll.y)} px</p></footer>
+        <footer className="space-y-1 rounded-xl border bg-muted/50 p-4 text-xs text-muted-foreground"><p>Segnalata da {report.authorName} · {formatReportDateTime(report.created_at)}</p><p>{report.updated_at ? `Ultima modifica: ${report.updatedByName ?? 'Utente'} · ${formatReportDateTime(report.updated_at)}` : 'Nessuna modifica registrata'}</p><ReportContextDetails context={report.context} /></footer>
         {report.canEdit ? <section aria-label="Zona pericolosa" className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4"><h3 className="text-sm font-semibold text-destructive">Zona pericolosa</h3><DeleteConfirm fullWidth disabled={busy} description="Eliminare questa segnalazione e tutte le sue risposte? Questa operazione è definitiva." onConfirm={() => run(() => write('delete', {}))}><Trash2 aria-hidden="true" />Elimina</DeleteConfirm></section> : null}
       </>}
     </div>

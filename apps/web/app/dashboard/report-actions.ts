@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { bulkReportRequestSchema, isUuid, reportPageSchema, type ReportPage, type ReportSelection } from '@reporty/shared';
+import { bulkReportRequestSchema, isUuid, reportPageSchema, reportScreenshotPaths, type ReportPage, type ReportSelection } from '@reporty/shared';
 import { requireUser } from '@/lib/auth';
 import { executeBulkReports } from '@/lib/bulk-reports';
 import { removeStoredFiles } from '@/lib/supabase/storage';
@@ -13,7 +13,7 @@ export async function mutateReport(environmentId: string, operation: string, pay
   if (error) return { error: 'Operazione non riuscita. Verifica i permessi e riprova.' };
   let warning: string | undefined;
   if (operation === 'delete') {
-    try { await removeStoredFiles([...(data?.screenshot_path ? [data.screenshot_path] : []),...(data?.attachment_paths ?? [])]); } catch { warning = 'Segnalazione eliminata; pulizia dei file incompleta.'; }
+    try { await removeStoredFiles([...reportScreenshotPaths(data ?? {}),...(data?.attachment_paths ?? [])]); } catch { warning = 'Segnalazione eliminata; pulizia dei file incompleta.'; }
   }
   // Kanban confirms status/priority in its local cache and reloads only its data.
   if (refreshDashboard !== false || !['status', 'priority'].includes(operation)) revalidatePath('/dashboard');

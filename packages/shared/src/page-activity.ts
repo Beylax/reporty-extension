@@ -1,6 +1,17 @@
-/** A visible tab can still belong to an unfocused browser window. */
+const embeddedActivity = new WeakMap<Document, boolean>();
+const activityChanged = 'reporty:page-activity';
+
+/** Set only from the widget's validated playground bridge. No credentials cross the frame. */
+export function setEmbeddedPageActive(active: boolean | null, page: Document = document) {
+  const previous = embeddedActivity.get(page);
+  if (active === null) embeddedActivity.delete(page);
+  else embeddedActivity.set(page, active);
+  if (previous !== embeddedActivity.get(page)) page.dispatchEvent(new Event(activityChanged));
+}
+
+/** Embedded playgrounds inherit the dashboard's activity instead of requiring a click. */
 export function isPageActive(page: Document = document) {
-  return page.visibilityState === 'visible' && page.hasFocus();
+  return page.visibilityState === 'visible' && (embeddedActivity.get(page) ?? page.hasFocus());
 }
 
 export function subscribePageActivity(update: () => void, page: Document = document, view: Window = window) {
@@ -12,10 +23,12 @@ export function subscribePageActivity(update: () => void, page: Document = docum
     update();
   };
   page.addEventListener('visibilitychange', changed);
+  page.addEventListener(activityChanged, changed);
   view.addEventListener('focus', changed, { capture: true });
   view.addEventListener('blur', changed, { capture: true });
   return () => {
     page.removeEventListener('visibilitychange', changed);
+    page.removeEventListener(activityChanged, changed);
     view.removeEventListener('focus', changed, { capture: true });
     view.removeEventListener('blur', changed, { capture: true });
   };

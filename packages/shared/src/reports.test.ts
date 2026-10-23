@@ -6,6 +6,13 @@ const context = { url: 'https://example.com/page', origin: 'https://example.com'
 test('report context accepts a free pin with viewport and scroll', () => {
   assert.equal(reportContextSchema.safeParse(context).success, true);
 });
+test('page reports need no fabricated viewport, scroll or pin coordinates', () => {
+  const page = { url: context.url, origin: context.origin, pagePath: context.pagePath, anchor: { kind: 'page' } };
+  assert.equal(reportContextSchema.safeParse(page).success, true);
+  assert.equal(reportContextSchema.safeParse({ ...page, anchor: { kind: 'pin', documentX: 0, documentY: 0 } }).success, false);
+  assert.equal(reportContextSchema.safeParse({ ...page, anchor: { kind: 'element', selector: 'html', offsetX: 0, offsetY: 0 } }).success, false);
+  assert.equal(reportContextSchema.safeParse({ ...page, viewport: { width: 0, height: 0, devicePixelRatio: 1 } }).success, false);
+});
 test('report context rejects invalid coordinates and missing anchors', () => {
   assert.equal(reportContextSchema.safeParse({ ...context, anchor: { ...context.anchor, documentX: Infinity } }).success, false);
   assert.equal(reportContextSchema.safeParse({ ...context, anchor: null }).success, false);

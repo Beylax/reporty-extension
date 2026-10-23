@@ -9,11 +9,14 @@ const coordinate = z.number().finite().nonnegative().max(10000000);
 export const reportContextSchema = z.object({
   url: z.string().max(8192), origin: z.string().max(2048), pagePath: z.string().max(8192),
   anchor: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('page') }),
     z.object({ kind: z.literal('pin'), documentX: coordinate, documentY: coordinate }),
     z.object({ kind: z.literal('element'), selector: z.string().min(1).max(4096), offsetX: z.number().min(0).max(1), offsetY: z.number().min(0).max(1), textExcerpt: z.string().max(200).optional() }),
   ]),
-  viewport: z.object({ width: coordinate.positive(), height: coordinate.positive(), devicePixelRatio: z.number().positive().max(10) }),
-  scroll: z.object({ x: coordinate, y: coordinate }),
+  viewport: z.object({ width: coordinate.positive(), height: coordinate.positive(), devicePixelRatio: z.number().positive().max(10) }).optional(),
+  scroll: z.object({ x: coordinate, y: coordinate }).optional(),
+}).superRefine((context, validation) => {
+  if (context.anchor.kind !== 'page' && (!context.viewport || !context.scroll)) validation.addIssue({ code: z.ZodIssueCode.custom, message: 'Viewport and scroll are required for positioned reports' });
 });
 export const reportPageSchema = z.object({
   offset: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(100).optional(),
@@ -43,15 +46,15 @@ export type NotificationPage = {
 };
 
 export const reportRequestSchema = z.object({
-  environmentId: z.string().uuid(), operation: z.enum(['list', 'page', 'pins', 'thread', 'create', 'reply', 'status', 'priority', 'edit', 'delete', 'notifications', 'notification_read', 'notifications_read']),
-  payload: reportPageSchema.merge(notificationPageSchema).extend({ id: z.string().uuid().optional(), pagePath: z.string().max(8192).optional(), body: z.string().trim().min(1).max(10000).optional(), status: z.enum(['open','in_progress','validation','resolved']).optional(), priority: reportPrioritySchema.optional(), context: reportContextSchema.optional(), replyId: z.string().uuid().optional(), attachments: z.array(z.string().uuid()).max(5).optional() }),
+  environmentId: z.string().uuid(), operation: z.enum(['list', 'page', 'pins', 'thread', 'create', 'screenshot', 'reply', 'status', 'priority', 'edit', 'delete', 'notifications', 'notification_read', 'notifications_read']),
+  payload: reportPageSchema.merge(notificationPageSchema).extend({ id: z.string().uuid().optional(), screenshotId: z.string().uuid().optional(), pagePath: z.string().max(8192).optional(), body: z.string().trim().min(1).max(10000).optional(), status: z.enum(['open','in_progress','validation','resolved']).optional(), priority: reportPrioritySchema.optional(), context: reportContextSchema.optional(), replyId: z.string().uuid().optional(), attachments: z.array(z.string().uuid()).max(5).optional() }),
   screenshot: z.string().max(3500000).optional(),
 });
 export type Report = {
   id: string; environment_id: string; project_id: string; page_path: string; body: string;
   priority: ReportPriority; status: 'open' | 'in_progress' | 'validation' | 'resolved'; context: z.infer<typeof reportContextSchema>;
   author_id?: string | null; guest_session_id?: string | null; authorKey?: string; updated_at?: string | null; updated_by?: string | null; updated_guest_session_id?: string | null; updatedByName?: string | null; updatedByKey?: string | null;
-  screenshot_path: string | null; created_at: string; commentCount?: number; authorName: string; canEdit: boolean; canChangeStatus: boolean;
+  screenshot_path: string | null; screenshot_paths?: string[]; attachments?: ReplyAttachment[]; created_at: string; commentCount?: number; authorName: string; canEdit: boolean; canChangeStatus: boolean;
 };
 export type ReportComment = { id: string; attachments?: ReplyAttachment[]; body: string; authorName: string; created_at: string };
 

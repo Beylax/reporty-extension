@@ -91,7 +91,7 @@ export function ReplyComposer({ requestFile, submit, onError, onBusyChange, disa
   </form>;
 }
 
-export function ReplyAttachmentList({ attachments = [], requestFile, onError }: { attachments?: ReplyAttachment[]; requestFile: RequestFile; onError: (message: string) => void }) {
+export function ReplyAttachmentList({ attachments = [], requestFile, onError, label = 'Allegati della risposta' }: { attachments?: ReplyAttachment[]; requestFile: RequestFile; onError: (message: string) => void; label?: string }) {
   const [opening,setOpening] = useState<string | null>(null);
   const [preview,setPreview] = useState<{name:string;url:string} | null>(null);
   const [loaded,setLoaded] = useState(false);
@@ -99,7 +99,7 @@ export function ReplyAttachmentList({ attachments = [], requestFile, onError }: 
   const lock = useRef(false);
   useEffect(() => { if (preview) dialog.current?.showModal(); },[preview]);
   return <>
-    {attachments.length ? <div className="mt-3 flex flex-wrap gap-2" aria-label="Allegati della risposta">{attachments.map(item => <Button key={item.id} type="button" variant="outline" className={pill} disabled={opening !== null} aria-label={`${isPreviewImage(item.mime) ? 'Visualizza' : 'Scarica'} ${item.name}`} onClick={() => {
+    {attachments.length ? <div className="mt-3 flex flex-wrap gap-2" aria-label={label}>{attachments.map(item => <Button key={item.id} type="button" variant="outline" className={pill} disabled={opening !== null} aria-label={`${isPreviewImage(item.mime) ? 'Visualizza' : 'Scarica'} ${item.name}`} onClick={() => {
       if (lock.current) return;
       lock.current = true; setOpening(item.id);
       void (async () => {

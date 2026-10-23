@@ -1,6 +1,9 @@
+import { ReportContextDetails } from '@reporty/shared/ui/report-context';
+import { ReportAttachmentPicker, type DraftReportFile, type ReportFileProgress } from '@reporty/shared/ui/report-attachments';
+import { uploadReportFile } from '@reporty/shared/report-file-upload';
 import { ReplyComposer, ReplyAttachmentList } from '@reporty/shared/ui/reply-attachments';
 import { TooltipButton } from '@reporty/shared/ui/tooltip-button';
-import type { AttachmentRequest } from '@reporty/shared';
+import type { AttachmentRequest, AttachmentResponse, ReplyAttachment } from '@reporty/shared';
 import { ReportPagination, REPORT_PAGE_SIZE } from '@/components/report-pagination';
 import { FilterPill } from '@/components/filter-pill';
 import { ReportIcon } from '@/components/report-icon';
@@ -22,19 +25,20 @@ import { InfiniteList } from '@reporty/shared/ui/infinite-list';
 import { BrandLogo } from '@/components/brand-logo';
 import { useNotify } from '@/components/ui/toast';
 import { RepliesSkeleton, ReportDetailSkeleton, ReportRowsSkeleton, ScreenshotSkeleton } from '@/components/loading-skeletons';
-import { LoadingImage } from '@/components/loading-image';
+import { ScreenshotSelector } from '@/components/screenshot-selector';
+import type { ScreenshotImage } from '@/lib/screenshot-selection';
 import { ScreenshotGallery } from '@/components/screenshot-gallery';
 import type { ReportSort, ReportNotification } from '@reporty/shared';
 import { useReportPage } from '@reporty/shared/ui/use-report-page';
 import { usePageActive } from '@reporty/shared/ui/use-page-active';
-import { isPageActive } from '@reporty/shared';
+import { isPageActive, MAX_REPORT_SCREENSHOTS } from '@reporty/shared';
 import type { NotificationPage, ReportPage, ReportPageQuery, ReportPin } from '@reporty/shared';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, Bell, Settings, Menu, X, Crosshair, Eye, EyeOff, MapPin, Pencil, Plus, Target, Trash2 } from 'lucide-react';
 import { notificationSummary, formatReportDateTime, getPageContext, priorityLabels, type ReportPriority, type Anchor, type Report, type ReportComment, type ReportContext } from '@reporty/shared';
 import type { Environment, Site } from '@/lib/session';
-import { captureHighlightedScreenshot } from '@/lib/screenshot';
-import { captureTab } from '@/lib/capture-tab';
+import { captureHighlightedScreenshot, capturePageScreenshot } from '@/lib/screenshot';
+import { captureTab, stopTabCapture } from '@/lib/capture-tab';
 import { elementAnchor, anchorPosition } from '@/lib/anchor';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -81,9 +85,11 @@ function ExpandingPin({ children, anchorX, anchorY, ...props }: React.ButtonHTML
   return <button {...props} ref={button} style={{ width: layout.width, height: layout.height, translate: `${layout.shiftX}px ${layout.shiftY}px`, overflowX: 'hidden', overflowY: expanded && expandedReady ? 'auto' : 'hidden', '--reporty-pin-preview-width': `${layout.previewWidth}px` } as React.CSSProperties} onMouseEnter={() => { setExpandedReady(window.matchMedia('(prefers-reduced-motion: reduce)').matches); setExpanded(true); }} onMouseLeave={() => { setExpanded(false); setExpandedReady(false); }}>{children}</button>;
 }
 
-type Draft = { id: string; context: ReportContext; screenshot?: string; body: string; priority: ReportPriority };
+type DraftScreenshot = ScreenshotImage & { id: string };
+type Draft = { id: string; context: ReportContext; screenshots: DraftScreenshot[]; files: DraftReportFile[]; body: string; priority: ReportPriority; saved?: boolean; uploaded?: string[] };
 
 export function ReviewOverlay({ site, environment, host, transport, logoUrl, onPositionChange, onHiddenChange, captureScreenshot: captureOverride, requestedReport, onOpenReport, reportsRevision }: { site: Site; environment: Environment; host: HTMLElement; onPositionChange: (position: Site['position']) => Promise<void>; onHiddenChange: (hidden: boolean) => Promise<void>; transport?: (body: Record<string, unknown>) => Promise<unknown>; logoUrl?: string; captureScreenshot?: () => Promise<string>; requestedReport?: { id: string; requestId: string; focusOnly?: boolean }; onOpenReport?: (id: string) => boolean; reportsRevision?: number }) {
+  useEffect(() => () => stopTabCapture(), [environment.id, captureOverride]);
   const rawMessage = async (body: Record<string, unknown>) => (transport ? await transport(body) : await extensionMessage(body)) as Awaited<ReturnType<typeof extensionMessage>>;
   const { ensureIdentity, nameDialog, nameDialogOpen } = useReviewerIdentity(rawMessage, environment.id);
   const message = async (body: Record<string, unknown>) => {
@@ -142,7 +148,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
     setNotificationReadingId(item && !openReport ? item.id : null);
     if (item && openReport) {
       setNotificationDetailLoading(true); setNotificationsOpen(false); setSettingsOpen(false);
-      setSelected(null); setComments([]); setEdit(null); setImageUrl(''); setGalleryOpen(false);
+      setSelected(null); setComments([]); setReportFiles([]); setEdit(null); setImageUrls([]); setGalleryOpen(false);
       setModalOpen(!external);
     }
     await run(async () => {
@@ -158,8 +164,8 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
           if (report.environment_id !== environment.id || report.page_path !== page.pagePath) throw new Error('Segnalazione non disponibile in questa pagina.');
           setReports(items => items.some(entry => entry.id === report.id) ? items.map(entry => entry.id === report.id ? { ...entry, ...report } : entry) : [...items, report]);
           if (external) { setModalOpen(false); setSelected(null); focusReport(report); }
-          else { setSelected(report); setComments(thread.data.comments); }
-          setNotificationsOpen(false); setSettingsOpen(false); setEdit(null); setImageUrl('');
+          else { setSelected(report); setComments(thread.data.comments); setReportFiles(thread.data.issue.attachments ?? []); }
+          setNotificationsOpen(false); setSettingsOpen(false); setEdit(null); setImageUrls([]);
         } else setStatus(item ? 'Notifica segnata come letta.' : 'Notifiche della pagina segnate come lette.', 'success');
       } catch (error) {
         if (item && openReport && scope === notificationScope.current) setNotificationsOpen(true);
@@ -172,6 +178,21 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
   }
   const [mode, setMode] = useState<'element' | 'pin' | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [screenshotCapture, setScreenshotCapture] = useState<ScreenshotImage | null>(null);
+  const submitLock = useRef(false);
+  const [fileProgress, setFileProgress] = useState<ReportFileProgress | null>(null);
+  const uploadAbort = useRef<AbortController | null>(null);
+  const pendingFiles = useRef(new Map<string, string>());
+  const cleanupFile = useRef<(issueId: string, id: string) => void>(() => {});
+  cleanupFile.current = (issueId, id) => { void rawMessage({ type: 'REPORTY_ATTACHMENT', payload: { scope: 'report', operation: 'remove', issueId, id } }).catch(() => setStatus('Pulizia dei file temporanei incompleta.', 'error')); };
+  useEffect(() => {
+    const issueId = draft?.id, pending = pendingFiles.current;
+    return () => {
+      if (!issueId) return;
+      uploadAbort.current?.abort();
+      for (const [id, owner] of pending) if (owner === issueId) { pending.delete(id); cleanupFile.current(issueId, id); }
+    };
+  }, [draft?.id]);
   const [selected, setSelected] = useState<Report | null>(null);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   useEffect(() => {
@@ -180,8 +201,9 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
     return () => clearTimeout(timer);
   }, [highlighted]);
   const [comments, setComments] = useState<ReportComment[]>([]);
+  const [reportFiles, setReportFiles] = useState<ReplyAttachment[]>([]);
   const [edit, setEdit] = useState<string | null>(null);
-  const [imageUrl, setImageUrl] = useState('');
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const setStatus = useNotify();
   const [pinsLoading, setPinsLoading] = useState(true);
@@ -275,7 +297,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
     const point = locate(report.context.anchor);
     const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth';
     if (point) window.scrollBy({ top: point.y - innerHeight / 2, left: 0, behavior });
-    else window.scrollTo({ top: report.context.scroll.y, left: report.context.scroll.x, behavior });
+    else if (report.context.scroll) window.scrollTo({ top: report.context.scroll.y, left: report.context.scroll.x, behavior });
     setHighlighted(null);
     requestAnimationFrame(() => setHighlighted(report.id));
   }
@@ -287,7 +309,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
       return;
     }
     const scope = notificationScope.current;
-    setSettingsOpen(false); setNotificationsOpen(false); setDraft(null); setEdit(null); setComments([]); setImageUrl(''); setOpen(false); setModalOpen(true);
+    setSettingsOpen(false); setNotificationsOpen(false); setDraft(null); setEdit(null); setComments([]); setReportFiles([]); setImageUrls([]); setOpen(false); setModalOpen(true);
     setSelected('project_id' in report ? report : null);
     setNotificationDetailLoading(true);
     await run(async () => {
@@ -295,12 +317,12 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
         const [thread, listing] = await Promise.all([loadThread(report.id), fetchPage({ id: report.id, pagePath: page.pagePath, limit: 1 })]);
         if (scope !== notificationScope.current) return;
         if (!listing.reports[0]) throw new Error('Segnalazione non disponibile.');
-        setSelected(listing.reports[0]); setComments(thread.data.comments);
+        setSelected(listing.reports[0]); setComments(thread.data.comments); setReportFiles(thread.data.issue.attachments ?? []);
       } finally { setNotificationDetailLoading(false); }
     });
   }
   useEffect(() => {
-    setSelected(null); setComments([]); setImageUrl('');
+    setSelected(null); setComments([]); setReportFiles([]); setImageUrls([]); setScreenshotCapture(null);
   }, [page.pagePath, environment.id]);
   useEffect(() => {
     if (hideReporty || !pageActive) return;
@@ -334,6 +356,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
     if (!id || pinsLoading) return;
     const report = reports.find(item => item.id === id && item.page_path === page.pagePath);
     if (!report) return;
+    if (report.context.anchor.kind === 'page') { deepLink.current = null; void view(report); return; }
     let attempts = 0;
     let stable = 0;
     let previous: { x: number; y: number } | null = null;
@@ -356,7 +379,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
         if (stable >= 3) { finish(); return; }
       }
       if (++attempts >= 20) {
-        if (!point) window.scrollTo({ top: report.context.scroll.y, left: report.context.scroll.x, behavior: 'instant' });
+        if (!point && report.context.scroll) window.scrollTo({ top: report.context.scroll.y, left: report.context.scroll.x, behavior: 'instant' });
         finish(); return;
       }
       timer = setTimeout(move, 250);
@@ -392,11 +415,11 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
       if (!element) return;
       const anchor: Anchor = mode === 'pin' ? { kind: 'pin', documentX: event.clientX + scrollX, documentY: event.clientY + scrollY } : elementAnchor(element, event.clientX, event.clientY);
       const context: ReportContext = { ...getPageContext(location.href), anchor, viewport: { width: innerWidth, height: innerHeight, devicePixelRatio }, scroll: { x: Math.max(0, scrollX), y: Math.max(0, scrollY) } };
-      setMode(null); setHover(null); setSelected(null); setDraft({ id: crypto.randomUUID(), context, body: '', priority: 'medium' }); setOpen(true);
+      setMode(null); setHover(null); setSelected(null); setDraft({ id: crypto.randomUUID(), context, screenshots: [], files: [], body: '', priority: 'medium' }); setOpen(true);
       void run(async () => {
         const screenshot = await captureScreenshot(context);
-        if (screenshot.length > 3500000) throw new Error('Screenshot troppo grande. Puoi inviare il commento senza immagine.');
-        setDraft(previous => previous ? { ...previous, screenshot } : previous);
+        if ((screenshot.split(',')[1]?.length ?? 0) * 3 / 4 > 2500000) throw new Error('Screenshot troppo grande. Puoi inviare il commento senza immagine.');
+        setDraft(previous => previous ? { ...previous, screenshots: [{ id: crypto.randomUUID(), src: screenshot, width: context.viewport.width, height: context.viewport.height }] } : previous);
       });
     };
     const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { setMode(null); setHover(null); setOpen(true); } };
@@ -428,7 +451,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
   const top = site.position.startsWith('top'), left = site.position.endsWith('left');
   const panelPosition = { [top ? 'top' : 'bottom']: 88, [left ? 'left' : 'right']: 24 };
   const floatingControls = <div className="pointer-events-none fixed inset-x-0 h-[74px] overflow-clip" style={{ [top ? 'top' : 'bottom']: 14 }}>
-    <div id="reporty-floating-controls" inert={controlsDocked} aria-hidden={controlsDocked} className={`pointer-events-auto absolute top-2.5 flex items-center gap-1 rounded-full border bg-background p-1.5 shadow-xl transition-[left,right,transform] duration-200 motion-reduce:transition-none ${left ? 'flex-row-reverse' : ''}`} style={{ [left ? 'left' : 'right']: controlsDocked ? 0 : hideReporty && !popupOpen ? 40 : 24, transform: controlsDocked ? (left ? 'translateX(-100%)' : 'translateX(100%)') : 'translateX(0)' }}><Button aria-label={modalOpen ? 'Chiudi segnalazioni' : `Apri lista segnalazioni${unreadNotifications ? `, ${unreadNotifications} notifiche non lette` : ''}`} aria-expanded={modalOpen} disabled={busy} variant="ghost" size="icon" className="relative size-9 rounded-lg text-foreground" onClick={() => { if (modalOpen) { setModalOpen(false); } else { setOpen(false); setSettingsOpen(false); setNotificationsOpen(false); setSelected(null); setModalOpen(true); void run(async () => { await refresh(); }); } }}>{modalOpen ? <X className="size-5" /> : <Menu className="size-5" />}{unreadNotifications ? <span aria-hidden="true" className="absolute -top-1 -right-1 min-w-4 rounded-full bg-red-600 px-1 text-[10px] leading-4 text-white">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span> : null}</Button>    <Button aria-label={open ? 'Chiudi creazione segnalazione' : 'Crea segnalazione'} aria-expanded={open} disabled={busy} size="icon" className="size-10 rounded-full" onClick={() => { setOpen(!open); setModalOpen(false); }}><span className="flex transition-transform motion-reduce:transition-none" style={{transform:open?'rotate(45deg)':'rotate(0deg)'}}><Plus className="size-5" /></span></Button></div>
+    <div id="reporty-floating-controls" inert={controlsDocked} aria-hidden={controlsDocked} className={`pointer-events-auto absolute top-2.5 flex items-center gap-1 rounded-full border bg-background p-1.5 shadow-xl transition-[left,right,transform] duration-200 motion-reduce:transition-none ${left ? 'flex-row-reverse' : ''}`} style={{ [left ? 'left' : 'right']: controlsDocked ? 0 : hideReporty && !popupOpen ? 40 : 24, transform: controlsDocked ? (left ? 'translateX(-100%)' : 'translateX(100%)') : 'translateX(0)' }}><Button aria-label={modalOpen ? 'Chiudi segnalazioni' : `Apri lista segnalazioni${unreadNotifications ? `, ${unreadNotifications} notifiche non lette` : ''}`} aria-expanded={modalOpen} disabled={busy && !modalOpen} variant="ghost" size="icon" className="relative size-9 rounded-lg text-foreground" onClick={() => { if (modalOpen) { setModalOpen(false); } else { setOpen(false); setSettingsOpen(false); setNotificationsOpen(false); setSelected(null); setModalOpen(true); void run(async () => { await refresh(); }); } }}>{modalOpen ? <X className="size-5" /> : <Menu className="size-5" />}{unreadNotifications ? <span aria-hidden="true" className="absolute -top-1 -right-1 min-w-4 rounded-full bg-red-600 px-1 text-[10px] leading-4 text-white">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span> : null}</Button>    <Button aria-label={open ? 'Chiudi creazione segnalazione' : 'Crea segnalazione'} aria-expanded={open} disabled={busy} size="icon" className="size-10 rounded-full" onClick={() => { setOpen(!open); setModalOpen(false); }}><span className="flex transition-transform motion-reduce:transition-none" style={{transform:open?'rotate(45deg)':'rotate(0deg)'}}><Plus className="size-5" /></span></Button></div>
     {hideReporty && !popupOpen ? <Button variant="outline" aria-label={controlsDocked ? 'Mostra Reporty' : 'Nascondi Reporty'} title={controlsDocked ? 'Mostra Reporty' : 'Nascondi Reporty'} aria-controls="reporty-floating-controls" aria-expanded={!controlsDocked} className={`pointer-events-auto absolute top-[15px] h-11 w-6 px-0 shadow-md ${left ? 'left-0 rounded-l-none rounded-r-lg' : 'right-0 rounded-l-lg rounded-r-none'}`} onClick={() => setControlsRevealed(value => !value)}>{controlsDocked ? (left ? <ChevronRight className="size-4" aria-hidden="true" /> : <ChevronLeft className="size-4" aria-hidden="true" />) : <X className="size-4" aria-hidden="true" />}</Button> : null}
   </div>;
   return <>
@@ -458,28 +481,74 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
       <Button variant="secondary" size="icon" aria-label="Pin libero" title="Pin libero" disabled={busy} tabIndex={open ? 0 : -1} className={`size-11 rounded-full border-border bg-card text-card-foreground shadow-lg hover:bg-accent transition-all duration-200 motion-reduce:transition-none ${open ? 'pointer-events-auto scale-100 opacity-100' : 'pointer-events-none scale-75 opacity-0'}`} style={{ transitionDelay: open ? '50ms' : '0ms', transform: open ? 'translateY(0)' : `translateY(${top ? '-20px' : '20px'})` }} onClick={() => void run(async () => { await ensureIdentity(); setMode('pin'); setOpen(false); })}><MapPin className="size-5" aria-hidden="true" /></Button>
     </div> : null}
     {open && !mode && draft ? <section aria-label="Crea segnalazione" className="pointer-events-auto fixed max-h-[75vh] w-[min(380px,calc(100vw-48px))] space-y-4 overflow-y-auto rounded-xl border bg-background p-4 text-sm text-foreground shadow-xl" style={panelPosition}>
-      {<form className="grid gap-3" onSubmit={event => { event.preventDefault(); void run(async () => {
-        const result = await message({ type: 'REPORTY_REPORT', operation: 'create', payload: { id: draft.id, body: draft.body, priority: draft.priority, context: draft.context }, screenshot: draft.screenshot });
-        setDraft(null); await refresh(); setStatus(result.warning ?? 'Segnalazione inviata.', result.warning ? 'error' : 'success');
+      {<form className="grid gap-3" onSubmit={event => { event.preventDefault(); if (submitLock.current) return; void run(async () => {
+        if (submitLock.current) return;
+        submitLock.current = true;
+        let saved = draft.saved === true;
+        try {
+          if (!saved) {
+            await message({ type: 'REPORTY_REPORT', operation: 'create', payload: { id: draft.id, body: draft.body, priority: draft.priority, context: draft.context } });
+            saved = true;
+            setDraft(previous => previous ? { ...previous, saved: true } : previous);
+          }
+          for (const screenshot of draft.screenshots) {
+            if (draft.uploaded?.includes(screenshot.id)) continue;
+            await message({ type: 'REPORTY_REPORT', operation: 'screenshot', payload: { id: draft.id, screenshotId: screenshot.id }, screenshot: screenshot.src });
+            setDraft(previous => previous ? { ...previous, uploaded: [...(previous.uploaded ?? []), screenshot.id] } : previous);
+          }
+          uploadAbort.current = new AbortController();
+          for (let index = 0; index < draft.files.length; index++) {
+            const item = draft.files[index]!;
+            if (item.uploaded) continue;
+            pendingFiles.current.set(item.id, draft.id);
+            await uploadReportFile(item.file, item.id, input => message({ type: 'REPORTY_ATTACHMENT', payload: { ...input, issueId: draft.id } }) as Promise<AttachmentResponse>, percent => setFileProgress({ id: item.id, completed: index, total: draft.files.length, percent }), uploadAbort.current.signal);
+            pendingFiles.current.delete(item.id);
+            setDraft(previous => previous ? { ...previous, files: previous.files.map(file => file.id === item.id ? { ...file, uploaded: true } : file) } : previous);
+          }
+          setDraft(null); setStatus('Segnalazione inviata.', 'success');
+          try { await refresh(); } catch { setStatus('Segnalazione inviata; aggiornamento della lista non riuscito.'); }
+        } catch (error) {
+          if (saved) throw new Error(`Segnalazione salvata, invio allegati interrotto. Premi Completa invio per riprovare. ${error instanceof Error ? error.message : ''}`);
+          throw error;
+        } finally { submitLock.current = false; uploadAbort.current = null; setFileProgress(null); }
       }); }}>
-        <h3 className="font-medium">Nuova segnalazione</h3><Label htmlFor="report-body">Fix da effettuare</Label><Textarea id="report-body" className="min-h-28 rounded-lg border bg-background p-3" value={draft.body} maxLength={10000} required onChange={event => setDraft({ ...draft, body: event.target.value })} />
-        <Label htmlFor="report-priority">Priorità</Label><RadioButtons variant="standard" label="Priorità" id="report-priority" disabled={busy} value={draft.priority} onValueChange={value => setDraft({ ...draft, priority: value as ReportPriority })} options={Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))} />
-        {capturing && !draft.screenshot ? <ScreenshotSkeleton aspectRatio={`${draft.context.viewport.width} / ${draft.context.viewport.height}`} /> : draft.screenshot ? <><LoadingImage key={draft.screenshot} alt="Anteprima screenshot da inviare" src={draft.screenshot} aspectRatio={`${draft.context.viewport.width} / ${draft.context.viewport.height}`} /><Button type="button" variant="outline" onClick={() => setDraft({ ...draft, screenshot: undefined })}>Rimuovi screenshot</Button></> : <div className="grid gap-2"><p className="text-xs text-muted-foreground">Nessuno screenshot allegato.</p><Button type="button" variant="outline" disabled={busy} onClick={() => void run(async () => {
-          if (location.href !== draft.context.url || Math.abs(scrollY - draft.context.scroll.y) > 2 || Math.abs(scrollX - draft.context.scroll.x) > 2) throw new Error('Torna alla pagina e alla posizione originali prima di acquisire lo screenshot.');
-          const screenshot = await captureScreenshot(draft.context);
-          if (screenshot.length > 3500000) throw new Error('Screenshot troppo grande.');
-          setDraft(previous => previous ? { ...previous, screenshot } : previous);
-        })}>Acquisisci screenshot</Button></div>}
-        <Button type="submit" disabled={busy || !draft.body.trim()}>Invia segnalazione</Button><Button type="button" variant="ghost" disabled={busy} onClick={() => setDraft(null)}>Annulla</Button>
+        <h3 className="font-medium">Nuova segnalazione</h3><Label htmlFor="report-body">Fix da effettuare</Label><Textarea id="report-body" className="min-h-28 rounded-lg border bg-background p-3" value={draft.body} disabled={busy || draft.saved} maxLength={10000} required onChange={event => setDraft({ ...draft, body: event.target.value })} />
+        <Label htmlFor="report-priority">Priorità</Label><RadioButtons variant="standard" label="Priorità" id="report-priority" disabled={busy || draft.saved} value={draft.priority} onValueChange={value => setDraft({ ...draft, priority: value as ReportPriority })} options={Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))} />
+        {capturing && !draft.screenshots.length ? <ScreenshotSkeleton aspectRatio={`${draft.context.viewport.width} / ${draft.context.viewport.height}`} /> : null}
+        {draft.screenshots.map((screenshot, index) => <div key={screenshot.id} className="relative">
+          <ScreenshotGallery src={screenshot.src} sources={draft.screenshots.map(item => item.src)} aspectRatio={`${screenshot.width} / ${screenshot.height}`} />
+          <TooltipButton type="button" label={`Rimuovi screenshot ${index + 1}`} disabled={busy || draft.saved} className="absolute right-2 top-2 z-10 bg-background text-destructive shadow-md hover:text-destructive" onClick={() => setDraft(previous => previous ? { ...previous, screenshots: previous.screenshots.filter(item => item.id !== screenshot.id) } : previous)}><Trash2 className="size-4" aria-hidden="true" /></TooltipButton>
+        </div>)}
+        {!capturing && !draft.screenshots.length ? <p className="text-xs text-muted-foreground">Nessuno screenshot allegato.</p> : null}
+        <Button type="button" variant="outline" disabled={busy || draft.saved || draft.screenshots.length >= MAX_REPORT_SCREENSHOTS} onClick={() => void run(async () => {
+          if (location.href !== draft.context.url) throw new Error('Torna alla pagina originale prima di aggiungere uno screenshot.');
+          const width = innerWidth, height = innerHeight;
+          const src = await capturePageScreenshot(host, captureOverride ?? captureTab);
+          if (location.href !== draft.context.url || width !== innerWidth || height !== innerHeight) throw new Error('La pagina o la viewport è cambiata. Riprova.');
+          setScreenshotCapture({ src, width, height });
+        })}><Plus className="size-4" aria-hidden="true" />Aggiungi screenshot ({draft.screenshots.length}/{MAX_REPORT_SCREENSHOTS})</Button>
+        <ReportAttachmentPicker files={draft.files} disabled={busy} saved={draft.saved} progress={fileProgress} onError={text => setStatus(text, 'error')} onChange={files => setDraft(previous => previous ? { ...previous, files } : previous)} onRemove={id => {
+          void run(async () => {
+            if (draft.saved || pendingFiles.current.has(id)) await message({ type: 'REPORTY_ATTACHMENT', payload: { scope: 'report', operation: 'remove', id, issueId: draft.id } });
+            pendingFiles.current.delete(id);
+            setDraft(previous => previous ? { ...previous, files: previous.files.filter(item => item.id !== id) } : previous);
+          });
+        }} />
+        <Button type="submit" disabled={busy || !draft.body.trim()}>{draft.saved ? 'Completa invio' : 'Invia segnalazione'}</Button><Button type="button" variant="ghost" disabled={busy} onClick={() => { setDraft(null); if (draft.saved) void run(async () => { await refresh(); }); }}>{draft.saved ? 'Chiudi' : 'Annulla'}</Button>
       </form>}
     </section> : null}
+    {screenshotCapture && draft ? <ScreenshotSelector snapshot={screenshotCapture} onCancel={() => setScreenshotCapture(null)} onConfirm={image => {
+      if (location.href !== draft.context.url) { setScreenshotCapture(null); setStatus('La pagina è cambiata. Torna alla pagina originale e riprova.'); return; }
+      setDraft(previous => previous && !previous.saved && previous.screenshots.length < MAX_REPORT_SCREENSHOTS ? { ...previous, screenshots: [...previous.screenshots, { ...image, id: crypto.randomUUID() }] } : previous);
+      setScreenshotCapture(null); setStatus('Screenshot aggiunto alla bozza.', 'success');
+    }} /> : null}
     <dialog ref={modal} aria-labelledby="reporty-modal-title" className="pointer-events-auto fixed inset-0 m-auto max-h-[85dvh] w-[calc(100vw-2rem)] max-w-3xl overflow-visible rounded-xl border bg-background p-0 text-sm text-foreground shadow-2xl backdrop:bg-black/50" onClick={event => {
         if (event.target !== modal.current) return;
         const rect = modal.current.getBoundingClientRect();
         if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) setModalOpen(false);
-      }} onCancel={event => { if (event.target === modal.current) { if (busy) event.preventDefault(); else setModalOpen(false); } }} onClose={event => { if (event.target === modal.current) setModalOpen(false); }}>
+      }} onCancel={event => { if (event.target === modal.current) setModalOpen(false); }} onClose={event => { if (event.target === modal.current) setModalOpen(false); }}>
       <div className={selected || settingsOpen || notificationDetailLoading ? "max-h-[85dvh] space-y-5 overflow-y-auto p-6" : "flex h-[80dvh] max-h-[85dvh] flex-col gap-5 overflow-hidden p-6"}>
-        <header className="flex shrink-0 flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"><h2 id="reporty-modal-title" className="min-w-0 break-words text-xl font-semibold">{notificationDetailLoading ? 'Dettaglio segnalazione' : notificationsOpen ? 'Notifiche della pagina' : settingsOpen ? 'Impostazioni' : selected ? 'Dettaglio segnalazione' : `${environment.projectName} · ${environment.name}`}</h2><div className="order-first flex items-center justify-end gap-2 sm:order-none">{notificationDetailLoading ? <TooltipButton label="Torna alle segnalazioni" disabled><ArrowLeft className="size-4" aria-hidden="true" /></TooltipButton> : settingsOpen || notificationsOpen ? <TooltipButton label="Torna alle segnalazioni" onClick={() => { setSettingsOpen(false); setNotificationsOpen(false); }}><ArrowLeft className="size-4" aria-hidden="true" /></TooltipButton> : !selected ? <><Button variant="outline" size="icon" className="relative" aria-label={`Apri notifiche, ${unreadNotifications} non lette`} title="Notifiche" onClick={() => setNotificationsOpen(true)}><Bell className="size-4" aria-hidden="true" />{unreadNotifications ? <span aria-hidden="true" className="absolute -top-1 -right-1 min-w-4 rounded-full bg-red-600 px-1 text-[10px] leading-4 text-white">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span> : null}</Button><Button variant="outline" size="icon" aria-label="Apri impostazioni" title="Impostazioni" onClick={() => setSettingsOpen(true)}><Settings className="size-4" aria-hidden="true" /></Button></> : null}{selected ? <TooltipButton label="Torna alle segnalazioni" disabled={busy} onClick={() => { setSelected(null); setImageUrl(''); }}><ArrowLeft className="size-4" aria-hidden="true" /></TooltipButton> : null}<Button variant="outline" size="icon" aria-label="Chiudi modale" disabled={busy} onClick={() => setModalOpen(false)}><X /></Button></div></header>
+        <header className="flex shrink-0 flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"><h2 id="reporty-modal-title" className="min-w-0 break-words text-xl font-semibold">{notificationDetailLoading ? 'Dettaglio segnalazione' : notificationsOpen ? 'Notifiche della pagina' : settingsOpen ? 'Impostazioni' : selected ? 'Dettaglio segnalazione' : `${environment.projectName} · ${environment.name}`}</h2><div className="order-first flex items-center justify-end gap-2 sm:order-none">{notificationDetailLoading ? <TooltipButton label="Torna alle segnalazioni" disabled><ArrowLeft className="size-4" aria-hidden="true" /></TooltipButton> : settingsOpen || notificationsOpen ? <TooltipButton label="Torna alle segnalazioni" onClick={() => { setSettingsOpen(false); setNotificationsOpen(false); }}><ArrowLeft className="size-4" aria-hidden="true" /></TooltipButton> : !selected ? <><Button variant="outline" size="icon" className="relative" aria-label={`Apri notifiche, ${unreadNotifications} non lette`} title="Notifiche" onClick={() => setNotificationsOpen(true)}><Bell className="size-4" aria-hidden="true" />{unreadNotifications ? <span aria-hidden="true" className="absolute -top-1 -right-1 min-w-4 rounded-full bg-red-600 px-1 text-[10px] leading-4 text-white">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span> : null}</Button><Button variant="outline" size="icon" aria-label="Apri impostazioni" title="Impostazioni" onClick={() => setSettingsOpen(true)}><Settings className="size-4" aria-hidden="true" /></Button></> : null}{selected ? <TooltipButton label="Torna alle segnalazioni" disabled={busy} onClick={() => { setSelected(null); setImageUrls([]); }}><ArrowLeft className="size-4" aria-hidden="true" /></TooltipButton> : null}<Button variant="outline" size="icon" aria-label="Chiudi modale" onClick={() => setModalOpen(false)}><X /></Button></div></header>
         {notificationDetailLoading ? <ReportDetailSkeleton /> : notificationsOpen ? <section className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden" aria-label="Notifiche della pagina">
           <div className="flex shrink-0 items-center justify-between gap-2"><div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto pb-1"><ReportFilter label="Stato" options={Object.entries(statusLabels).map(([value,label]) => ({value,label}))} selected={notificationStatuses} onChange={setNotificationStatuses} /><ReportFilter label="Lettura" options={Object.entries(notificationReadLabels).map(([value,label]) => ({value,label}))} selected={notificationReads} onChange={setNotificationReads} /></div><Button variant="outline" size="sm" disabled={busy || notificationsLoading || !unreadNotifications} onClick={() => void readNotifications()}>Segna tutte come lette</Button></div>
           {notificationFilters.length ? <div className="flex shrink-0 flex-wrap gap-2" aria-label="Filtri notifiche attivi">{notificationFilters.map(filter => <FilterPill key={filter.key} label={filter.label} onRemove={filter.remove} />)}</div> : null}
@@ -491,7 +560,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
           <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/50 p-4 dark:bg-card"><div className="space-y-1"><Label htmlFor="reporty-resolved">Mostra risolte</Label><p id="reporty-resolved-help" className="text-xs text-muted-foreground">Include i pin delle segnalazioni chiuse sulla pagina. Non modifica i filtri della lista.</p></div><Switch id="reporty-resolved" checked={showResolved && !hideReporty} onCheckedChange={setShowResolved} disabled={hideReporty || !pinsVisible} aria-describedby="reporty-resolved-help" /></div>
           <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/50 p-4 dark:bg-card"><div className="space-y-1"><h3 className="text-sm font-medium">Tema</h3><p className="text-xs text-muted-foreground">Scegli la modalità chiara o scura per Reporty.</p></div><ThemeSwitch host={host} /></div>
         </section> : selected ? <div className="space-y-4">
-        <section className="space-y-4" aria-label="Segnalazione"><div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-2 text-xs sm:flex-wrap"><span className={`inline-flex items-center gap-1 rounded-full border border-[color-mix(in_oklab,currentColor_25%,transparent)] px-2 py-1 ${statusColors[selected.status]}`}><ReportIcon value={selected.status} />{statusLabels[selected.status]}</span><span className={`inline-flex items-center gap-1 rounded-full border border-[color-mix(in_oklab,currentColor_25%,transparent)] px-2 py-1 ${priorityColors[selected.priority ?? 'medium']}`}><ReportIcon value={selected.priority ?? 'medium'} />Priorità {priorityLabels[selected.priority ?? 'medium'].toLowerCase()}</span></div><div className="flex items-center gap-2">{selected.screenshot_path ? <TooltipButton label="Mostra screenshot" disabled={busy || imageLoading} onClick={() => { setImageUrl(''); setGalleryOpen(true); void run(async () => { try { const result = await loadScreenshot(selected.id); setImageUrl(result.url); } catch (error) { setGalleryOpen(false); throw error; } }); }}><Eye className="size-4" aria-hidden="true" /></TooltipButton> : null}<TooltipButton label="Vai alla segnalazione" disabled={busy} onClick={() => {
+        <section className="space-y-4" aria-label="Segnalazione"><div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-2 text-xs sm:flex-wrap"><span className={`inline-flex items-center gap-1 rounded-full border border-[color-mix(in_oklab,currentColor_25%,transparent)] px-2 py-1 ${statusColors[selected.status]}`}><ReportIcon value={selected.status} />{statusLabels[selected.status]}</span><span className={`inline-flex items-center gap-1 rounded-full border border-[color-mix(in_oklab,currentColor_25%,transparent)] px-2 py-1 ${priorityColors[selected.priority ?? 'medium']}`}><ReportIcon value={selected.priority ?? 'medium'} />Priorità {priorityLabels[selected.priority ?? 'medium'].toLowerCase()}</span></div><div className="flex items-center gap-2">{selected.screenshot_path ? <TooltipButton label="Mostra screenshot" disabled={busy || imageLoading} onClick={() => { setImageUrls([]); setGalleryOpen(true); void run(async () => { try { const result = await loadScreenshot(selected.id); setImageUrls(result.urls ?? [result.url]); } catch (error) { setGalleryOpen(false); throw error; } }); }}><Eye className="size-4" aria-hidden="true" /></TooltipButton> : null}<TooltipButton label="Vai alla segnalazione" disabled={busy} onClick={() => {
           if (selected.page_path !== page.pagePath) { const url = new URL(selected.context.url); url.searchParams.set('__reporty_issue', selected.id); location.assign(url.href); return; }
           setModalOpen(false);
           setHighlighted(null);
@@ -499,12 +568,13 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
           if (selected.status === 'resolved') setShowResolved(true);
           const point = locate(selected.context.anchor);
           if (point) window.scrollBy({ top: point.y - innerHeight / 2, left: 0, behavior: 'smooth' });
-          else window.scrollTo({ top: selected.context.scroll.y, left: selected.context.scroll.x, behavior: 'smooth' });
+          else if (selected.context.scroll) window.scrollTo({ top: selected.context.scroll.y, left: selected.context.scroll.x, behavior: 'smooth' });
         }}><Target className="size-4" aria-hidden="true" /></TooltipButton></div></div>
         <section className="space-y-3 rounded-xl border bg-muted/50 dark:bg-card p-4"><h4 className="text-sm font-semibold">Descrizione</h4>{edit === null ? <p className="whitespace-pre-wrap break-words leading-relaxed">{selected.body}</p> : null}
         {selected.canEdit ? <div className="flex flex-col items-end gap-2">{edit === null ? <TooltipButton label="Modifica descrizione" disabled={busy} onClick={() => setEdit(selected.body)}><Pencil className="size-4" aria-hidden="true" /></TooltipButton> : <form className="grid w-full gap-2" onSubmit={event => { event.preventDefault(); if (busy || !edit?.trim() || edit.trim() === selected.body.trim()) return; void run(async () => { await message({ type: 'REPORTY_REPORT', operation: 'edit', payload: { id: selected.id, body: edit } }); setStatus('Testo aggiornato.', 'success'); await refresh(); const listing = await fetchPage({ id: selected.id, pagePath: page.pagePath, limit: 1 }); setSelected(listing.reports[0] ?? null); setEdit(null); }); }}><Textarea aria-label="Modifica descrizione" className="min-h-28 rounded-lg border bg-background p-3" required value={edit} maxLength={10000} onChange={event => setEdit(event.target.value)} /><div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={busy} onClick={() => setEdit(null)}>Annulla</Button><Button type="submit" disabled={busy || !edit.trim() || edit.trim() === selected.body.trim()}>Salva testo</Button></div></form>}</div> : null}</section>
-        {galleryOpen ? <ScreenshotGallery autoOpen loading={imageLoading || !imageUrl} onClose={() => { setGalleryOpen(false); setImageUrl(''); }} src={imageUrl} aspectRatio={`${selected.context.viewport.width} / ${selected.context.viewport.height}`} /> : null}
-        {selected.page_path === page.pagePath && !locate(selected.context.anchor) ? <p className="rounded-lg bg-muted p-3">Elemento non trovato o modificato. Consulta lo screenshot originale.</p> : null}
+        {reportFiles.length ? <section className="space-y-3 rounded-xl border bg-muted/50 p-4" aria-label="File allegati alla segnalazione"><h3 className="font-medium">File allegati</h3><ReplyAttachmentList attachments={reportFiles} label="File della segnalazione" requestFile={input => message({ type: 'REPORTY_ATTACHMENT', payload: { ...input, scope: 'report', issueId: selected.id } })} onError={text => setStatus(text, 'error')} /></section> : null}
+        {galleryOpen ? <ScreenshotGallery autoOpen loading={imageLoading || !imageUrls.length} onClose={() => { setGalleryOpen(false); setImageUrls([]); }} src={imageUrls[0] ?? ''} sources={imageUrls} aspectRatio={selected.context.viewport ? `${selected.context.viewport.width} / ${selected.context.viewport.height}` : '16 / 9'} /> : null}
+        {selected.context.anchor.kind !== 'page' && selected.page_path === page.pagePath && !locate(selected.context.anchor) ? <p className="rounded-lg bg-muted p-3">Elemento non trovato o modificato. Consulta lo screenshot originale.</p> : null}
         <section className="space-y-4 rounded-xl border bg-muted/50 dark:bg-card p-4" aria-label="Gestione segnalazione">
         {selected.canChangeStatus ? <div className="grid gap-2"><Label htmlFor="report-status">Stato</Label><RadioButtons label="Stato" id="report-status" disabled={busy} value={selected.status} onValueChange={value => updateReportField('status', value)} options={Object.entries(statusLabels).map(([value, label]) => ({ value, label }))} /></div> : null}
         {selected.canChangeStatus ? <div className="grid gap-2"><Label htmlFor="selected-priority">Priorità</Label><RadioButtons variant="standard" label="Priorità" id="selected-priority" disabled={busy} value={selected.priority ?? 'medium'} onValueChange={value => updateReportField('priority', value)} options={Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))} /></div> : null}
@@ -514,11 +584,11 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
           await message({ type:'REPORTY_REPORT',operation:'reply',payload:{ id:selected.id,body,attachments,replyId } });
           setStatus('Risposta inviata.','success');
           try {
-            const result = await loadThread(selected.id); setComments(result.data.comments);
+            const result = await loadThread(selected.id); setComments(result.data.comments); setReportFiles(result.data.issue.attachments ?? []);
             setReports(items => items.map(item => item.id === selected.id ? { ...item,commentCount:result.data.comments.length } : item));
           } catch (error) { setStatus(error instanceof Error ? error.message : 'Impossibile aggiornare le risposte.','error'); }
         }} />
-        </section><footer className="rounded-xl border bg-muted/50 dark:bg-card p-4 text-xs text-muted-foreground"><p>Segnalata da {selected.authorName}</p><p>{selected.updated_at ? <>Ultima modifica: {selected.updatedByName ?? 'Utente'} · {formatReportDateTime(selected.updated_at)}</> : 'Nessuna modifica registrata'}</p><p>Viewport originale: {selected.context.viewport.width} × {selected.context.viewport.height} · scroll {Math.round(selected.context.scroll.y)} px</p></footer>{selected.canEdit ? <section aria-label="Zona pericolosa" className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4"><h3 className="text-sm font-semibold text-destructive">Zona pericolosa</h3><div className="flex justify-end"><DeleteConfirm fullWidth disabled={busy} description="Eliminare questa segnalazione e tutte le sue risposte? Questa operazione è definitiva." onConfirm={() => run(async () => { const result = await message({ type: 'REPORTY_REPORT', operation: 'delete', payload: { id: selected.id } }); setStatus('Segnalazione eliminata.', 'success'); if (result.warning) setStatus(result.warning,'error'); setSelected(null); await refresh(); })}><Trash2 className="size-4" aria-hidden="true" />Elimina</DeleteConfirm></div></section> : null}
+        </section><footer className="rounded-xl border bg-muted/50 dark:bg-card p-4 text-xs text-muted-foreground"><p>Segnalata da {selected.authorName}</p><p>{selected.updated_at ? <>Ultima modifica: {selected.updatedByName ?? 'Utente'} · {formatReportDateTime(selected.updated_at)}</> : 'Nessuna modifica registrata'}</p><ReportContextDetails context={selected.context} /></footer>{selected.canEdit ? <section aria-label="Zona pericolosa" className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4"><h3 className="text-sm font-semibold text-destructive">Zona pericolosa</h3><div className="flex justify-end"><DeleteConfirm fullWidth disabled={busy} description="Eliminare questa segnalazione e tutte le sue risposte? Questa operazione è definitiva." onConfirm={() => run(async () => { const result = await message({ type: 'REPORTY_REPORT', operation: 'delete', payload: { id: selected.id } }); setStatus('Segnalazione eliminata.', 'success'); if (result.warning) setStatus(result.warning,'error'); setSelected(null); await refresh(); })}><Trash2 className="size-4" aria-hidden="true" />Elimina</DeleteConfirm></div></section> : null}
       </div> : <div className="flex min-h-0 flex-1 flex-col gap-5">
   <Input aria-label="Cerca segnalazioni" placeholder="Cerca commento o pagina…" className="h-10 w-full rounded-lg border bg-background px-3" value={searchInput} onChange={event => setSearch(event.target.value)} />
   <div className="flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-2">

@@ -3,7 +3,7 @@ export type { ReportSort, ReportSortField } from './report-order';
 export { compareReports, compareReportsBy } from './report-order';
 export { formatReportDateTime } from './date';
 export { getPageContext } from './page';
-export { isPageActive, subscribePageActivity, whenPageActive } from './page-activity';
+export { isPageActive, setEmbeddedPageActive, subscribePageActivity, whenPageActive } from './page-activity';
 export { normalizeOrigin, validateName, isUuid } from './project';
 export { bulkReportRequestSchema, matchesReportUsers, reportContextSchema, reportRequestSchema, reportPrioritySchema, priorityLabels } from './reports';
 export type { BulkReportRequest, BulkReportResult, ReportNotification, Report, ReportComment, ReportPriority, ProjectParticipant } from './reports';
@@ -14,6 +14,7 @@ export const floatingPositions = ['bottom_right', 'bottom_left', 'top_right', 't
 export type FloatingPosition = (typeof floatingPositions)[number];
 
 export type Anchor =
+  | { kind: 'page' }
   | { kind: 'element'; selector: string; offsetX: number; offsetY: number; textExcerpt?: string }
   | { kind: 'pin'; documentX: number; documentY: number };
 
@@ -28,11 +29,12 @@ export interface ReportContext extends PageContext {
   viewport: { width: number; height: number; devicePixelRatio: number };
   scroll: { x: number; y: number };
 }
-export { MAX_ATTACHMENT_BYTES, MAX_REPLY_ATTACHMENTS, attachmentRequestSchema, attachmentMime, isPreviewImage } from './attachments';
-export type { AttachmentRequest, ReplyAttachment } from './attachments';
+export { MAX_ATTACHMENT_BYTES, MAX_REPLY_ATTACHMENTS, MAX_REPORT_ATTACHMENT_BYTES, MAX_REPORT_ATTACHMENTS, attachmentRequestSchema, attachmentMime, isPreviewImage } from './attachments';
+export type { AttachmentRequest, ReplyAttachment, AttachmentResponse } from './attachments';
 
 export { reportPageSchema } from './reports';
 export type { ReportPage, ReportPageQuery, ReportPin, ReportSelection } from './reports';
 
 export { notificationPageSchema } from './reports';
 export type { NotificationPageQuery, NotificationPage, NotificationCursor } from './reports';
+export { MAX_REPORT_SCREENSHOTS, reportScreenshotPaths } from './screenshots';

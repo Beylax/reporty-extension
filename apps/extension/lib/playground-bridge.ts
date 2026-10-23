@@ -3,13 +3,14 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export type PlaygroundSelection = { id: string; requestId: string; focusOnly?: boolean };
 
 /** Carries page metadata only; authentication remains in the widget transport. */
-export function createPlaygroundBridge(apiOrigin: string, key: string, target: Window = window) {
+export function createPlaygroundBridge(apiOrigin: string, key: string, target: Window = window, onActivity: (active: boolean | null) => void = () => {}) {
   if (target.parent === target) return null;
   let nonce = '';
   let enabled = false;
   let externalDetails = false;
   let lastPage = '';
   let disposed = false;
+  let activityTimer: ReturnType<typeof setTimeout> | undefined;
   const selections = new Set<(selection: PlaygroundSelection) => void>();
   const refreshListeners = new Set<() => void>();
   const pending = new Map<string, { url: string; resolve: (image: string) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
@@ -38,6 +39,12 @@ export function createPlaygroundBridge(apiOrigin: string, key: string, target: W
       if (data.key !== key) return;
       if (nonce && nonce !== data.nonce) cancelCaptures('La sessione playground è cambiata. Riprova.');
       nonce = data.nonce;
+      if (typeof data.active === 'boolean') {
+        clearTimeout(activityTimer);
+        onActivity(data.active);
+        // Stop inherited activity if the dashboard stops renewing the connection.
+        activityTimer = setTimeout(() => onActivity(false), 3000);
+      }
       externalDetails = data.externalDetails === true;
       publish(true);
       return;
@@ -95,6 +102,8 @@ export function createPlaygroundBridge(apiOrigin: string, key: string, target: W
     dispose() {
       disposed = true;
       clearInterval(timer);
+      clearTimeout(activityTimer);
+      onActivity(null);
       target.removeEventListener('message', receive);
       selections.clear();
       refreshListeners.clear();

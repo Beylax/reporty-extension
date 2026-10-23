@@ -24,7 +24,7 @@
 - Gli utenti della dashboard sono sviluppatori (Google, anche per creare il primo progetto). Il team usa dashboard ed estensione. I clienti/revisori ospiti usano l'estensione tramite link e nome, senza registrazione o accesso alla dashboard.
 - I progetti contengono ambienti identificati da origini esplicite. Protocollo e porta fanno parte dell'origine.
 - Il termine workspace indica attualmente la dashboard: non esiste una tabella workspace separata.
-- Segnalazioni collegate a elementi DOM o pin liberi, con descrizione, screenshot opzionale e risposte.
+- Segnalazioni collegate a elementi DOM o pin liberi, con descrizione, fino a 5 screenshot opzionali, fino a 5 file allegati alla segnalazione e risposte.
 - Stati: `open`, `in_progress`, `validation`, `resolved`. Priorità: `low`, `medium`, `high`, inizialmente `medium`.
 - Identità pagina: ambiente e percorso; query conservate come contesto, percorsi hash distinti.
 - Non acquisire o ripristinare stato interno React, cookie o storage del sito. La modalità con script è disponibile per ambiente: chiave pubblica e toggle inizialmente disabilitato, consultazione senza nome, nome obbligatorio alla prima scrittura e permessi completi limitati all’ambiente. API e database verificano il toggle; frontend lo controlla ogni 10 secondi.
@@ -40,11 +40,12 @@
 
 - Lo schema corrente è in `supabase/initialize.sql`: è distruttivo, elimina anche tutti gli account Auth e non conserva amministratori. Non eseguirlo sul remoto senza autorizzazione. Per future modifiche su dati da conservare, concordare una migrazione incrementale anziché usare il reset.
 - Mantenere RLS, controlli RPC e `search_path` esplicito nelle funzioni security definer; limitare gli execute grant.
-- Il widget riusa il pannello estensione tramite transport; bundle generato da `scripts/build-widget.mjs` prima della build web. Screenshot widget tramite condivisione scheda con consenso a ogni acquisizione; fermare le tracce sempre.
+- Il widget riusa il pannello estensione tramite transport; bundle generato da `scripts/build-widget.mjs` prima della build web. Screenshot widget tramite condivisione scheda con consenso alla prima acquisizione della sessione; riutilizzare la condivisione attiva per le catture successive e fermare tutte le tracce a fine sessione, su interruzione o errore.
 - Token ospite e invito memorizzati con hash. I codici di collegamento estensione sono monouso; verificare origine, scheda, nonce e scadenza.
 - La sessione estensione resta nello storage riservato ai contesti fidati; non deve essere esposta al sito revisionato.
 - `SUPABASE_SECRET_KEY` resta server-only, usata per Storage dopo controllo di autorizzazione. Non inserirla nell'estensione, nei log o in variabili `NEXT_PUBLIC_*`.
 - Screenshot nel bucket privato `screenshots`, JPEG fino a 2,5 MB, URL firmati brevi. Evidenziare elemento/punto durante la cattura e rimuovere sempre l'overlay temporaneo, anche su errore.
+- File della segnalazione nel bucket privato `report-attachments`, fino a 5 da 5 MB ciascuno; upload TUS diretto con token firmato limitato al singolo oggetto, conferma dopo controllo RPC. File generici sempre scaricati, senza esecuzione inline. Gli allegati delle risposte mantengono il limite di 2,5 MB.
 - Rimuovere file tramite API Storage, non eliminando direttamente metadati `storage.objects` via SQL. La pulizia dopo cancellazioni applicative è best effort e non deve nascondere errori.
 
 ## Convenzioni UI

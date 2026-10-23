@@ -3,6 +3,7 @@ import { anchorPosition } from './anchor';
 
 // Capture a temporary annotation alongside the page, keeping Reporty's UI hidden.
 export async function captureHighlightedScreenshot(host: HTMLElement, context: ReportContext, capture: () => Promise<string>) {
+  if (context.anchor.kind === 'page') return capturePageScreenshot(host, capture);
   const point = anchorPosition(context.anchor);
   if (!point) throw new Error('Elemento non trovato: seleziona nuovamente il punto da segnalare.');
   const marker = document.createElement('div');
@@ -25,6 +26,13 @@ export async function captureHighlightedScreenshot(host: HTMLElement, context: R
   const pin = document.createElement('div');
   pin.className = 'point'; pin.style.left = `${point.x}px`; pin.style.top = `${point.y}px`;
   shadow.append(pin);
+  try {
+    document.documentElement.append(marker);
+    return await capturePageScreenshot(host, capture);
+  } finally { marker.remove(); }
+}
+
+export async function capturePageScreenshot(host: HTMLElement, capture: () => Promise<string>) {
   const surfaces = [...new Set([host, document.getElementById('reporty-overlay'), document.getElementById('reporty-widget')])].filter((element): element is HTMLElement => element instanceof HTMLElement);
   const previousDisplay = surfaces.map(element => ({
     element,
@@ -34,12 +42,10 @@ export async function captureHighlightedScreenshot(host: HTMLElement, context: R
   try {
     // Hide the entire shadow tree, including fixed buttons and toast portals.
     surfaces.forEach(element => element.style.setProperty('display', 'none', 'important'));
-    document.documentElement.append(marker);
     // Start the permission request synchronously within the user gesture.
     // captureTab waits for rendered frames before drawing the shared tab.
     return await capture();
   } finally {
-    marker.remove();
     previousDisplay.forEach(({ element, value, priority }) => {
       if (value) element.style.setProperty('display', value, priority);
       else element.style.removeProperty('display');
