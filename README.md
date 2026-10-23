@@ -231,7 +231,7 @@ I file sono elencati e scaricabili nel dettaglio di dashboard, drawer del playgr
 
 ### Creazione manuale dalla dashboard
 
-Nella tab Segnalazioni, in vista Lista e Kanban, **Nuova segnalazione** apre una modale per scegliere l’ambiente, inserire l’URL della pagina, la descrizione e la priorità (Media iniziale). L’URL deve avere origine, protocollo e porta dell’ambiente; query e hash sono conservati con le regole di identità pagina già in uso. La segnalazione è collegata alla pagina, senza un pin o dati di viewport fittizi. È visibile anche nella lista dell’estensione/widget della pagina, senza un indicatore sovrapposto al sito.
+Nella tab Segnalazioni, in vista Lista e Kanban, il pulsante circolare con icona **+** a sinistra della ricerca ha tooltip e nome accessibile **Nuova segnalazione**. Apre una modale per scegliere l’ambiente, inserire l’URL della pagina, la descrizione e la priorità (Media iniziale). L’URL deve avere origine, protocollo e porta dell’ambiente; query e hash sono conservati con le regole di identità pagina già in uso. La segnalazione è collegata alla pagina, senza un pin o dati di viewport fittizi. È visibile anche nella lista dell’estensione/widget della pagina, senza un indicatore sovrapposto al sito.
 
 Si possono allegare fino a 5 screenshot JPG, PNG o WebP da 5 MB ciascuno in ingresso, convertiti in JPEG entro 2,5 MB per Storage, con anteprima a galleria e cestino; altri 5 file fino a 5 MB ciascuno usano l’upload diretto già disponibile. In caso di errore successivo al salvataggio, **Completa invio** riprende gli allegati mancanti sulla stessa segnalazione. La chiusura conserva la segnalazione già creata e ripulisce in best effort gli upload non confermati.
 

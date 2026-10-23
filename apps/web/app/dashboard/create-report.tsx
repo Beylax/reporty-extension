@@ -6,6 +6,7 @@ import { getPageContext, MAX_REPORT_SCREENSHOTS, priorityLabels, reportRequestSc
 import { uploadReportFile } from '@reporty/shared/report-file-upload';
 import { ReportAttachmentPicker, type DraftReportFile, type ReportFileProgress } from '@reporty/shared/ui/report-attachments';
 import { FilePickerButton } from '@reporty/shared/ui/file-picker-button';
+import { TooltipButton } from '@reporty/shared/ui/tooltip-button';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -25,7 +26,7 @@ type Draft = { id: string; environmentId: string; url: string; body: string; pri
 export function CreateReport({ environments, disabled, onCreated }: { environments: Environment[]; disabled?: boolean; onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   return <>
-    <Button disabled={disabled || !environments.length} onClick={() => setOpen(true)}><Plus aria-hidden="true" />Nuova segnalazione</Button>
+    <TooltipButton label="Nuova segnalazione" variant="default" className="rounded-full" disabled={disabled || !environments.length} onClick={() => setOpen(true)}><Plus aria-hidden="true" /></TooltipButton>
     {open && environments.length ? <CreateReportForm environments={environments} onCreated={onCreated} onClose={() => setOpen(false)} /> : null}
   </>;
 }
