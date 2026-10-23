@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { isUuid, validateName } from '@reporty/shared';
-import { widgetOriginAllowed } from '@/lib/widget-origin';
+import { widgetConfigOrigin, widgetOriginAllowed } from '@/lib/widget-origin';
 import { newToken, validToken } from '@/lib/invitation-token';
 import { POST as reports } from '../extension/reports/route';
 import { POST as attachment } from '../extension/attachments/route';
@@ -9,7 +9,7 @@ import { POST as identity } from '../extension/context/route';
 
 function cors(response: Response, origin: string) {
   response.headers.set('Access-Control-Allow-Origin', origin);
-  response.headers.set('Vary', 'Origin');
+  response.headers.set('Vary', 'Origin, Sec-Fetch-Site');
   response.headers.set('Cache-Control', 'no-store');
   return response;
 }
@@ -23,7 +23,7 @@ export function OPTIONS(request: Request) {
 }
 export async function GET(request: Request) {
   const key = new URL(request.url).searchParams.get('key') ?? '';
-  const origin = request.headers.get('origin') ?? '';
+  const origin = widgetConfigOrigin(request);
   if (!isUuid(key)) return new Response(null,{status:400});
   const supabase = await createClient();
   const {data,error} = await supabase.rpc('widget_config',{key});
