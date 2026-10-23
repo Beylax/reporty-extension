@@ -1,10 +1,11 @@
 'use server';
+import { isOAuthAuthorizationId } from '@/lib/mcp/return-path';
 import { isUuid } from '@reporty/shared';
 import { requireUser } from '@/lib/auth';
 import { appOrigin } from '@/lib/supabase/config';
 
 export async function decideMcpConsent(authorizationId: string, projectId: string, approve: boolean) {
-  if (!isUuid(authorizationId) || (approve && !isUuid(projectId)) || typeof approve !== 'boolean') return { error: 'Richiesta non valida.' };
+  if (!isOAuthAuthorizationId(authorizationId) || (approve && !isUuid(projectId)) || typeof approve !== 'boolean') return { error: 'Richiesta non valida.' };
   const { supabase, userId } = await requireUser();
   // Resolve client/user on the server; never trust client identity from the form.
   const { data: details, error } = await supabase.auth.oauth.getAuthorizationDetails(authorizationId);

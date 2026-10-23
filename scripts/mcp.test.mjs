@@ -5,7 +5,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { handleMcpRequest } from '../apps/web/lib/mcp/server.ts';
 import { validMcpClaims } from '../apps/web/lib/mcp/claims.ts';
-import { oauthReturnPath } from '../apps/web/lib/mcp/return-path.ts';
+import { isOAuthAuthorizationId, oauthReturnPath } from '../apps/web/lib/mcp/return-path.ts';
 
 const origin='https://reporty.example';
 const project=randomUUID(), report=randomUUID(), attachment=randomUUID();
@@ -61,7 +61,20 @@ test('stateless transport rejects oversized request bodies', async () => {
 test('Google callback resumes only a valid local OAuth consent request', () => {
   const path='/oauth/consent?authorization_id='+randomUUID();
   assert.equal(oauthReturnPath(path),path);
-  for(const value of [null,undefined,'https://evil.example','//evil.example','/dashboard','/oauth/consent?authorization_id=x',path+'&next=https://evil.example',path+'#evil','\\evil.example']) assert.equal(oauthReturnPath(value),null);
+  for(const value of [null,undefined,'https://evil.example','//evil.example','/dashboard','/oauth/consent?authorization_id=',path+'&next=https://evil.example',path+'#evil','\\evil.example']) assert.equal(oauthReturnPath(value),null);
+});
+
+
+test('opaque Supabase authorization IDs survive the Google login return path without accepting URL injection', () => {
+  const authorizationId = 'q3z7wfnmqejfn5rsxsclcvhemxep2vca';
+  const path = '/oauth/consent?authorization_id=' + authorizationId;
+  assert.equal(isOAuthAuthorizationId(authorizationId), true);
+  assert.equal(oauthReturnPath(path), path);
+  assert.equal(new URL('https://reporty.example/login?next=' + encodeURIComponent(path)).searchParams.get('next'), path);
+  for (const value of ['', '../other', 'a/b', 'value?next=other', 'value#fragment', 'value%2fpath', 'value\n', 'x'.repeat(257), null, []]) {
+    assert.equal(isOAuthAuthorizationId(value), false);
+    if (typeof value === 'string') assert.equal(oauthReturnPath('/oauth/consent?authorization_id=' + value), null);
+  }
 });
 
 test('MCP credentials require their own audience, OAuth identity, binding, session and expiry', () => {

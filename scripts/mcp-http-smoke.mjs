@@ -16,9 +16,17 @@ assert.equal(denied.status,403); console.log('MCP con Origin esterna: 403');
 const invalid=await fetch(root+'/oauth/consent');
 assert.equal(invalid.status,200); assert.match(await invalid.text(),/Collegamento non disponibile/);
 console.log('Consenso senza richiesta: stato non disponibile');
-const consent='/oauth/consent?authorization_id=11111111-1111-4111-8111-111111111111';
-const resume=await fetch(root+consent,{redirect:'manual'});
-// A streamed Next.js response delivers redirects through a refresh meta tag.
-if (resume.status === 307) assert.match(resume.headers.get('location'), /^\/login\?next=/);
-else { assert.equal(resume.status,200); assert.match(await resume.text(), /url=\/login\?next=|NEXT_REDIRECT;replace;\/login\?next=/); }
-console.log('Consenso senza login: ritorno al login preservato');
+for (const authorizationId of ['11111111-1111-4111-8111-111111111111', 'q3z7wfnmqejfn5rsxsclcvhemxep2vca']) {
+  const consent='/oauth/consent?authorization_id='+authorizationId;
+  const resume=await fetch(root+consent,{redirect:'manual'});
+  // A streamed Next.js response delivers redirects through a refresh meta tag.
+  if (resume.status === 307) {
+    assert.equal(new URL(resume.headers.get('location'), root).searchParams.get('next'), consent);
+  } else {
+    assert.equal(resume.status,200);
+    const body=await resume.text();
+    assert.match(body, /url=\/login\?next=|NEXT_REDIRECT;replace;\/login\?next=/);
+    assert.ok(body.includes(encodeURIComponent(consent)));
+  }
+  console.log('Consenso senza login: ritorno preservato per ID '+(authorizationId.includes('-')?'UUID':'opaco'));
+}
