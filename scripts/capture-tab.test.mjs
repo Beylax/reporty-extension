@@ -27,8 +27,9 @@ function setup({ wrongTab = false, denied = false } = {}) {
   currentWindow = new EventTarget();
   globalThis.window = currentWindow;
   globalThis.requestAnimationFrame = callback => callback();
-  globalThis.document = { createElement: tag => tag === 'video' ? { videoWidth: 1600, videoHeight: 1000, play: async () => {}, srcObject: null } : { getContext: () => ({ drawImage: () => { draws++; } }), toDataURL: () => `data:image/jpeg;base64,frame${draws}` } };
-  return { configs, tracks, get requests() { return requests; }, get draws() { return draws; } };
+  const video = { videoWidth: 1600, videoHeight: 1000, play: async () => {}, srcObject: null };
+  globalThis.document = { createElement: tag => tag === 'video' ? video : { getContext: () => ({ drawImage: () => { draws++; } }), toDataURL: () => `data:image/jpeg;base64,frame${draws}` } };
+  return { configs, tracks, video, get requests() { return requests; }, get draws() { return draws; } };
 }
 
 test('requests sharing during the first gesture and captures fresh screenshots without further consent', async () => {
@@ -50,6 +51,40 @@ test('rejects a different tab and stops its tracks', async () => {
   assert.equal(state.tracks[0].readyState, 'ended');
   assert.equal(state.draws, 0);
   assert.equal(state.configs.at(-1).handle, '');
+});
+
+test('reused sharing skips the buffered frame before drawing the page with Reporty hidden', async () => {
+  const state = setup();
+  await captureTab();
+  const frames = [];
+  state.video.requestVideoFrameCallback = callback => { frames.push(callback); return frames.length; };
+  state.video.cancelVideoFrameCallback = () => {};
+  const capture = captureTab();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(state.draws, 1);
+  assert.equal(frames.length, 1);
+  frames.shift()(); // The first delivered frame may still contain the panel.
+  assert.equal(state.draws, 1);
+  assert.equal(frames.length, 1);
+  frames.shift()();
+  assert.equal(await capture, 'data:image/jpeg;base64,frame2');
+  assert.equal(state.requests, 1);
+  stopTabCapture();
+});
+
+test('stopping sharing while waiting for fresh frames prevents drawing', async () => {
+  const state = setup();
+  await captureTab();
+  const frames = [];
+  state.video.requestVideoFrameCallback = callback => { frames.push(callback); return frames.length; };
+  state.video.cancelVideoFrameCallback = () => {};
+  const capture = captureTab();
+  await new Promise(resolve => setImmediate(resolve));
+  stopTabCapture();
+  frames.shift()();
+  frames.shift()();
+  await assert.rejects(capture, /Condivisione interrotta/);
+  assert.equal(state.draws, 1);
 });
 
 test('every reused capture still validates that the shared source is the current tab', async () => {

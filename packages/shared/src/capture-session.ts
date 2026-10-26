@@ -74,6 +74,24 @@ export function createCaptureSession() {
         const version = generation;
         // Include the new annotation and exclude Reporty's controls on every capture.
         await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+        // Page paints can precede the shared video's update. Skip the buffered
+        // frame and wait for the following frame before copying the page.
+        if (video?.requestVideoFrameCallback) {
+          const source = video;
+          await new Promise<void>((resolve, reject) => {
+            let frame = 0;
+            const timeout = setTimeout(() => {
+              source.cancelVideoFrameCallback(frame);
+              reject(new Error('La condivisione non ha prodotto un nuovo fotogramma. Riprova.'));
+            }, 5000);
+            frame = source.requestVideoFrameCallback(() => {
+              frame = source.requestVideoFrameCallback(() => {
+                clearTimeout(timeout);
+                resolve();
+              });
+            });
+          });
+        }
         if (generation !== version || !video) throw new Error('Condivisione interrotta. Ripeti la cattura.');
         validate();
         drawing = true;

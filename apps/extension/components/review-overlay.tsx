@@ -480,7 +480,7 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
       <Button variant="secondary" size="icon" aria-label="Seleziona elemento" title="Seleziona elemento" disabled={busy} tabIndex={open ? 0 : -1} className={`size-11 rounded-full border-border bg-card text-card-foreground shadow-lg hover:bg-accent transition-all duration-200 motion-reduce:transition-none ${open ? 'pointer-events-auto scale-100 opacity-100' : 'pointer-events-none scale-75 opacity-0'}`} style={{ transform: open ? 'translateY(0)' : `translateY(${top ? '-12px' : '12px'})` }} onClick={() => void run(async () => { await ensureIdentity(); setMode('element'); setOpen(false); })}><Crosshair className="size-5" aria-hidden="true" /></Button>
       <Button variant="secondary" size="icon" aria-label="Pin libero" title="Pin libero" disabled={busy} tabIndex={open ? 0 : -1} className={`size-11 rounded-full border-border bg-card text-card-foreground shadow-lg hover:bg-accent transition-all duration-200 motion-reduce:transition-none ${open ? 'pointer-events-auto scale-100 opacity-100' : 'pointer-events-none scale-75 opacity-0'}`} style={{ transitionDelay: open ? '50ms' : '0ms', transform: open ? 'translateY(0)' : `translateY(${top ? '-20px' : '20px'})` }} onClick={() => void run(async () => { await ensureIdentity(); setMode('pin'); setOpen(false); })}><MapPin className="size-5" aria-hidden="true" /></Button>
     </div> : null}
-    {open && !mode && draft ? <section aria-label="Crea segnalazione" className="pointer-events-auto fixed max-h-[75vh] w-[min(380px,calc(100vw-48px))] space-y-4 overflow-y-auto rounded-xl border bg-background p-4 text-sm text-foreground shadow-xl" style={panelPosition}>
+    {open && !mode && draft ? <section aria-label="Crea segnalazione" className="pointer-events-auto fixed max-h-[75vh] w-[min(380px,calc(100vw-48px))] space-y-4 overflow-y-auto rounded-xl border bg-background p-4 text-sm text-foreground shadow-xl" style={{ ...panelPosition, visibility: capturing || screenshotCapture ? 'hidden' : undefined }}>
       {<form className="grid gap-3" onSubmit={event => { event.preventDefault(); if (submitLock.current) return; void run(async () => {
         if (submitLock.current) return;
         submitLock.current = true;
@@ -523,9 +523,12 @@ export function ReviewOverlay({ site, environment, host, transport, logoUrl, onP
         <Button type="button" variant="outline" disabled={busy || draft.saved || draft.screenshots.length >= MAX_REPORT_SCREENSHOTS} onClick={() => void run(async () => {
           if (location.href !== draft.context.url) throw new Error('Torna alla pagina originale prima di aggiungere uno screenshot.');
           const width = innerWidth, height = innerHeight;
-          const src = await capturePageScreenshot(host, captureOverride ?? captureTab);
-          if (location.href !== draft.context.url || width !== innerWidth || height !== innerHeight) throw new Error('La pagina o la viewport è cambiata. Riprova.');
-          setScreenshotCapture({ src, width, height });
+          setCapturing(true);
+          try {
+            const src = await capturePageScreenshot(host, captureOverride ?? captureTab);
+            if (location.href !== draft.context.url || width !== innerWidth || height !== innerHeight) throw new Error('La pagina o la viewport è cambiata. Riprova.');
+            setScreenshotCapture({ src, width, height });
+          } finally { setCapturing(false); }
         })}><Plus className="size-4" aria-hidden="true" />Aggiungi screenshot ({draft.screenshots.length}/{MAX_REPORT_SCREENSHOTS})</Button>
         <ReportAttachmentPicker files={draft.files} disabled={busy} saved={draft.saved} progress={fileProgress} onError={text => setStatus(text, 'error')} onChange={files => setDraft(previous => previous ? { ...previous, files } : previous)} onRemove={id => {
           void run(async () => {
