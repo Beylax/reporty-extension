@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { bulkReportRequestSchema, isUuid, reportPageSchema, reportScreenshotPaths, type ReportPage, type ReportSelection } from '@reporty/shared';
+import type { PlaygroundReportDetail } from '@/lib/playground-report-cache';
 import { requireUser } from '@/lib/auth';
 import { executeBulkReports } from '@/lib/bulk-reports';
 import { removeStoredFiles } from '@/lib/supabase/storage';
@@ -25,6 +26,19 @@ export async function getReportThread(environmentId: string, id: string) {
   if (!isUuid(environmentId) || !isUuid(id)) return { error: 'Dati non validi.' };
   const { data, error } = await supabase.rpc('report_operation', { secret: null, target: environmentId, operation: 'thread', payload: { id } });
   return error ? { error: 'Segnalazione non disponibile.' } : { data };
+}
+
+/** One browser request; both reads retain their existing backend authorization. */
+export async function getPlaygroundReport(environmentId: string, pagePath: string, id: string): Promise<PlaygroundReportDetail> {
+  const [listing, thread] = await Promise.all([
+    getReportPage(environmentId, { id, environments: [environmentId], pages: [pagePath], limit: 1 }),
+    getReportThread(environmentId, id),
+  ]);
+  const report = listing.reports[0];
+  if (!report || report.environment_id !== environmentId || report.page_path !== pagePath || thread.error) {
+    throw new Error(thread.error ?? 'Segnalazione non disponibile in questa pagina.');
+  }
+  return { report: { ...report, attachments: thread.data.issue.attachments ?? [] }, comments: thread.data.comments };
 }
 
 export async function mutateReportsBulk(input: unknown) {

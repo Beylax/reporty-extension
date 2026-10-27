@@ -11,7 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToastManager } from '@/components/ui/toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getReportPage } from './report-actions';
+import { getPlaygroundReport, getReportPage, mutateReport } from './report-actions';
+import { createPlaygroundReportCache } from '@/lib/playground-report-cache';
 import { PlaygroundReports } from './playground-reports';
 import { PlaygroundFrame } from './playground-frame';
 import { StopScreenshotSharing } from './screenshot-sharing';
@@ -57,6 +58,13 @@ function PlaygroundHeader({ projectName, hidden, children }: { projectName: stri
 }
 
 function EnvironmentPlayground({ projectName, initialReport, environment, fullscreen, fullscreenTrigger, onFullscreen, onExitFullscreen }: { projectName: string; initialReport?: PlaygroundReport; environment: PlaygroundEnvironment; fullscreen: boolean; fullscreenTrigger: React.RefObject<HTMLButtonElement | null>; onFullscreen: () => void; onExitFullscreen: () => void }) {
+  const [reportCache] = useState(() => createPlaygroundReportCache(
+    (pagePath, id) => getPlaygroundReport(environment.id, pagePath, id),
+    async (id, change) => {
+      const result = await mutateReport(environment.id, 'status' in change ? 'status' : 'priority', { id, ...change }, false);
+      if (result.error) throw new Error(result.error);
+    },
+  ));
   const [sidebar, setSidebar] = useState<'open' | 'hidden'>('open');
   const sidebarId = useId();
   const [tabs, setTabs] = useState<PageTab[]>([]);
@@ -139,7 +147,7 @@ function EnvironmentPlayground({ projectName, initialReport, environment, fullsc
           {tabs.filter(tab => tab.visited).map(tab => <PlaygroundFrame key={tab.id} environment={environment} url={tab.src} viewport={tab.viewport} active={tab.id === activeId} fitWidth={tab.fitWidth} fullscreen={fullscreen && tab.id === activeId} onExitFullscreen={onExitFullscreen} reload={tab.reload} requestedReport={tab.requestedReport} reportsRevision={tab.reportsRevision} onSelectReport={id => update(tab.id, { selectedReport: id })} onPage={(url, connected) => setTabs(items => items.map(item => item.id === tab.id && (item.url !== url || item.connected !== connected) ? { ...item, url, connected, selectedReport: item.url !== url ? undefined : item.selectedReport, requestedReport: item.url !== url ? undefined : item.requestedReport } : item))} />)}
           {!tabs.length && !failed ? <p className="p-6 text-sm text-muted-foreground">Nessuna pagina aperta. Usa il pulsante + per aprire una pagina dell’ambiente.</p> : null}
         </div>
-        {active?.selectedReport ? <PlaygroundReportDrawer key={`${active.id}:${active.selectedReport}`} id={active.selectedReport} environmentId={environment.id} pagePath={getPageContext(active.url).pagePath} onViewport={viewport => update(active.id, { viewport, fitWidth: false })} onClose={() => setTabs(items => items.map(item => item.id === active.id && item.selectedReport === active.selectedReport ? { ...item, selectedReport: undefined } : item))} onChanged={() => setTabs(items => items.map(item => item.id === active.id ? { ...item, reportsRevision: item.reportsRevision + 1 } : item))} /> : null}
+        {active?.selectedReport ? <PlaygroundReportDrawer key={`${active.id}:${active.selectedReport}:${getPageContext(active.url).pagePath}`} cache={reportCache} id={active.selectedReport} environmentId={environment.id} pagePath={getPageContext(active.url).pagePath} onViewport={viewport => update(active.id, { viewport, fitWidth: false })} onClose={() => setTabs(items => items.map(item => item.id === active.id && item.selectedReport === active.selectedReport ? { ...item, selectedReport: undefined } : item))} onChanged={() => setTabs(items => items.map(item => item.id === active.id ? { ...item, reportsRevision: item.reportsRevision + 1 } : item))} /> : null}
       </div>
     </>}
   </div>;
